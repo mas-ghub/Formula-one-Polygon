@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<title>POLYGON GP — Low-Poly Grand Prix</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:ital,wght@0,400;0,500;0,600;0,700;1,600;1,700&display=swap" rel="stylesheet">
+<style>
+:root{--red:#e10600;--txt:#f4f1ea;--dim:#9aa0a8;--line:#2a2e35;--panel:rgba(12,14,18,.84);}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:'Chakra Petch',sans-serif;color:var(--txt);user-select:none;touch-action:none;}
+canvas{display:block;}
+#gl{position:fixed;inset:0;z-index:0;}
+#drops{position:fixed;inset:0;z-index:5;pointer-events:none;}
+#vig{position:fixed;inset:0;z-index:6;pointer-events:none;box-shadow:inset 0 0 190px rgba(0,0,0,.38);}
+.hidden{display:none!important;}
+.panel{background:var(--panel);border:1px solid var(--line);clip-path:polygon(0 0,calc(100% - 14px) 0,100% 14px,100% 100%,14px 100%,0 calc(100% - 14px));}
+#title{position:fixed;inset:0;z-index:20;display:flex;}
+#tLogo{position:absolute;top:6%;right:5%;text-align:right;pointer-events:none;}
+#tLogo h1{margin:0;font-style:italic;font-weight:700;font-size:clamp(46px,7.5vw,104px);line-height:.9;letter-spacing:-.02em;color:#fff;text-shadow:6px 6px 0 rgba(0,0,0,.45);}
+#tLogo h1 span{color:var(--red);}
+#tLogo p{margin:10px 4px 0 0;font-size:clamp(11px,1.2vw,15px);letter-spacing:.34em;opacity:.85;}
+#tPanel{width:400px;max-width:94vw;margin:24px;padding:22px 22px 16px;overflow-y:auto;max-height:calc(100vh - 48px);scrollbar-width:thin;}
+.sec{margin-bottom:15px;}
+.sec label{display:block;font-size:10px;letter-spacing:.3em;color:var(--red);font-weight:600;margin-bottom:7px;}
+.card{display:flex;align-items:center;gap:12px;padding:8px 10px;border:1px solid var(--line);margin-bottom:7px;cursor:pointer;background:rgba(255,255,255,.02);transition:border-color .15s,background .15s;}
+.card:hover{border-color:#565c66;}
+.card.sel{border-color:var(--red);background:rgba(225,6,0,.09);}
+.card canvas{flex:0 0 auto;}
+.card .cn{font-weight:600;font-size:14px;letter-spacing:.04em;}
+.card .cm{font-size:11px;color:var(--dim);letter-spacing:.08em;margin-top:2px;}
+.seg{display:flex;gap:6px;flex-wrap:wrap;}
+.seg button,.seg4 button{flex:1;padding:9px 4px;background:rgba(255,255,255,.03);border:1px solid var(--line);color:var(--txt);font-family:inherit;font-size:12px;font-weight:600;letter-spacing:.08em;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;transition:all .15s;}
+.seg button:hover,.seg4 button:hover{border-color:#565c66;}
+.seg button.sel,.seg4 button.sel{border-color:var(--red);color:#fff;background:rgba(225,6,0,.16);}
+.seg4 button{flex-direction:column;gap:4px;padding:10px 4px;}
+.seg4 svg{width:22px;height:22px;}
+.row2{display:flex;gap:12px;}
+.row2 .sec{flex:1;}
+#tName{width:100%;padding:9px 10px;background:rgba(255,255,255,.04);border:1px solid var(--line);color:var(--txt);font-family:inherit;font-size:14px;font-weight:600;letter-spacing:.06em;outline:none;}
+#tName:focus{border-color:var(--red);}
+.tgl{width:100%;padding:9px;border:1px solid var(--line);background:rgba(255,255,255,.03);color:var(--dim);font-family:inherit;font-weight:700;letter-spacing:.2em;cursor:pointer;font-size:12px;}
+.tgl.on{color:#7dd97b;border-color:#3d6b3c;}
+#tStart{width:100%;margin-top:4px;padding:16px;background:var(--red);color:#fff;border:none;font-family:inherit;font-style:italic;font-weight:700;font-size:21px;letter-spacing:.14em;cursor:pointer;transform:skewX(-7deg);transition:filter .15s;}
+#tStart:hover{filter:brightness(1.18);}
+#tStart span{display:inline-block;transform:skewX(7deg);}
+.hint{font-size:10px;color:var(--dim);letter-spacing:.1em;line-height:1.7;margin:14px 0 0;}
+#tFoot{position:absolute;bottom:14px;right:5%;font-size:10px;letter-spacing:.28em;color:var(--dim);pointer-events:none;}
+#hud{position:fixed;inset:0;z-index:10;pointer-events:none;}
+#hTL{position:absolute;top:16px;left:16px;padding:12px 18px 12px 14px;min-width:170px;}
+#hPos{font-style:italic;font-weight:700;font-size:38px;line-height:1;}
+#hPosT{font-size:15px;color:var(--dim);font-weight:600;}
+#hTL .small{font-size:12px;letter-spacing:.18em;color:var(--dim);margin-top:2px;font-weight:600;}
+#hTL .small b{color:var(--txt);}
+.trow{font-size:11px;letter-spacing:.12em;color:var(--dim);margin-top:4px;font-weight:500;}
+.trow b{color:var(--txt);font-weight:600;float:right;margin-left:14px;}
+#hTR{position:absolute;top:16px;right:16px;display:flex;gap:8px;flex-direction:column;align-items:flex-end;}
+.chip{background:var(--panel);border:1px solid var(--line);padding:6px 12px;font-size:11px;font-weight:600;letter-spacing:.18em;display:flex;align-items:center;gap:8px;}
+.chip svg{width:16px;height:16px;}
+.chip.drs{color:#5a6068;}
+.chip.drs.on{color:#7dd97b;border-color:#3d6b3c;}
+#hMsg{position:absolute;top:17%;left:0;right:0;text-align:center;opacity:0;transform:translateY(8px);transition:opacity .3s,transform .3s;}
+#hMsg.show{opacity:1;transform:translateY(0);}
+#hMsgMain{font-style:italic;font-weight:700;font-size:clamp(30px,4.6vw,52px);letter-spacing:.06em;text-shadow:4px 4px 0 rgba(0,0,0,.5);}
+#hMsgMain.purple{color:#c98bf5;}#hMsgMain.red{color:#ff5348;}#hMsgMain.green{color:#8be08a;}
+#hMsgSub{font-size:15px;letter-spacing:.24em;opacity:.9;margin-top:4px;font-weight:600;}
+#camToast{position:absolute;top:26%;left:0;right:0;text-align:center;font-style:italic;font-weight:700;font-size:clamp(20px,2.6vw,30px);letter-spacing:.34em;opacity:0;transition:opacity .25s;text-shadow:3px 3px 0 rgba(0,0,0,.55);}
+#camToast.show{opacity:.95;}
+#hBL{position:absolute;bottom:16px;left:16px;padding:12px 18px 12px 14px;display:flex;align-items:center;gap:16px;}
+#hGear{font-style:italic;font-weight:700;font-size:54px;line-height:1;color:#fff;min-width:44px;text-align:center;}
+#hGear.hot{color:var(--red);}
+#hSpdBox{display:flex;flex-direction:column;}
+#hSpeed{font-style:italic;font-weight:700;font-size:34px;line-height:1;}
+#hSpdBox .unit{font-size:10px;letter-spacing:.3em;color:var(--dim);margin-top:1px;}
+#hRpm{display:flex;gap:3px;margin-top:8px;}
+#hRpm i{width:9px;height:13px;background:#242830;transform:skewX(-14deg);}
+#hRpm i.on{background:#ffd23f;}#hRpm i.on.hot{background:#ff4b1f;}#hRpm i.on.max{background:#fff;}
+#hBR{position:absolute;bottom:16px;right:16px;padding:8px;}
+#lights{position:absolute;top:11%;left:0;right:0;display:flex;justify-content:center;gap:14px;}
+#lights i{width:26px;height:26px;border-radius:50%;background:#2a1210;border:2px solid #46201c;}
+#lights i.on{background:#ff1a1a;border-color:#ff5040;box-shadow:0 0 18px rgba(255,26,26,.7);}
+#hWrong{position:absolute;top:27%;left:0;right:0;text-align:center;font-style:italic;font-weight:700;font-size:34px;color:#ff5348;letter-spacing:.14em;text-shadow:3px 3px 0 rgba(0,0,0,.5);}
+#slipTag{position:absolute;bottom:120px;left:0;right:0;text-align:center;font-size:12px;letter-spacing:.4em;color:#8be08a;font-weight:600;opacity:0;transition:opacity .2s;}
+#slipTag.on{opacity:.9;}
+#touch button{position:absolute;bottom:22px;width:74px;height:74px;border-radius:50%;border:1px solid rgba(255,255,255,.25);background:rgba(15,17,22,.45);color:#fff;pointer-events:auto;font-family:inherit;font-weight:700;font-size:11px;display:flex;align-items:center;justify-content:center;}
+#touch{position:absolute;inset:0;display:none;pointer-events:none;}
+body.touch #touch{display:block;}
+#tL{left:18px;}#tR{left:104px;}#tB{right:104px;}#tG{right:18px;background:rgba(225,6,0,.35);}
+#tC{right:18px;bottom:110px;width:54px!important;height:54px!important;}
+#results,#pause,#instructions{position:fixed;inset:0;z-index:22;display:flex;align-items:center;justify-content:center;background:rgba(5,6,8,.55);}
+#rPanel, #iPanel{width:540px;max-width:94vw;max-height:86vh;padding:26px 26px 20px;display:flex;flex-direction:column;}
+#rTitle{font-style:italic;font-weight:700;font-size:32px;margin:0 0 2px;}
+#rSub{font-size:12px;letter-spacing:.26em;color:var(--dim);margin-bottom:16px;}
+#rTable{overflow-y:auto;flex:1;scrollbar-width:thin;}
+.rrow{display:flex;align-items:center;gap:10px;padding:7px 10px;border-bottom:1px solid #1c1f24;font-size:14px;}
+.rrow.me{background:rgba(225,6,0,.16);border-left:3px solid var(--red);}
+.rrow .rp{width:36px;font-style:italic;font-weight:700;font-size:16px;}
+.rrow .sw{width:4px;height:22px;flex:0 0 auto;}
+.rrow .rn{flex:1;font-weight:600;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
+.rrow .rn small{color:var(--dim);font-weight:500;margin-left:8px;font-size:11px;}
+.rrow .rt{width:92px;text-align:right;font-size:13px;color:var(--dim);}
+.rrow .rb{width:92px;text-align:right;font-size:12px;color:var(--dim);}
+.btnrow{display:flex;gap:10px;margin-top:18px;}
+.btnrow button{flex:1;padding:13px;border:1px solid var(--line);background:rgba(255,255,255,.04);color:var(--txt);font-family:inherit;font-weight:700;font-style:italic;letter-spacing:.16em;font-size:14px;cursor:pointer;}
+.btnrow button:hover{border-color:var(--red);}
+.btnrow button.pri{background:var(--red);border-color:var(--red);}
+#pPanel{width:320px;padding:28px;text-align:center;}
+#pPanel h2{font-style:italic;margin:0 0 18px;letter-spacing:.1em;}
+#iPanel h2{font-style:italic;margin:0 0 18px;letter-spacing:.1em;}
+.irow {margin-bottom: 12px; line-height: 1.6; font-size: 14px; color: var(--dim);}
+.irow b {color: var(--txt); display: inline-block; width: 120px;}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<canvas id="drops"></canvas>
+<div id="vig"></div>
+<div id="title">
+  <div id="tLogo"><h1>POLYGON<span>GP</span></h1><p>LOW-POLY GRAND PRIX · TWENTY CARS · ONE APEX</p></div>
+  <div id="tPanel" class="panel">
+    <div class="sec"><label>CIRCUIT</label><div id="tTrack"></div></div>
+    <div class="sec"><label>WEATHER</label><div id="tWeather" class="seg4"></div></div>
+    <div class="row2">
+      <div class="sec"><label>RACE DISTANCE</label><div id="tLaps" class="seg"></div></div>
+      <div class="sec"><label>GRID SIZE</label><div id="tGrid" class="seg"></div></div>
+    </div>
+    <div class="sec"><label>AI STRENGTH</label><div id="tDiff" class="seg"></div></div>
+    <div class="row2">
+      <div class="sec"><label>DRIVER NAME</label><input id="tName" maxlength="14" spellcheck="false" value="YOU"></div>
+      <div class="sec"><label>COMMENTARY</label><button id="tSpeech" class="tgl on">VOICE ON</button></div>
+    </div>
+    <button id="tStart"><span>START RACE</span></button>
+    <button id="tInst" class="tgl" style="margin-top: 8px;">HOW TO PLAY</button>
+    <p class="hint">WASD / ARROWS — drive · SPACE — drift · C — camera (5 views)<br>R — reset to track · M — mute · ESC — pause</p>
+  </div>
+  <div id="tFoot">PRIVATE BUILD · PHYSICS &amp; AUDIO SYNTHESISED LOCALLY</div>
+</div>
+<div id="hud" class="hidden">
+  <div id="hTL" class="panel">
+    <div><span id="hPos">P—</span><span id="hPosT"> / 20</span></div>
+    <div class="small">LAP <b id="hLap">1</b> / <span id="hLaps">3</span></div>
+    <div class="trow">TIME <b id="hTime">0:00.000</b></div>
+    <div class="trow">BEST <b id="hBest">—</b></div>
+    <div class="trow">GAP <b id="hGap">—</b></div>
+  </div>
+  <div id="hTR">
+    <div class="chip" id="hWx"></div>
+    <div class="chip" id="hCam">CHASE</div>
+    <div class="chip drs" id="hDrs">DRS</div>
+  </div>
+  <div id="hMsg"><div id="hMsgMain"></div><div id="hMsgSub"></div></div>
+  <div id="camToast"></div>
+  <div id="hBL" class="panel">
+    <div id="hGear">N</div>
+    <div id="hSpdBox"><div id="hSpeed">0</div><div class="unit">KM/H</div><div id="hRpm"></div></div>
+  </div>
+  <div id="hBR" class="panel"><canvas id="minimap" width="176" height="176"></canvas></div>
+  <div id="lights"><i></i><i></i><i></i><i></i><i></i></div>
+  <div id="hWrong" class="hidden">WRONG WAY</div>
+  <div id="slipTag">SLIPSTREAM</div>
+  <div id="touch">
+    <button id="tL">◄</button><button id="tR">►</button><button id="tB">BRK</button><button id="tG">GAS</button><button id="tC">CAM</button>
+  </div>
+</div>
+<div id="results" class="hidden"><div id="rPanel" class="panel">
+  <h2 id="rTitle">CHEQUERED FLAG</h2><div id="rSub">PROVISIONAL CLASSIFICATION</div>
+  <div id="rTable"></div>
+  <div class="btnrow"><button id="rRestart">RESTART</button><button id="rMenu" class="pri">BACK TO MENU</button></div>
+</div></div>
+<div id="pause" class="hidden"><div id="pPanel" class="panel">
+  <h2>PAUSED</h2>
+  <div class="btnrow" style="flex-direction:column">
+    <button id="pResume" class="pri">RESUME</button>
+    <button id="pRestart">RESTART RACE</button>
+    <button id="pQuit">QUIT TO MENU</button>
+  </div>
+</div></div>
+<div id="instructions" class="hidden"><div id="iPanel" class="panel">
+  <h2>HOW TO PLAY</h2>
+  <div class="irow"><b>WASD / ARROWS</b> Steer, Accelerate, Brake/Reverse</div>
+  <div class="irow"><b>SPACEBAR</b> Drift (hold while turning for tighter cornering)</div>
+  <div class="irow"><b>C KEY</b> Change Camera (5 Views including Top-Down)</div>
+  <div class="irow"><b>+/- or SCROLL</b> Zoom Camera (Top-Down view only)</div>
+  <div class="irow"><b>R KEY</b> Reset car to track if stuck</div>
+  <div class="irow"><b>M KEY</b> Mute audio</div>
+  <div class="irow"><b>ESC KEY</b> Pause game</div>
+  <div class="irow" style="margin-top: 15px; color: #8be08a;"><b>DRS:</b> Activates automatically when within 1 second of the car ahead in fast zones.</div>
+  <div class="irow" style="color: #47c7fc;"><b>SLIPSTREAM:</b> Gain extra speed when following closely behind another car.</div>
+  <div class="btnrow"><button id="iClose" class="pri">CLOSE</button></div>
+</div></div>
+
+<script type="importmap">
+{"imports":{"three":"https://unpkg.com/three@0.160.0/build/three.module.js","three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"}}
+</script>
+<script type="module" src="/src/game.js"></script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+{
+  "name": "POLYGON GP — Low-Poly Grand Prix",
+  "description": "High-speed 3D & top-down F1 racing simulator featuring realistic circuits, authentic physics & drift mechanics, mobile tilt controls, Shadertoy rain shaders, and customizable graphics quality modes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
