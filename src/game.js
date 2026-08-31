@@ -452,7 +452,7 @@ const[cc,cg]=mkCanvas(64,64);
 cg.fillStyle='#d81f2a';cg.fillRect(0,0,64,32);cg.fillStyle='#ecebe6';cg.fillRect(0,32,64,32);
 const curbT=ctex(cc,true);
 const[wc,wg]=mkCanvas(1024,128);
-const ADS=[['POLYGON GP','#e9e9e9','#101114'],['APEX FUEL','#e10600','#ffffff'],['TURBO+','#101418','#39d0c4'],['VANTAGE TYRES','#ffd23f','#101114'],['NOVA ENERGY','#0f7a4a','#ffffff'],['GRIPCO','#e9e9e9','#c8102e'],['POLYCOLA','#101418','#ffd23f'],['DRIFT KING','#e10600','#ffffff']];
+const ADS=[['POLYGON GP','#e9e9e9','#101114'],['APEX FUEL','#e10600','#ffffff'],['SPARKY','#ffd9af','#8c4f2c'],['VANTAGE TYRES','#ffd23f','#101114'],['NOVA ENERGY','#0f7a4a','#ffffff'],["END OF ROAD FEST '26",'#f58fa1','#ffffff'],['GET THIS APP!','#efa733','#101114'],['DRIFT KING','#e10600','#ffffff']];
 for(let i=0;i<8;i++){const[t,bg,fg]=ADS[i];wg.fillStyle=bg;wg.fillRect(i*128,0,128,128);
  wg.fillStyle=fg;wg.font='italic 700 25px sans-serif';wg.textAlign='center';wg.textBaseline='middle';
  wg.save();wg.translate(i*128+64,64);wg.rotate(-0.05);wg.fillText(t,0,0,116);wg.restore();
@@ -510,13 +510,15 @@ export function getBodyGeo(colA,colB){
  B(0.03,0.22,0.62,colB,0.97,0.18,2.62);B(0.03,0.22,0.62,colB,-0.97,0.18,2.62);
  B(0.78,0.2,1.0,colA,0,0.58,0.55);B(0.5,0.1,0.9,'#101114',0,0.66,0.55);
  // Halo protection structure — a real halo shape: a front arc, a single
- // forward spine down to the nose bulkhead, and two rear struts down to the
- // chassis sides, sitting close over the cockpit rim rather than floating
- // high above the driver's head.
- P.push(part(new THREE.TorusGeometry(0.26,0.032,6,14,Math.PI),'#202226',0,0.64,0.48));
- C(0.03,0.03,0.32,6,'#202226',0,0.5,0.85,-0.32);
- C(0.026,0.026,0.24,6,'#202226',0.22,0.52,0.36,0,0,0.42);
- C(0.026,0.026,0.24,6,'#202226',-0.22,0.52,0.36,0,0,-0.42);
+ // forward spine down to the nose bulkhead, two rear struts down to the
+ // chassis sides, and a rear cross-brace tying those struts together (the
+ // "cross piece" that reads clearly even at a distance) — sitting close
+ // over the cockpit rim rather than floating high above the driver's head.
+ P.push(part(new THREE.TorusGeometry(0.29,0.045,6,14,Math.PI),'#202226',0,0.64,0.48));
+ C(0.04,0.04,0.32,6,'#202226',0,0.5,0.85,-0.32);
+ C(0.035,0.035,0.24,6,'#202226',0.24,0.52,0.36,0,0,0.42);
+ C(0.035,0.035,0.24,6,'#202226',-0.24,0.52,0.36,0,0,-0.42);
+ B(0.48,0.035,0.035,'#202226',0,0.5,0.36);
  
  // Engine cover & sidepods
  C(0.09,0.3,1.9,8,colA,0,0.5,-0.95,-Math.PI/2);
@@ -1683,7 +1685,7 @@ function aiThink(c,dt){
  const ah=nearestAhead(c);
  if(ah&&ah.dist<24){
   const side=(c.lat-ah.c.lat)>=0?1:-1;
-  latT=clamp(ah.c.lat+side*3.2,-(T.halfW-1.1),T.halfW-1.1);
+  latT=clamp(ah.c.lat+side*3.7,-(T.halfW-1.1),T.halfW-1.1);
  }
  latT=clamp(latT,-(T.halfW-1.0),T.halfW-1.0);
  sampleF(lf);
@@ -1699,7 +1701,7 @@ function aiThink(c,dt){
  for(let k=2;k<look;k+=3)cmax=Math.max(cmax,Math.abs(T.samples[(fi+k)%T.N].curv));
  let tv=Math.sqrt(21/Math.max(cmax,1e-4))*c.d.skill*state.diffMul*Math.sqrt(Math.max(cur.grip,0.35));
  tv=Math.min(tv,PH.top*(0.86+c.d.skill*0.13));
- if(ah&&ah.dist<20)tv=Math.min(tv,Math.min(ah.c.vF*1.02,ah.c.vF+(ah.dist-6)));
+ if(ah&&ah.dist<20)tv=Math.min(tv,Math.min(ah.c.vF*1.02,ah.c.vF+(ah.dist-9)));
  const dv=tv-vF;
  c.throttle=dv>0.5?1:dv<-1.5?0:0.45;
  c.brake=dv<-4?clamp(-dv*0.14,0,1):0;
@@ -1868,6 +1870,13 @@ function carCollisions(){
   const A=cars[a];
   for(let b=a+1;b<cars.length;b++){
    const B=cars[b];
+   // World-space proximity alone isn't enough: a track that loops back near
+   // itself (a hairpin, or two straights running close in opposite
+   // directions) can put cars a full lap-fraction apart right next to each
+   // other in x/z. Require them to also be close along the racing line
+   // itself before treating it as an actual on-track encounter.
+   let df=Math.abs(A.f-B.f);if(df>T.N/2)df=T.N-df;
+   if(df*T.segLen>30)continue;
    const dx0=B.x-A.x,dz0=B.z-A.z;
    if(dx0*dx0+dz0*dz0>49)continue;
    const afx=Math.sin(A.hdg),afz=Math.cos(A.hdg);
