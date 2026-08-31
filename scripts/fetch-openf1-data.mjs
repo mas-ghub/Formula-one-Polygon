@@ -12,6 +12,7 @@ import { writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { TRACKS } from '../src/tracks.js';
+import { accentFor } from '../src/teamLivery.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -140,11 +141,12 @@ async function fetchDrivers() {
     seen.add(d.driver_number);
     let color = d.team_colour ? `#${d.team_colour}` : '#888888';
     if (color === '#null') color = '#888888';
+    const team = d.team_name || 'F1 Team';
     const entry = {
       name: d.full_name || d.broadcast_name || `${d.first_name} ${d.last_name}`,
       code: d.name_acronym || (d.last_name ? d.last_name.substring(0, 3).toUpperCase() : 'DRV'),
-      team: d.team_name || 'F1 Team',
-      color, colB: color,
+      team,
+      color, colB: accentFor(team, color),
       num: d.driver_number,
       headshot: null,
     };

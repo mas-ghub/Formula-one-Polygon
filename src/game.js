@@ -7,6 +7,7 @@ import { SnowShaderPass } from './snowShader.js';
 import { TiltController } from './tiltControls.js';
 import { QualityManager, QUALITY_PRESETS } from './quality.js';
 import { GyroCalibrationLab } from './gyroLab.js';
+import { accentFor } from './teamLivery.js';
 
 /* ============ helpers ============ */
 const $=id=>document.getElementById(id);
@@ -47,7 +48,7 @@ const DRIVERS=[
 ['Pierre Gasly','Alpine',0.90,10,'#0093cc','#ff87bc','#ff5f8a'],
 ['Esteban Ocon','Alpine',0.89,31,'#0093cc','#ff87bc','#5fb8e8'],
 ['Alexander Albon','Williams',0.91,23,'#0a2a4a','#64c4ff','#e8e8e8'],
-['Logan Sargeant','White',0.80,2,'#0a2a4a','#64c4ff','#9fc4e8'],
+['Logan Sargeant','Williams',0.80,2,'#0a2a4a','#64c4ff','#9fc4e8'],
 ['Valtteri Bottas','Sauber',0.87,77,'#00e701','#101418','#a8e8b0'],
 ['Zhou Guanyu','Sauber',0.84,24,'#00e701','#101418','#5f8a68'],
 ['Nico Hülkenberg','Haas',0.89,27,'#b6babd','#e10600','#d8d8d8'],
@@ -107,13 +108,14 @@ async function loadOpenF1Drivers() {
         
         let color = d.team_colour ? `#${d.team_colour}` : null;
         if (color === '#null' || !d.team_colour) color = '#888888';
-        
+        const team = d.team_name || 'F1 Team';
+
         uniqueDrivers.push({
           name: d.full_name || d.broadcast_name || `${d.first_name} ${d.last_name}`,
           code: d.name_acronym || (d.last_name ? d.last_name.substring(0,3).toUpperCase() : 'DRV'),
-          team: d.team_name || 'F1 Team',
+          team,
           color: color,
-          colB: color,
+          colB: accentFor(team, color),
           num: d.driver_number,
           headshot: d.headshot_url || null,
           skill: rand(0.85, 1.0)
@@ -1689,7 +1691,7 @@ function aiThink(c,dt){
  for(let k=2;k<look;k+=3)cmax=Math.max(cmax,Math.abs(T.samples[(fi+k)%T.N].curv));
  let tv=Math.sqrt(21/Math.max(cmax,1e-4))*c.d.skill*state.diffMul*Math.sqrt(Math.max(cur.grip,0.35));
  tv=Math.min(tv,PH.top*(0.86+c.d.skill*0.13));
- if(ah&&ah.dist<20)tv=Math.min(tv,Math.max(ah.c.vF*1.02,ah.c.vF+(ah.dist-6)));
+ if(ah&&ah.dist<20)tv=Math.min(tv,Math.min(ah.c.vF*1.02,ah.c.vF+(ah.dist-6)));
  const dv=tv-vF;
  c.throttle=dv>0.5?1:dv<-1.5?0:0.45;
  c.brake=dv<-4?clamp(-dv*0.14,0,1):0;
@@ -2724,47 +2726,69 @@ function seg(container,items,cur,cb){
   b.onclick=()=>{[...el.children].forEach(x=>x.className='');b.className='sel';cb(i);};
   el.appendChild(b);});
 }
+function drawTrackPreview(cv,t){
+ const W=cv.width,H=cv.height;
+ const c=cv.getContext('2d');
+ const pv=(Array.isArray(t.realPts)&&t.realPts.length>20)?t.realPts.map(p=>[p[0],p[2]]):t.pts;
+ let minX=1e9,maxX=-1e9,minZ=1e9,maxZ=-1e9;
+ pv.forEach(p=>{minX=Math.min(minX,p[0]);maxX=Math.max(maxX,p[0]);minZ=Math.min(minZ,p[1]);maxZ=Math.max(maxZ,p[1]);});
+ const spanX=Math.max(maxX-minX,1);
+ const spanZ=Math.max(maxZ-minZ,1);
+ const s=Math.min((W-24)/spanX,(H-16)/spanZ);
+ const cx=W/2,cy=H/2;
+
+ c.clearRect(0,0,W,H);
+ c.fillStyle='rgba(18,20,24,0.6)';
+ c.fillRect(0,0,W,H);
+ c.strokeStyle='rgba(225,6,0,0.3)';
+ c.lineWidth=Math.max(4,W*0.05);
+ c.lineCap='round';
+ c.lineJoin='round';
+ c.beginPath();
+ pv.forEach((p,j)=>{const x=cx+(p[0]-(minX+maxX)/2)*s,y=cy+(p[1]-(minZ+maxZ)/2)*s;j===0?c.moveTo(x,y):c.lineTo(x,y);});
+ c.closePath();c.stroke();
+
+ c.strokeStyle='#f4f1ea';c.lineWidth=Math.max(1.6,W*0.018);
+ c.beginPath();
+ pv.forEach((p,j)=>{const x=cx+(p[0]-(minX+maxX)/2)*s,y=cy+(p[1]-(minZ+maxZ)/2)*s;j===0?c.moveTo(x,y):c.lineTo(x,y);});
+ c.closePath();c.stroke();
+
+ // Start line dot
+ c.fillStyle='#e10600';
+ const startX=cx+(pv[0][0]-(minX+maxX)/2)*s, startY=cy+(pv[0][1]-(minZ+maxZ)/2)*s;
+ c.beginPath();c.arc(startX,startY,Math.max(2,W*0.028),0,Math.PI*2);c.fill();
+}
 function buildMenu(){
- const tc=$('tTrack');if(!tc)return;tc.innerHTML='';
+ const dd=$('tTrack');const list=$('tTrackList');const btn=$('tTrackBtn');
+ if(!dd||!list||!btn)return;
+ list.innerHTML='';
+ const btnPv=$('tTrackBtnPv'),btnName=$('tTrackBtnName'),btnMeta=$('tTrackBtnMeta');
+ function setButton(i){
+  const t=TRACKS[i];
+  drawTrackPreview(btnPv,t);
+  btnName.textContent=t.name;
+  btnMeta.textContent=`${t.loc} — ${t.desc}`;
+ }
+ function closeList(){dd.classList.remove('open');list.classList.add('hidden');}
+ function openList(){dd.classList.add('open');list.classList.remove('hidden');}
  TRACKS.forEach((t,i)=>{
   const card=document.createElement('div');card.className='card'+(i===state.trackIdx?' sel':'');
   const cv=document.createElement('canvas');cv.width=140;cv.height=70;
-  const c=cv.getContext('2d');
-  const pv=(Array.isArray(t.realPts)&&t.realPts.length>20)?t.realPts.map(p=>[p[0],p[2]]):t.pts;
-  let minX=1e9,maxX=-1e9,minZ=1e9,maxZ=-1e9;
-  pv.forEach(p=>{minX=Math.min(minX,p[0]);maxX=Math.max(maxX,p[0]);minZ=Math.min(minZ,p[1]);maxZ=Math.max(maxZ,p[1]);});
-  const spanX=Math.max(maxX-minX,1);
-  const spanZ=Math.max(maxZ-minZ,1);
-  const s=Math.min(116/spanX,54/spanZ);
-
-  // Background card track preview
-  c.fillStyle='rgba(18,20,24,0.6)';
-  c.fillRect(0,0,140,70);
-  c.strokeStyle='rgba(225,6,0,0.3)';
-  c.lineWidth=7;
-  c.lineCap='round';
-  c.lineJoin='round';
-  c.beginPath();
-  pv.forEach((p,j)=>{const x=70+(p[0]-(minX+maxX)/2)*s,y=35+(p[1]-(minZ+maxZ)/2)*s;j===0?c.moveTo(x,y):c.lineTo(x,y);});
-  c.closePath();c.stroke();
-
-  c.strokeStyle='#f4f1ea';c.lineWidth=2.6;
-  c.beginPath();
-  pv.forEach((p,j)=>{const x=70+(p[0]-(minX+maxX)/2)*s,y=35+(p[1]-(minZ+maxZ)/2)*s;j===0?c.moveTo(x,y):c.lineTo(x,y);});
-  c.closePath();c.stroke();
-
-  // Start line dot
-  c.fillStyle='#e10600';
-  const startX=70+(pv[0][0]-(minX+maxX)/2)*s, startY=35+(pv[0][1]-(minZ+maxZ)/2)*s;
-  c.beginPath();c.arc(startX,startY,4,0,Math.PI*2);c.fill();
-
+  drawTrackPreview(cv,t);
   const info=document.createElement('div');
   info.innerHTML=`<div class="cn">${t.name}</div><div class="cm">${t.loc} — ${t.desc}</div>`;
   card.append(cv,info);
-  card.onclick=()=>{[...tc.children].forEach(x=>x.classList.remove('sel'));card.classList.add('sel');
-   state.trackIdx=i;buildWorld(i);snapWeather(state.wx);setupGrid(20);};
-  tc.appendChild(card);
+  card.onclick=()=>{[...list.children].forEach(x=>x.classList.remove('sel'));card.classList.add('sel');
+   state.trackIdx=i;setButton(i);closeList();
+   buildWorld(i);snapWeather(state.wx);setupGrid(20);};
+  list.appendChild(card);
  });
+ setButton(state.trackIdx);
+ btn.onclick=()=>{dd.classList.contains('open')?closeList():openList();};
+ if(!dd._ddWired){
+  dd._ddWired=true;
+  document.addEventListener('click',e=>{if(!dd.contains(e.target))closeList();});
+ }
 
  seg('tWeather',['SUNNY','DRIZZLE','RAIN','SNOW'].map((l,i)=>ICONS[['sun','driz','rain','snow'][i]]+'<span>'+l+'</span>'),0,
   i=>{state.wx=['sun','driz','rain','snow'][i];snapWeather(state.wx);});
@@ -2875,6 +2899,7 @@ function resize(){
  if(snowPass)snowPass.resize();
 }
 addEventListener('resize',resize);
+addEventListener('orientationchange',()=>setTimeout(resize,120));
 
 /* ============ boot ============ */
 rainPass = new RainShaderPass(renderer);

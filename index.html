@@ -55,6 +55,18 @@ canvas{display:block;}
 .card canvas{flex:0 0 auto;border-radius:3px;background:rgba(0,0,0,.4);}
 .card .cn{font-weight:700;font-size:13px;letter-spacing:.04em;color:#fff;}
 .card .cm{font-size:11px;color:var(--dim);letter-spacing:.06em;margin-top:2px;}
+.dd{position:relative;}
+.dd-btn{width:100%;display:flex;align-items:center;gap:12px;padding:8px 10px;border:1px solid var(--line);background:rgba(255,255,255,.02);cursor:pointer;font-family:inherit;text-align:left;transition:all .15s;touch-action:manipulation;}
+.dd-btn:hover{border-color:#565c66;background:rgba(255,255,255,.05);}
+.dd.open .dd-btn{border-color:var(--red);box-shadow:0 0 10px rgba(225,6,0,.3);}
+.dd-btn canvas{flex:0 0 auto;border-radius:3px;background:rgba(0,0,0,.4);}
+.dd-btn-info{flex:1;min-width:0;}
+.dd-chev{flex:0 0 auto;color:var(--dim);transition:transform .18s;}
+.dd.open .dd-chev{transform:rotate(180deg);color:#fff;}
+.dd-list{position:absolute;top:calc(100% + 5px);left:0;right:0;z-index:40;max-height:min(360px,55vh);overflow-y:auto;-webkit-overflow-scrolling:touch;background:var(--panel);border:1px solid var(--line);padding:6px;box-shadow:0 14px 40px rgba(0,0,0,.55);}
+.dd-list.hidden{display:none;}
+.dd-list .card{margin-bottom:4px;}
+.dd-list .card:last-child{margin-bottom:0;}
 .seg{display:flex;gap:5px;flex-wrap:wrap;}
 .seg4{display:flex;gap:5px;flex-wrap:wrap;}
 .seg button,.seg4 button{flex:1;padding:10px 6px;background:rgba(255,255,255,.03);border:1px solid var(--line);color:var(--txt);font-family:inherit;font-size:11px;font-weight:700;letter-spacing:.08em;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:all .15s;touch-action:manipulation;pointer-events:auto;}
@@ -465,7 +477,17 @@ document.addEventListener('DOMContentLoaded', function() {
   <div id="tPanel" class="panel">
     <div class="sec">
       <label>CIRCUIT LAYOUT</label>
-      <div id="tTrack"></div>
+      <div id="tTrack" class="dd">
+        <button id="tTrackBtn" class="dd-btn" type="button">
+          <canvas id="tTrackBtnPv" width="46" height="30"></canvas>
+          <div class="dd-btn-info">
+            <div class="cn" id="tTrackBtnName"></div>
+            <div class="cm" id="tTrackBtnMeta"></div>
+          </div>
+          <svg class="dd-chev" viewBox="0 0 24 24" width="16" height="16"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div id="tTrackList" class="dd-list hidden"></div>
+      </div>
     </div>
     
     <div class="sec">
