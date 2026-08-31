@@ -461,12 +461,26 @@ const[cc,cg]=mkCanvas(64,64);
 cg.fillStyle='#d81f2a';cg.fillRect(0,0,64,32);cg.fillStyle='#ecebe6';cg.fillRect(0,32,64,32);
 const curbT=ctex(cc,true);
 const[wc,wg]=mkCanvas(1024,128);
-const ADS=[['POLYGON GP','#e9e9e9','#101114'],['APEX FUEL','#e10600','#ffffff'],['SPARKY','#ffd9af','#8c4f2c'],['VANTAGE TYRES','#ffd23f','#101114'],['NOVA ENERGY','#0f7a4a','#ffffff'],["END OF ROAD FEST '26",'#f58fa1','#ffffff'],['GET THIS APP!','#efa733','#101114'],['DRIFT KING','#e10600','#ffffff']];
+const ADS=[['POLYGON GP','#e9e9e9','#101114'],['APEX FUEL','#e10600','#ffffff'],['SPARKY','#ffd9af','#8c4f2c'],['VANTAGE TYRES','#ffd23f','#101114'],['NOVA ENERGY','#0f7a4a','#ffffff'],["END OF ROAD FEST '26",'#d9486b','#ffffff'],['GET THIS APP!','#efa733','#101114'],['DRIFT KING','#e10600','#ffffff']];
+// A small Sparky-the-sparrow silhouette badge in the corner of every board —
+// drawn in the same color as that tile's text so it always reads clearly
+// against its own background.
+function drawAdBird(cx,x,y,s,color){
+ cx.save();cx.translate(x,y);cx.scale(s,s);cx.fillStyle=color;
+ cx.beginPath();cx.ellipse(0,0,7,5,0,0,Math.PI*2);cx.fill();
+ cx.beginPath();cx.arc(6.5,-3,3.4,0,Math.PI*2);cx.fill();
+ cx.beginPath();cx.moveTo(9.4,-3);cx.lineTo(13.5,-1.9);cx.lineTo(9.4,-1);cx.closePath();cx.fill();
+ cx.beginPath();cx.moveTo(-2,-1);cx.quadraticCurveTo(-8,-6.5,-11.5,-2);cx.quadraticCurveTo(-6,1,-2,3);cx.closePath();cx.fill();
+ cx.beginPath();cx.moveTo(-7,1);cx.lineTo(-14.5,-1.2);cx.lineTo(-13,4.2);cx.closePath();cx.fill();
+ cx.restore();
+}
 for(let i=0;i<8;i++){const[t,bg,fg]=ADS[i];wg.fillStyle=bg;wg.fillRect(i*128,0,128,128);
- wg.fillStyle=fg;wg.font='italic 700 25px sans-serif';wg.textAlign='center';wg.textBaseline='middle';
- wg.save();wg.translate(i*128+64,64);wg.rotate(-0.05);wg.fillText(t,0,0,116);wg.restore();
+ wg.fillStyle=fg;wg.font='italic 700 24px sans-serif';wg.textAlign='center';wg.textBaseline='middle';
+ wg.save();wg.translate(i*128+64,70);wg.rotate(-0.05);wg.fillText(t,0,0,104);wg.restore();
+ drawAdBird(wg,i*128+22,26,1.2,fg);
  wg.fillStyle='rgba(0,0,0,.25)';wg.fillRect(i*128,118,128,10);}
 const adsT=ctex(wc,true);
+adsT.repeat.set(1/8,1);
 // Building facade — richer than a flat grid of squares: panel banding,
 // mullions between windows, and a few warm/cool lit-window tones instead of
 // one flat gold.
@@ -1136,7 +1150,7 @@ function buildWorld(idx){
  // 4. Continuous Smooth Curved 3D Barrier Ribbons (TechPro Red/White / Armco Barrier)
  {
   const wPos=[],wCol=[],wIdx=[];let wVi=0;
-  const wallH=1.18,wallThick=0.55;
+  const wallH=0.6,wallThick=0.55;
 
   for(let i=0;i<N;i++){
    const s=samples[i],s2=samples[(i+1)%N];
@@ -1257,11 +1271,15 @@ function buildWorld(idx){
 
  // 8. Trackside Sponsor Billboards (Clean Straightaway Placements)
  {
-  const am=new THREE.MeshStandardMaterial({map:adsT,roughness:0.8});
-  let side=1;
+  // adsT holds all 8 ads side by side in one strip; each board needs its
+  // own texture instance (same image, different .offset) so it shows just
+  // one ad instead of the whole crammed-together strip.
+  let side=1,adIdx=0;
   for(let i=45;i<N-45;i+=38){
    if(Math.abs(samples[i].curv)>0.007)continue;
    side=-side;sampleF(i);
+   const tex=adsT.clone();tex.offset.x=(adIdx++%ADS.length)/ADS.length;tex.needsUpdate=true;
+   const am=new THREE.MeshStandardMaterial({map:tex,roughness:0.8});
    const w=new THREE.Mesh(new THREE.BoxGeometry(11,2.6,0.35),am);
    w.position.set(_sv.x+_sn.x*(T.latLimit+3.2)*side,_sv.y+1.35,_sv.z+_sn.z*(T.latLimit+3.2)*side);
    w.rotation.y=Math.atan2(_st.x,_st.z);w.castShadow=true;world.add(w);
@@ -2519,7 +2537,14 @@ function onLap(c){
   return;
  }
  const lt=raceT-c.lapStart;c.lapStart=raceT;
- if(lt>5&&(c.best==null||lt<c.best)){
+ // c.lap was just incremented above: on the very first crossing since the
+ // grid start it goes 0→1, which is only the short hop from the grid to
+ // the line, not a completed lap — a genuine lap-1 time only exists once
+ // c.lap reaches 2 (the SECOND crossing, line to line). Gating on elapsed
+ // time alone was fragile: a slow-starting car easily out-lasted the old
+ // 5-second cutoff and got credited with a "fastest lap" for that partial
+ // hop. lt>5 stays only as a sanity floor against a degenerate track.
+ if(c.lap>1&&lt>5&&(c.best==null||lt<c.best)){
   c.best=lt;
   if(c.isPlayer&&state.mode==='race'){showMsg('FASTEST LAP',fmtT(lt),'purple',2);Speech.say(LINES.fastest,false,{rate:1.06,pitch:1.02});}
  }
