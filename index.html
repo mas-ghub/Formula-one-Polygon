@@ -15,7 +15,6 @@
 html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:'Chakra Petch',sans-serif;color:var(--txt);user-select:none;}
 canvas{display:block;}
 #gl{position:fixed;inset:0;z-index:0;pointer-events:auto;}
-#rainGl{position:fixed;inset:0;z-index:5;pointer-events:none;}
 #drops{position:fixed;inset:0;z-index:6;pointer-events:none;}
 #vig{position:fixed;inset:0;z-index:7;pointer-events:none;box-shadow:inset 0 0 160px rgba(0,0,0,.45);}
 .hidden{display:none!important;}
@@ -50,6 +49,7 @@ canvas{display:block;}
 .card .cn{font-weight:700;font-size:13px;letter-spacing:.04em;color:#fff;}
 .card .cm{font-size:11px;color:var(--dim);letter-spacing:.06em;margin-top:2px;}
 .seg{display:flex;gap:5px;flex-wrap:wrap;}
+.seg4{display:flex;gap:5px;flex-wrap:wrap;}
 .seg button,.seg4 button{flex:1;padding:10px 6px;background:rgba(255,255,255,.03);border:1px solid var(--line);color:var(--txt);font-family:inherit;font-size:11px;font-weight:700;letter-spacing:.08em;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:all .15s;touch-action:manipulation;pointer-events:auto;}
 .seg button:hover,.seg4 button:hover{border-color:#565c66;}
 .seg button.sel,.seg4 button.sel{border-color:var(--red);color:#fff;background:rgba(225,6,0,.25);}
@@ -439,7 +439,6 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
 </div>
 <canvas id="gl"></canvas>
-<canvas id="rainGl"></canvas>
 <canvas id="drops"></canvas>
 <div id="vig"></div>
 
@@ -460,7 +459,12 @@ document.addEventListener('DOMContentLoaded', function() {
       <label>WEATHER</label>
       <div id="tWeather" class="seg4"></div>
     </div>
-    
+
+    <div class="sec">
+      <label>TIME OF DAY</label>
+      <div id="tTod" class="seg"></div>
+    </div>
+
     <div class="row2">
       <div class="sec">
         <label>RACE DISTANCE</label>

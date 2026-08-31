@@ -3,13 +3,14 @@
 export const QUALITY_PRESETS = {
   ULTRA: {
     label: 'ULTRA',
-    pixelRatio: 2.0,
+    pixelRatio: 2.2,
     shadows: true,
     shadowSize: 2048,
     smokeParticles: 700,
     sparkParticles: 200,
     anisotropy: 8,
-    rainShader: true
+    rainShader: true,
+    propDensity: 1.15
   },
   HIGH: {
     label: 'HIGH',
@@ -19,7 +20,8 @@ export const QUALITY_PRESETS = {
     smokeParticles: 400,
     sparkParticles: 120,
     anisotropy: 4,
-    rainShader: true
+    rainShader: true,
+    propDensity: 1.0
   },
   MED: {
     label: 'MED',
@@ -29,17 +31,19 @@ export const QUALITY_PRESETS = {
     smokeParticles: 250,
     sparkParticles: 80,
     anisotropy: 2,
-    rainShader: true
+    rainShader: true,
+    propDensity: 0.7
   },
   LOW: {
     label: 'LOW',
-    pixelRatio: 1.0,
+    pixelRatio: 0.65,
     shadows: false,
     shadowSize: 256,
     smokeParticles: 120,
     sparkParticles: 40,
     anisotropy: 1,
-    rainShader: false
+    rainShader: false,
+    propDensity: 0.4
   }
 };
 
@@ -56,9 +60,11 @@ export class QualityManager {
     this.current = mode;
     const cfg = QUALITY_PRESETS[mode];
 
-    // Pixel ratio
-    const dpr = Math.min(window.devicePixelRatio || 1, cfg.pixelRatio);
-    this.renderer.setPixelRatio(dpr);
+    // Pixel ratio — an absolute render-resolution multiplier, not capped to
+    // the display's own devicePixelRatio, so every tier is visibly different
+    // even on a standard (non-Retina/scaled) monitor: LOW genuinely renders
+    // at reduced resolution, ULTRA supersamples above native.
+    this.renderer.setPixelRatio(Math.min(cfg.pixelRatio, 3));
 
     // Shadow maps
     if (cfg.shadows) {

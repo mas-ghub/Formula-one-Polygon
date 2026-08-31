@@ -249,7 +249,7 @@ export class TiltController {
       if (isLandscape || angle === 90 || angle === -90 || angle === 270) {
         const sign = (angle === 270 || angle === -90) ? 1 : -1;
         rawSteer = sign * (this.accY / g) * 45;
-        rawPitch = (this.accX / g) * 45;
+        rawPitch = sign * (this.accX / g) * 45;
       } else {
         rawSteer = (this.accX / g) * 45;
         rawPitch = (this.accY / g) * 45;
@@ -269,7 +269,7 @@ export class TiltController {
       if (isLandscape || angle === 90 || angle === 270 || angle === -90) {
         const sign = (angle === 270 || angle === -90) ? 1 : -1;
         rawSteer = sign * this.currentBeta;
-        rawPitch = this.currentGamma;
+        rawPitch = sign * this.currentGamma;
       } else {
         rawSteer = this.currentGamma;
         rawPitch = this.currentBeta;

@@ -1,5 +1,17 @@
 /* ============ Authentic World-Class F1 Circuit Layouts & Official Benchmarks ============ */
 
+// Generic placeholder loop used only if OpenF1 has no usable lap telemetry for
+// a circuit (see src/circuitData.js) — every track below is really rendered
+// from the real racing line fetched live from OpenF1's `location` endpoint.
+function ovalPts(rx, rz, n) {
+  const pts = [];
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    pts.push([Math.round(Math.cos(a) * rx), Math.round(Math.sin(a) * rz + Math.sin(a * 2) * rz * 0.18)]);
+  }
+  return pts;
+}
+
 export const TRACKS = [
   {
     name: 'Monza',
@@ -7,7 +19,7 @@ export const TRACKS = [
     theme: 'park',
     grass: 0x477d3b,
     runoff: 7.0,
-    openf1CircuitKey: 7,
+    openf1CircuitKey: 39,
     meetingName: 'Italian Grand Prix',
     lapRecord: '1:21.046',
     lapRecordSec: 81.046,
@@ -88,7 +100,7 @@ export const TRACKS = [
     theme: 'forest',
     grass: 0x3b7032,
     runoff: 7.0,
-    openf1CircuitKey: 14,
+    openf1CircuitKey: 7,
     meetingName: 'Belgian Grand Prix',
     lapRecord: '1:41.252',
     lapRecordSec: 101.252,
@@ -193,7 +205,7 @@ export const TRACKS = [
     theme: 'park',
     grass: 0x448236,
     runoff: 6.2,
-    openf1CircuitKey: 12,
+    openf1CircuitKey: 46,
     meetingName: 'Japanese Grand Prix',
     lapRecord: '1:30.983',
     lapRecordSec: 90.983,
@@ -220,5 +232,214 @@ export const TRACKS = [
       [-205, -55],  // Final Corner (Turn 18 right)
       [-175, -145]  // Returning to Main Straight
     ]
+  },
+  {
+    name: 'Albert Park',
+    loc: 'Albert Park Circuit · Melbourne, Australia',
+    theme: 'park',
+    grass: 0x4a8a3f,
+    runoff: 6.5,
+    openf1CircuitKey: 10,
+    meetingName: 'Australian Grand Prix',
+    desc: 'Lakeside park circuit — fast, flowing corners around Albert Park Lake',
+    pts: ovalPts(230, 190, 20)
+  },
+  {
+    name: 'Shanghai',
+    loc: 'Shanghai International Circuit · China',
+    theme: 'park',
+    grass: 0x3f7d3a,
+    runoff: 7.0,
+    openf1CircuitKey: 49,
+    meetingName: 'Chinese Grand Prix',
+    desc: 'Sweeping "shang" (上) shaped circuit with a long back straight',
+    pts: ovalPts(220, 210, 22)
+  },
+  {
+    name: 'Bahrain International Circuit',
+    loc: 'Sakhir · Bahrain',
+    theme: 'park',
+    grass: 0x4d7a3e,
+    runoff: 7.0,
+    openf1CircuitKey: 63,
+    meetingName: 'Bahrain Grand Prix',
+    desc: 'Desert floodlit circuit — heavy braking zones under the lights',
+    pts: ovalPts(225, 175, 18)
+  },
+  {
+    name: 'Jeddah Corniche',
+    loc: 'Jeddah Corniche Circuit · Saudi Arabia',
+    theme: 'street',
+    grass: 0x3f7a44,
+    runoff: 4.0,
+    openf1CircuitKey: 149,
+    meetingName: 'Saudi Arabian Grand Prix',
+    desc: 'The fastest street circuit on the calendar — walls, no room for error',
+    pts: ovalPts(260, 150, 22)
+  },
+  {
+    name: 'Miami International Autodrome',
+    loc: 'Hard Rock Stadium · Miami, USA',
+    theme: 'street',
+    grass: 0x3f8241,
+    runoff: 5.0,
+    openf1CircuitKey: 151,
+    meetingName: 'Miami Grand Prix',
+    desc: 'Stadium-circling street track around Hard Rock Stadium',
+    pts: ovalPts(230, 180, 20)
+  },
+  {
+    name: 'Circuit Gilles Villeneuve',
+    loc: "Île Notre-Dame · Montreal, Canada",
+    theme: 'street',
+    grass: 0x3f7d46,
+    runoff: 5.5,
+    openf1CircuitKey: 23,
+    meetingName: 'Canadian Grand Prix',
+    desc: 'Island circuit — long straights into the Wall of Champions',
+    pts: ovalPts(215, 195, 18)
+  },
+  {
+    name: 'Circuit de Barcelona-Catalunya',
+    loc: 'Catalunya · Spain',
+    theme: 'park',
+    grass: 0x4a8340,
+    runoff: 7.0,
+    openf1CircuitKey: 15,
+    meetingName: 'Spanish Grand Prix',
+    desc: 'Technical benchmark circuit with fast, high-grip corners',
+    pts: ovalPts(220, 200, 20)
+  },
+  {
+    name: 'Hungaroring',
+    loc: 'Mogyoród · Hungary',
+    theme: 'park',
+    grass: 0x437d3c,
+    runoff: 6.5,
+    openf1CircuitKey: 4,
+    meetingName: 'Hungarian Grand Prix',
+    desc: 'Tight, twisty "Monaco without the walls" in a natural amphitheatre',
+    pts: ovalPts(200, 210, 22)
+  },
+  {
+    name: 'Circuit Zandvoort',
+    loc: 'Zandvoort · Netherlands',
+    theme: 'park',
+    grass: 0x4c8748,
+    runoff: 6.0,
+    openf1CircuitKey: 55,
+    meetingName: 'Dutch Grand Prix',
+    desc: 'Dune-side circuit with banked corners at Tarzan and Arie Luyendyk',
+    pts: ovalPts(205, 200, 20)
+  },
+  {
+    name: 'Madring',
+    loc: 'Madrid · Spain',
+    theme: 'street',
+    grass: 0x3f7a3f,
+    runoff: 5.0,
+    openf1CircuitKey: 153,
+    meetingName: 'Spanish Grand Prix',
+    desc: 'Newest circuit on the calendar — a hybrid street & permanent layout',
+    pts: ovalPts(225, 185, 20)
+  },
+  {
+    name: 'Baku City Circuit',
+    loc: 'Baku · Azerbaijan',
+    theme: 'street',
+    grass: 0x3d783f,
+    runoff: 4.0,
+    openf1CircuitKey: 144,
+    meetingName: 'Azerbaijan Grand Prix',
+    desc: 'Old-town castle walls meet a two-kilometre seafront straight',
+    pts: ovalPts(280, 160, 22)
+  },
+  {
+    name: 'Sepang',
+    loc: 'Kuala Lumpur · Malaysia',
+    theme: 'forest',
+    grass: 0x386b38,
+    runoff: 7.0,
+    openf1CircuitKey: 12,
+    meetingName: 'Malaysian Grand Prix',
+    desc: 'Jungle-fringed circuit with long straights and heavy humidity',
+    pts: ovalPts(230, 210, 20)
+  },
+  {
+    name: 'Marina Bay',
+    loc: 'Marina Bay Street Circuit · Singapore',
+    theme: 'street',
+    grass: 0x3a7a45,
+    runoff: 3.8,
+    openf1CircuitKey: 61,
+    meetingName: 'Singapore Grand Prix',
+    desc: 'Floodlit night race through the city — one of the toughest on the calendar',
+    pts: ovalPts(215, 195, 22)
+  },
+  {
+    name: 'Circuit of the Americas',
+    loc: 'Austin, Texas · USA',
+    theme: 'park',
+    grass: 0x4a8340,
+    runoff: 7.0,
+    openf1CircuitKey: 9,
+    meetingName: 'United States Grand Prix',
+    desc: 'Steep uphill Turn 1 inspired by Silverstone’s Maggotts-Becketts',
+    pts: ovalPts(225, 205, 20)
+  },
+  {
+    name: 'Autódromo Hermanos Rodríguez',
+    loc: 'Mexico City · Mexico',
+    theme: 'park',
+    grass: 0x4c8747,
+    runoff: 6.5,
+    openf1CircuitKey: 65,
+    meetingName: 'Mexico City Grand Prix',
+    desc: 'Thin high-altitude air and a stadium section through the Foro Sol',
+    pts: ovalPts(210, 210, 20)
+  },
+  {
+    name: 'Interlagos',
+    loc: 'Autódromo José Carlos Pace · São Paulo, Brazil',
+    theme: 'park',
+    grass: 0x437f3d,
+    runoff: 6.5,
+    openf1CircuitKey: 14,
+    meetingName: 'São Paulo Grand Prix',
+    desc: 'Anti-clockwise, undulating circuit famous for late-season drama',
+    pts: ovalPts(215, 195, 20)
+  },
+  {
+    name: 'Las Vegas Strip Circuit',
+    loc: 'Las Vegas, Nevada · USA',
+    theme: 'street',
+    grass: 0x3a7040,
+    runoff: 4.5,
+    openf1CircuitKey: 152,
+    meetingName: 'Las Vegas Grand Prix',
+    desc: 'Midnight street race down the neon-lit Las Vegas Strip',
+    pts: ovalPts(260, 165, 20)
+  },
+  {
+    name: 'Lusail International Circuit',
+    loc: 'Lusail · Qatar',
+    theme: 'park',
+    grass: 0x477a3c,
+    runoff: 7.0,
+    openf1CircuitKey: 150,
+    meetingName: 'Qatar Grand Prix',
+    desc: 'High-speed floodlit desert circuit with sweeping, flowing corners',
+    pts: ovalPts(225, 195, 20)
+  },
+  {
+    name: 'Yas Marina',
+    loc: 'Yas Island · Abu Dhabi, UAE',
+    theme: 'park',
+    grass: 0x437d40,
+    runoff: 6.5,
+    openf1CircuitKey: 70,
+    meetingName: 'Abu Dhabi Grand Prix',
+    desc: 'Season finale under the lights beside the Yas Marina yacht harbour',
+    pts: ovalPts(215, 200, 20)
   }
 ];
