@@ -263,7 +263,13 @@ refresh(){try{
   if(name.includes('premium'))s+=80;
   if(name.includes('google'))s+=60;
   if(name.includes('neural'))s+=50;
-  if(/(female|samantha|hazel|serena|daniel|george|david|arthur|james|victoria|kate)/i.test(name))s+=35;
+  // Prefer a male-sounding voice for the commentator — a broadcast-caller
+  // baritone reads more like a real F1 broadcast. Explicit "male"/"female"
+  // tags win outright; otherwise fall back to common per-platform voice names.
+  if(/\bmale\b/.test(name)&&!/female/.test(name))s+=300;
+  else if(/female/.test(name))s-=300;
+  else if(/(daniel|george|david|arthur|james|oliver|ryan|guy|christopher|eric|fred|alex|thomas|nathan)/i.test(name))s+=120;
+  else if(/(samantha|hazel|serena|victoria|kate|karen|moira|tessa|susan|zira|aria|jenny|michelle|fiona|zoe)/i.test(name))s-=120;
   return s;};
  vs.sort((a,b)=>score(b)-score(a));
  this.voice=vs[0];
@@ -277,8 +283,11 @@ say(text,force,opts){
   const u=new SpeechSynthesisUtterance(text);
   if(this.voice)u.voice=this.voice;
   u.lang=(this.voice&&this.voice.lang)||'en-GB';
-  u.rate=(opts&&opts.rate!=null)?opts.rate:0.96;
-  u.pitch=(opts&&opts.pitch!=null)?opts.pitch:0.97;
+  // A punchier baseline rate/pitch than a flat narrator — individual lines
+  // (lights out, overtakes, crashes) already push these higher still for
+  // their moment, this just raises the resting energy level between them.
+  u.rate=(opts&&opts.rate!=null)?opts.rate:1.06;
+  u.pitch=(opts&&opts.pitch!=null)?opts.pitch:1.05;
   u.volume=1.0;
   speechSynthesis.speak(u);
  }catch(e){}}};
