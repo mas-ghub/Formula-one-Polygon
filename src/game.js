@@ -615,17 +615,17 @@ function makeCarMesh(d){
  const axleR=new THREE.Mesh(getAxleGeo(),matWheel);axleR.position.set(0,0.37,-1.62);
  const drs=new THREE.Mesh(drsGeo,new THREE.MeshStandardMaterial({color:d.colB,flatShading:true,roughness:0.4}));
  drs.position.set(0,1.0,-2.42);
- // FIA-style flashing rain light, mounted high at the rear like the real cars — on in wet weather only.
- const rainLight=new THREE.Mesh(new THREE.SphereGeometry(0.06,8,6),new THREE.MeshStandardMaterial({color:0x2a0000,emissive:0xff1a1a,emissiveIntensity:0,roughness:0.4}));
- rainLight.position.set(0,1.16,-2.55);
- // Rear brake light — lights up under braking, in any weather, like the real cars' LED strip.
+ // Rear brake light — lights up under braking in any weather, and also
+ // doubles as the FIA-style flashing rain light when wet and off the
+ // brakes, like the real cars' LED strip (a separate light mounted high
+ // over the rear wing just read as a stray flashing blob at car scale).
  const brakeLight=new THREE.Mesh(new THREE.BoxGeometry(0.16,0.08,0.03),new THREE.MeshStandardMaterial({color:0x2a0000,emissive:0xff0000,emissiveIntensity:0,roughness:0.4}));
  brakeLight.position.set(0,0.56,-2.56);
  const nT=numTex(d.num);
  for(const sx of[1,-1]){const p=new THREE.Mesh(new THREE.PlaneGeometry(0.3,0.3),new THREE.MeshBasicMaterial({map:nT,transparent:true}));
   p.position.set(sx*0.885,0.44,-0.25);p.rotation.y=sx*Math.PI/2;g.add(p);}
- g.add(body,driverGroup,axleF,axleR,drs,rainLight,brakeLight);
- return{g,body,driverGroup,helmetGroup,axleF,axleR,drs,rainLight,brakeLight};
+ g.add(body,driverGroup,axleF,axleR,drs,brakeLight);
+ return{g,body,driverGroup,helmetGroup,axleF,axleR,drs,brakeLight};
 }
 
 /* ============ particles ============ */
@@ -1939,13 +1939,13 @@ function updCarVisual(c,dt){
  c.mesh.axleF.rotation.x=c.wheelRot;
  c.mesh.axleR.rotation.x=c.wheelRot;
  c.mesh.drs.rotation.x=c.drsOpen?-1.15:0;
- if(cur.wet>0.25){
-  const on=Math.sin(timeSec*12)>0;
-  c.mesh.rainLight.material.emissiveIntensity=on?3.2:0;
+ if(c.brake>0.02){
+  c.mesh.brakeLight.material.emissiveIntensity=4;
+ }else if(cur.wet>0.25){
+  c.mesh.brakeLight.material.emissiveIntensity=Math.sin(timeSec*12)>0?3.2:0;
  }else{
-  c.mesh.rainLight.material.emissiveIntensity=0;
+  c.mesh.brakeLight.material.emissiveIntensity=0;
  }
- c.mesh.brakeLight.material.emissiveIntensity=c.brake>0.02?4:0;
  const fx=Math.sin(c.hdg),fz=Math.cos(c.hdg),rx=-fz,rz=fx;
  const vR=c.vx*rx+c.vz*rz;
  c.mesh.body.rotation.z=damp(c.mesh.body.rotation.z,clamp(vR*0.011,-0.1,0.1),8,dt);
@@ -2169,6 +2169,97 @@ const AudioSys={started:false,
  setMute(m){if(this.started)this.master.gain.value=m?0:0.9;}
 };
 
+/* ============ Title screen theme ============
+   A quiet, original moody blues-rock instrumental for the menu/attract
+   screen — its own chord progression, walking bassline and rhythm, not an
+   arrangement of any existing song. Built the same way as the rest of
+   AudioSys (raw oscillators/noise through filters and gain envelopes,
+   scheduled ahead of the audio clock so JS-thread jitter can't cause
+   glitches), and mixed through AudioSys.master so the game's mute/volume
+   controls cover it too. */
+const TitleTheme={
+ playing:false,gain:null,nextNoteTime:0,step:0,barIdx:0,stepDur:0.3,
+ // Em - C - G - D: a common rock progression, deliberately not the one
+ // that makes any specific existing song recognizable. Each chord carries
+ // its own 8-step walking bass line (eighth notes at ~100bpm) and triad.
+ chords:[
+  {tones:[164.81,196.00,246.94],bass:[82.41,82.41,98.00,110.00,123.47,110.00,98.00,82.41]},
+  {tones:[130.81,164.81,196.00],bass:[65.41,65.41,82.41,98.00,82.41,73.42,65.41,65.41]},
+  {tones:[98.00,123.47,146.83],bass:[98.00,98.00,123.47,146.83,123.47,110.00,98.00,98.00]},
+  {tones:[73.42,92.50,110.00],bass:[73.42,73.42,92.50,110.00,92.50,82.41,73.42,73.42]},
+ ],
+ ensureGain(){
+  if(this.gain||!AudioSys.ctx)return;
+  this.gain=AudioSys.ctx.createGain();this.gain.gain.value=0;
+  this.gain.connect(AudioSys.master);
+ },
+ start(){
+  if(!AudioSys.ctx||this.playing)return;
+  this.ensureGain();
+  this.playing=true;this.step=0;this.barIdx=0;
+  this.nextNoteTime=AudioSys.ctx.currentTime+0.15;
+  const t=AudioSys.ctx.currentTime;
+  this.gain.gain.cancelScheduledValues(t);
+  this.gain.gain.setValueAtTime(this.gain.gain.value,t);
+  this.gain.gain.linearRampToValueAtTime(0.15,t+3);
+ },
+ stop(){
+  if(!this.playing)return;
+  this.playing=false;
+  if(this.gain&&AudioSys.ctx){
+   const t=AudioSys.ctx.currentTime;
+   this.gain.gain.cancelScheduledValues(t);
+   this.gain.gain.setValueAtTime(this.gain.gain.value,t);
+   this.gain.gain.linearRampToValueAtTime(0,t+1.1);
+  }
+ },
+ bassNote(freq,time,dur){
+  const ctx=AudioSys.ctx;
+  const o=ctx.createOscillator();o.type='sawtooth';o.frequency.value=freq;
+  const f=ctx.createBiquadFilter();f.type='lowpass';f.frequency.value=420;f.Q.value=0.8;
+  const g=ctx.createGain();g.gain.setValueAtTime(0.0001,time);
+  g.gain.exponentialRampToValueAtTime(0.11,time+0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001,time+dur*0.92);
+  o.connect(f);f.connect(g);g.connect(this.gain);
+  o.start(time);o.stop(time+dur);
+ },
+ pad(tones,time,dur){
+  const ctx=AudioSys.ctx;
+  tones.forEach((freq,i)=>{
+   const o=ctx.createOscillator();o.type=i===0?'triangle':'sine';
+   o.frequency.value=freq;o.detune.value=(i-1)*4;
+   const f=ctx.createBiquadFilter();f.type='lowpass';f.frequency.value=1100;
+   const g=ctx.createGain();g.gain.setValueAtTime(0.0001,time);
+   g.gain.linearRampToValueAtTime(0.045,time+0.9);
+   g.gain.linearRampToValueAtTime(0.0001,time+dur);
+   o.connect(f);f.connect(g);g.connect(this.gain);
+   o.start(time);o.stop(time+dur+0.05);
+  });
+ },
+ tick(time){
+  const ctx=AudioSys.ctx;
+  const n=ctx.createBufferSource();n.buffer=AudioSys.noiseBuf;
+  const f=ctx.createBiquadFilter();f.type='highpass';f.frequency.value=5000;
+  const g=ctx.createGain();g.gain.setValueAtTime(0.018,time);
+  g.gain.exponentialRampToValueAtTime(0.0001,time+0.05);
+  n.connect(f);f.connect(g);g.connect(this.gain);
+  n.start(time);n.stop(time+0.06);
+ },
+ update(){
+  if(!this.playing||!AudioSys.ctx)return;
+  const ctx=AudioSys.ctx;
+  while(this.nextNoteTime<ctx.currentTime+0.2){
+   const chord=this.chords[this.barIdx%this.chords.length];
+   this.bassNote(chord.bass[this.step],this.nextNoteTime,this.stepDur*0.95);
+   if(this.step===0)this.pad(chord.tones,this.nextNoteTime,this.stepDur*8);
+   if(this.step%2===1)this.tick(this.nextNoteTime);
+   this.step++;
+   if(this.step>=8){this.step=0;this.barIdx++;}
+   this.nextNoteTime+=this.stepDur;
+  }
+ }
+};
+
 /* ============ cameras (5 modes incl. top-down, active one always labelled) ============ */
 const cam={pos:V3(0,20,0),shake:0,orbA:0,smHdg:0,heliU:0,heliPos:null};
 // Title-screen "director": cuts between a helicopter establishing shot, a
@@ -2365,6 +2456,7 @@ let raceT=0,cdT=0,cdGo=0,posTimer=0,towerRows=null,cdLastOn=0;
 function beginRace(){
  state.name=$('tName').value.trim()||'YOU';
  Speech.enabled=$('tSpeech').classList.contains('on');
+ TitleTheme.stop();
  $('title').classList.add('hidden');$('results').classList.add('hidden');$('pause').classList.add('hidden');
  $('hud').classList.remove('hidden');
  $('hLaps').textContent=state.laps;
@@ -2475,6 +2567,7 @@ function toTitle(){
  snapWeather(state.wx);
  setupGrid(20);
  attractT=6;
+ TitleTheme.start();
 }
 function resetPlayer(){
  const p=player;if(!p||state.mode==='title')return;
@@ -2902,6 +2995,7 @@ function tick(){
   }
   updCamera(state.paused?0.0001:dtGlobal);
   AudioSys.update();
+  TitleTheme.update();
  }catch(err){
   console.error('[tick] update error:',err);
  }
@@ -2963,4 +3057,17 @@ loadRealCircuits(TRACKS).then(() => {
 state.mode='title';
 tiltCtrl.updateUI();
 tick();
+
+// Browsers won't let audio play before a user gesture, so the title theme
+// can't just start at boot — pick it up on whatever the player touches
+// first (a settings button, a key) while still on the title screen.
+function unlockAudioForTitle(){
+ if(!AudioSys.started)AudioSys.start();
+ if(AudioSys.ctx&&AudioSys.ctx.state==='suspended')AudioSys.ctx.resume();
+ if(state.mode==='title')TitleTheme.start();
+ removeEventListener('pointerdown',unlockAudioForTitle);
+ removeEventListener('keydown',unlockAudioForTitle);
+}
+addEventListener('pointerdown',unlockAudioForTitle);
+addEventListener('keydown',unlockAudioForTitle);
 
