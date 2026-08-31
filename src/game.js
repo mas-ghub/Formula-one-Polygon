@@ -1570,14 +1570,22 @@ function placeCar(c){
  c.mesh.g.rotation.y=c.hdg;
 }
 /* project world position onto the centreline (local search around cached index) */
-function projectCar(c){
+function projectCar(c,full){
  const N=T.N;
  let bi=c.ti||0,bd=1e18;
- for(let k=-46;k<=46;k++){
-  const i=(c.ti+k+N)%N;
-  const p=T.samples[i].p;
-  const d=(p.x-c.x)**2+(p.z-c.z)**2;
-  if(d<bd){bd=d;bi=i;}
+ if(full){
+  for(let i=0;i<N;i++){
+   const p=T.samples[i].p;
+   const d=(p.x-c.x)**2+(p.z-c.z)**2;
+   if(d<bd){bd=d;bi=i;}
+  }
+ }else{
+  for(let k=-46;k<=46;k++){
+   const i=(c.ti+k+N)%N;
+   const p=T.samples[i].p;
+   const d=(p.x-c.x)**2+(p.z-c.z)**2;
+   if(d<bd){bd=d;bi=i;}
+  }
  }
  c.ti=bi;
  const s=T.samples[bi];
@@ -2299,8 +2307,24 @@ function showMsg(main,sub,cls,dur=2.2){
 const rpmBars=[];
 {const hr=$('hRpm');for(let i=0;i<12;i++){const b=document.createElement('i');hr.appendChild(b);rpmBars.push(b);}}
 let lastPos=0,otCool=0,resultsShown=false,wwT=0;
+let hudRefreshAcc=0;
 function updHUD(dt){
  const p=player;if(!p)return;
+ const t=T.samples[p.ti].t;
+ const along=p.vx*t.x+p.vz*t.z;
+ if(along<-3&&Math.abs(p.vF)>1)wwT+=dt;else wwT=0;
+ if(msgTimer>0){msgTimer-=dt;if(msgTimer<=0)$('hMsg').classList.remove('show');}
+ if(otCool>0)otCool-=dt;
+ lastPos=p.pos;
+
+ // The on-screen numbers (esp. the millisecond timer) don't need a DOM write
+ // every rendered frame — at 60Hz the fast-changing digits just read as
+ // flicker. Refreshing at ~12Hz is still perfectly responsive and reads as
+ // a steady clock instead of a blur.
+ hudRefreshAcc+=dt;
+ if(hudRefreshAcc<0.08)return;
+ hudRefreshAcc=0;
+
  $('hPos').textContent='P'+p.pos;$('hPosT').textContent=' / '+cars.length;
  $('hLap').textContent=clamp(p.lap,1,state.laps);
  $('hTime').textContent=p.finished?fmtT(p.finishTime):fmtT(raceT-p.lapStart);
@@ -2314,13 +2338,7 @@ function updHUD(dt){
  rpmBars.forEach((b,i)=>{b.className=i<on?('on'+(p.rpm>0.96?' max':p.rpm>0.84?' hot':'')):'';});
  $('hDrs').className='chip drs'+(p.drsOpen?' on':'');
  $('slipTag').className=p.slipstream?'on':'';
- const t=T.samples[p.ti].t;
- const along=p.vx*t.x+p.vz*t.z;
- if(along<-3&&Math.abs(p.vF)>1)wwT+=dt;else wwT=0;
  $('hWrong').className=(wwT>0.7&&!p.finished)?'':'hidden';
- if(msgTimer>0){msgTimer-=dt;if(msgTimer<=0)$('hMsg').classList.remove('show');}
- if(otCool>0)otCool-=dt;
- lastPos=p.pos;
  drawMinimap();
 }
 
@@ -2442,12 +2460,13 @@ function toTitle(){
 }
 function resetPlayer(){
  const p=player;if(!p||state.mode==='title')return;
- projectCar(p);
+ projectCar(p,true);
  const s=T.samples[p.ti];
  p.x=s.p.x;p.z=s.p.z;
  p.hdg=Math.atan2(s.t.x,s.t.z);
  p.vx=0;p.vz=0;p.vF=0;p.lat=0;
  p.f=p.ti;p._pf=p.f;
+ p.y=getRoadHAtCoords(p.x,p.z);p.vy=0;p.airborne=false;p.pitch=0;p.bounceOff=0;p.bounceVel=0;
  placeCar(p);
 }
 function updRace(dt){
