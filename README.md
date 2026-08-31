@@ -121,6 +121,13 @@ on the title screen.
   sounds properly loud before lights out, plus a beep on each starting light
   and a distinct tone at lights-out.
 
+## Roadmap
+
+- **Offline play** — make the game work fully offline (service worker +
+  cache/manifest so it installs as a PWA and loads with no network at all).
+  `public/data/` is already local/static, so this is mainly about caching
+  the app shell (`index.html`, `src/`, fonts) and the data folder.
+
 ## Project layout
 
 ```
