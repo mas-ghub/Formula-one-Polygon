@@ -34,6 +34,14 @@
   .snd.hint::after{content:'';position:absolute;inset:-4px;border-radius:50%;
     border:2px solid rgba(230,160,70,.8);animation:pulse 2s ease-out infinite}
   @keyframes pulse{0%{transform:scale(.85);opacity:.9}70%{transform:scale(1.35);opacity:0}100%{opacity:0}}
+  .skip{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);z-index:5;
+    padding:11px 22px;border:none;border-radius:24px;cursor:pointer;
+    background:rgba(255,255,255,.42);backdrop-filter:blur(14px) saturate(1.4);
+    -webkit-backdrop-filter:blur(14px) saturate(1.4);
+    box-shadow:0 4px 16px rgba(120,70,40,.18), inset 0 0 0 1px rgba(255,255,255,.65);
+    color:#6B4A38;font-family:'Nunito',sans-serif;font-weight:800;font-size:13px;letter-spacing:.1em;
+    transition:transform .22s cubic-bezier(.34,1.56,.64,1), background .22s;touch-action:manipulation}
+  .skip:active{transform:translateX(-50%) scale(.94)}
 </style>
 </head>
 <body>
@@ -46,6 +54,7 @@
       <g class="slash"><path d="M16 9.5l5 5M21 9.5l-5 5"/></g>
     </svg>
   </button>
+  <button id="skip" class="skip">SKIP ▶</button>
 </div>
 
 <script>
@@ -1371,6 +1380,13 @@ requestAnimationFrame(loop);
 cv.addEventListener('pointerdown',()=>{
   if(Audio_.on&&Audio_.ctx&&Audio_.ctx.state==='suspended')Audio_.ctx.resume();
   if(phase===P.IDLE)reset();
+});
+
+/* ── Skip button: same "reveal the app behind us" signal as the
+   auto-continue-on-idle hook below, just fired immediately on tap.
+   No-op when opened standalone (window.parent === window). ── */
+document.getElementById('skip').addEventListener('click',()=>{
+  if(window.parent!==window)window.parent.postMessage('sparky-splash-done','*');
 });
 
 /* ── Embedded-splash hook: tell an embedding page once the full
