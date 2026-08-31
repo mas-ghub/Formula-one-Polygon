@@ -87,6 +87,11 @@ canvas{display:block;}
 .btn-mini:hover{border-color:var(--red);color:#fff;}
 
 /* HUD elements */
+/* Chakra Petch is proportional — digits like "1" and "8" aren't the same
+   width, so a fast-changing readout (the race clock especially) visibly
+   shifts as it counts. Tabular figures make every digit the same width. */
+#hTime,#hBest,#hGap,#hLap,#hLaps,#hPos,#hPosT,#hSpeed,#hGear,.tower-pos,.tower-gap{
+ font-variant-numeric:tabular-nums;font-feature-settings:'tnum' 1,'lnum' 1;}
 #hud{position:fixed;inset:0;z-index:10;pointer-events:none;}
 #hTL{position:absolute;top:14px;left:14px;padding:10px 16px 10px 12px;min-width:160px;}
 #hPos{font-style:italic;font-weight:700;font-size:36px;line-height:1;}
