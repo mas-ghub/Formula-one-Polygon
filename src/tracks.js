@@ -140,6 +140,7 @@ export const TRACKS = [
     grass: 0x3d6632,
     runoff: 3.2,
     openf1CircuitKey: 22,
+    tunnel: { from: 0.505, to: 0.615 }, // the iconic Portier → Tunnel → Nouvelle Chicane covered section
     meetingName: 'Monaco Grand Prix',
     lapRecord: '1:12.909',
     lapRecordSec: 72.909,
@@ -206,6 +207,7 @@ export const TRACKS = [
     grass: 0x448236,
     runoff: 6.2,
     openf1CircuitKey: 46,
+    lake: { frac: 0.9 }, // parkland infield water
     meetingName: 'Japanese Grand Prix',
     lapRecord: '1:30.983',
     lapRecordSec: 90.983,
@@ -240,6 +242,7 @@ export const TRACKS = [
     grass: 0x4a8a3f,
     runoff: 6.5,
     openf1CircuitKey: 10,
+    lake: { frac: 0.9 }, // the circuit encircles Albert Park Lake — a water disc in the infield
     meetingName: 'Australian Grand Prix',
     desc: 'Lakeside park circuit — fast, flowing corners around Albert Park Lake',
     pts: ovalPts(230, 190, 20)

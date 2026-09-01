@@ -515,8 +515,53 @@ grassBumpT.repeat.set(120, 120);
 const[cc,cg]=mkCanvas(64,64);
 cg.fillStyle='#d81f2a';cg.fillRect(0,0,64,32);cg.fillStyle='#ecebe6';cg.fillRect(0,32,64,32);
 const curbT=ctex(cc,true);
-const[wc,wg]=mkCanvas(1024,128);
-const ADS=[['POLYGON GP','#e9e9e9','#101114'],['APEX FUEL','#e10600','#ffffff'],['SPARKY','#ffd9af','#8c4f2c'],['VANTAGE TYRES','#ffd23f','#101114'],['NOVA ENERGY','#0f7a4a','#ffffff'],["END OF ROAD FEST '26",'#d9486b','#ffffff'],['GET THIS APP!','#efa733','#101114'],['DRIFT KING','#e10600','#ffffff']];
+
+// Gravel-trap texture — a coarse, speckled tan-and-grey bed of rounded
+// pebbles, so a car that runs wide into the run-off visibly digs into gravel
+// rather than sliding across more asphalt.
+const[glc,glg]=mkCanvas(128,128);
+glg.fillStyle='#8a7f6b';glg.fillRect(0,0,128,128);
+for(let i=0;i<34;i++){ // large tonal drifts of light/dark gravel
+ const light=Math.random()<0.5;
+ glg.fillStyle=light?'rgba(120,108,88,0.5)':'rgba(72,64,50,0.5)';
+ glg.beginPath();glg.ellipse(Math.random()*128,Math.random()*128,rand(10,30),rand(8,22),rand(0,7),0,7);glg.fill();
+}
+for(let i=0;i<1600;i++){ // individual pebbles
+ const g=rand(0.55,0.95)*150;
+ const r=g*1.05,gg=g,b=g*0.8;
+ glg.fillStyle=`rgba(${r|0},${gg|0},${b|0},1)`;
+ glg.beginPath();glg.arc(Math.random()*128,Math.random()*128,rand(1,3.2),0,7);glg.fill();
+ glg.fillStyle='rgba(30,26,20,0.35)';
+ glg.beginPath();glg.arc(Math.random()*128,Math.random()*128,rand(0.8,2.2),0,7);glg.fill();
+}
+const gravelT=ctex(glc,true);gravelT.repeat.set(8,8);
+
+// Water texture — a subtle caustic ripple (blue base + light streaks) used by
+// the flat lake/harbour discs, kept mostly for a shimmering highlight layer.
+const[wtc,wtg]=mkCanvas(128,128);
+wtg.fillStyle='#14556f';wtg.fillRect(0,0,128,128);
+for(let i=0;i<40;i++){
+ wtg.strokeStyle=`rgba(180,225,240,${rand(0.05,0.2)})`;wtg.lineWidth=rand(1,3);
+ const y=Math.random()*128;wtg.beginPath();wtg.moveTo(0,y);
+ for(let x=0;x<=128;x+=16)wtg.lineTo(x,y+Math.sin(x*0.2+Math.random()*6)*3);
+ wtg.stroke();
+}
+const waterT=ctex(wtc,true);waterT.repeat.set(6,6);
+
+// Tyre tread texture — circumferential grooves and tread blocks over a dark
+// rubber base, so the wheels read as proper race tyres rather than plain
+// black cylinders when they spin.
+const[tyc,tyg]=mkCanvas(128,64);
+tyg.fillStyle='#131417';tyg.fillRect(0,0,128,64);
+for(let y=6;y<64;y+=14){tyg.fillStyle='#050607';tyg.fillRect(0,y,128,5);tyg.fillStyle='#26282d';tyg.fillRect(0,y+5,128,2);}
+for(let x=0;x<128;x+=10){tyg.fillStyle='rgba(0,0,0,0.4)';tyg.fillRect(x,0,1.6,64);}
+for(let i=0;i<1200;i++){const g=18+Math.random()*22|0;tyg.fillStyle=`rgb(${g},${g},${g+2})`;tyg.fillRect(Math.random()*128,Math.random()*64,1.4,1.4);}
+const tyreT=ctex(tyc,true);tyreT.repeat.set(6,1);
+
+const ADS=[['POLYGON GP','#e9e9e9','#101114'],['APEX FUEL','#e10600','#ffffff'],['SPARKY','#ffd9af','#8c4f2c'],['VANTAGE TYRES','#ffd23f','#101114'],['NOVA ENERGY','#0f7a4a','#ffffff'],["END OF ROAD FEST '26",'#d9486b','#ffffff'],['GET THIS APP!','#efa733','#101114'],['DRIFT KING','#e10600','#ffffff'],
+ ['STEVE SAUSAGES ARE GGGGGREAT!','#c0392b','#fff3d6'],['LEWIS CHEATS (A LOT) :)','#FFE600','#101114'],['PIT LANE TAKEAWAY','#2e6fd0','#fff'],['BIG STEAMY PUDDINGS','#8e44ad','#fff']];
+const NA=ADS.length;
+const[wc,wg]=mkCanvas(NA*128,128);
 // A small Sparky-the-sparrow silhouette badge in the corner of every board —
 // drawn in the same color as that tile's text so it always reads clearly
 // against its own background.
@@ -529,13 +574,16 @@ function drawAdBird(cx,x,y,s,color){
  cx.beginPath();cx.moveTo(-7,1);cx.lineTo(-14.5,-1.2);cx.lineTo(-13,4.2);cx.closePath();cx.fill();
  cx.restore();
 }
-for(let i=0;i<8;i++){const[t,bg,fg]=ADS[i];wg.fillStyle=bg;wg.fillRect(i*128,0,128,128);
- wg.fillStyle=fg;wg.font='italic 700 24px sans-serif';wg.textAlign='center';wg.textBaseline='middle';
- wg.save();wg.translate(i*128+64,70);wg.rotate(-0.05);wg.fillText(t,0,0,104);wg.restore();
+// Text is drawn mirrored so it reads the correct way round on the face the
+// card/board presents to the driver (the user asked for the writing to be the
+// other way around).
+for(let i=0;i<NA;i++){const[t,bg,fg]=ADS[i];wg.fillStyle=bg;wg.fillRect(i*128,0,128,128);
+ wg.fillStyle=fg;wg.font='italic 700 22px sans-serif';wg.textAlign='center';wg.textBaseline='middle';
+ wg.save();wg.translate(i*128+64,70);wg.rotate(-0.05);wg.scale(-1,1);wg.fillText(t,0,0,112);wg.restore();
  drawAdBird(wg,i*128+22,26,1.2,fg);
  wg.fillStyle='rgba(0,0,0,.25)';wg.fillRect(i*128,118,128,10);}
 const adsT=ctex(wc,true);
-adsT.repeat.set(1/8,1);
+adsT.repeat.set(1/NA,1);
 // Building facade — richer than a flat grid of squares: panel banding,
 // mullions between windows, and a few warm/cool lit-window tones instead of
 // one flat gold.
@@ -561,7 +609,10 @@ function bannerTex(name){const[cn,cx]=mkCanvas(1024,96);
  cx.fillStyle='#101216';cx.fillRect(0,0,1024,96);
  cx.fillStyle='#e10600';cx.fillRect(0,0,26,96);cx.fillRect(998,0,26,96);
  cx.fillStyle='#f4f1ea';cx.font='italic 700 52px sans-serif';cx.textAlign='center';cx.textBaseline='middle';
- cx.fillText(name.toUpperCase()+' · POLYGON GP',512,52,940);return ctex(cn,false);}
+ // Mirrored so the banner reads the correct way round when you approach the
+ // line (the plane's facing means a normal draw comes out backwards).
+ cx.save();cx.translate(512,52);cx.scale(-1,1);cx.fillText(name.toUpperCase()+' · POLYGON GP',0,0,940);cx.restore();
+ return ctex(cn,false);}
 const numCache=new Map();
 function numTex(n){if(numCache.has(n))return numCache.get(n);
  const[cn,cx]=mkCanvas(64,64);cx.clearRect(0,0,64,64);
@@ -571,11 +622,30 @@ function numTex(n){if(numCache.has(n))return numCache.get(n);
 
 /* ============ car geometry ============ */
 const matBody=new THREE.MeshStandardMaterial({vertexColors:true,flatShading:true,roughness:0.25,metalness:0.35,envMapIntensity:1.1});
-const matWheel=new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.55,metalness:0.15,envMapIntensity: 0.8});
+const matWheel=new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.55,metalness:0.15,envMapIntensity: 0.8,bumpMap:tyreT,bumpScale:0.55});
+const woodLegMat=new THREE.MeshStandardMaterial({color:0x6b4a2f,roughness:0.9});
 function tint(geo,color){const col=new THREE.Color(color);const n=geo.attributes.position.count;
  const a=new Float32Array(n*3);for(let i=0;i<n;i++){a[i*3]=col.r;a[i*3+1]=col.g;a[i*3+2]=col.b;}
  geo.setAttribute('color',new THREE.BufferAttribute(a,3));return geo;}
 function part(geo,color,x,y,z,rx=0,ry=0,rz=0){geo.rotateZ(rz);geo.rotateY(ry);geo.rotateX(rx);geo.translate(x,y,z);tint(geo,color);return geo;}
+// Tapered, forward-drooping beak for the 2026-style nose — a four-sided
+// frustum whose front face is narrower AND drops lower than its back face, so
+// the nose is a sculpted aerodynamic beak rather than a pointy cone.
+function noseGeo(wB,hB,wF,hF,len,drop){
+ const hb=wB/2,vb=hB/2,hf=wF/2,vf=hF/2,l=len/2;
+ const verts=new Float32Array([
+  -hb,-vb,-l, hb,-vb,-l, hb,vb,-l, -hb,vb,-l,   // back face (z=-l)
+  -hf,-vf-drop,l, hf,-vf-drop,l, hf,vf-drop,l, -hf,vf-drop,l // front face (z=+l, drooped)
+ ]);
+ const idx=[0,1,2,0,2,3, 4,6,5,4,7,6, 0,4,5,0,5,1, 1,5,6,1,6,2, 2,6,7,2,7,3, 3,7,4,3,4,0];
+ const g=new THREE.BufferGeometry();
+ g.setAttribute('position',new THREE.BufferAttribute(verts,3));
+ g.setIndex(idx);g.computeVertexNormals();
+ // Simple planar UVs so the geometry merges cleanly with the box/cylinder
+ // parts that carry UVs (matBody itself is untextured, so values are cosmetic)
+ const uvs=new Float32Array(16);for(let i=0;i<4;i++){uvs[i*2]=(i%2);uvs[i*2+1]=i<2?0:1;}for(let i=0;i<4;i++){uvs[8+i*2]=(i%2);uvs[8+i*2+1]=i<2?0:1;}
+ g.setAttribute('uv',new THREE.BufferAttribute(uvs,2));return g;
+}
 const bodyCache=new Map();
 export function getBodyGeo(colA,colB){
  const key=colA+colB;if(bodyCache.has(key))return bodyCache.get(key);
@@ -583,9 +653,16 @@ export function getBodyGeo(colA,colB){
  const C=(rt,rb,h,seg,c,x,y,z,rx=0)=>P.push(part(new THREE.CylinderGeometry(rt,rb,h,seg),c,x,y,z,rx));
  B(1.55,0.07,3.6,'#15161a',0,0.14,0.15);
  B(0.72,0.34,2.2,colA,0,0.42,0.75);
- C(0.07,0.19,1.5,8,colA,0,0.42,2.1,Math.PI/2);
- B(1.95,0.045,0.62,colB,0,0.12,2.62);B(1.95,0.035,0.3,colB,0,0.2,2.42,-0.25);
- B(0.03,0.22,0.62,colB,0.97,0.18,2.62);B(0.03,0.22,0.62,colB,-0.97,0.18,2.62);
+ // 2026-style drooping nose beak (replaces the old pointy cone).
+ P.push(part(noseGeo(0.62,0.30,0.46,0.12,1.12,0.18),colA,0,0.46,2.13));
+ // 2026 narrower, two-element active front wing + simplified endplates (the
+ // 2026 rules cut front-wing width to 1850mm and introduced a two-element flap).
+ B(1.70,0.05,0.50,colB,0,0.11,2.72);                    // main plane
+ B(1.58,0.04,0.30,colB,0,0.17,2.54,-0.26);              // second (active) element
+ B(0.04,0.30,0.52,colB,0.83,0.17,2.72);                 // right endplate
+ B(0.04,0.30,0.52,colB,-0.83,0.17,2.72);                // left endplate
+ B(0.09,0.12,0.09,'#202226',0.17,0.26,2.50);            // centre pylons
+ B(0.09,0.12,0.09,'#202226',-0.17,0.26,2.50);
  B(0.78,0.2,1.0,colA,0,0.58,0.55);B(0.5,0.1,0.9,'#101114',0,0.66,0.55);
  // Halo protection structure — a real halo shape: a thick front arc running
  // over the driver's head, a single forward spine down to the nose bulkhead,
@@ -673,9 +750,20 @@ export function makeDriverMesh(colA, helmetCol){
 
 let axleGeo=null;
 export function getAxleGeo(){if(axleGeo)return axleGeo;
- const tire=part(new THREE.CylinderGeometry(0.37,0.37,0.34,10),'#17181a',0,0,0,0,0,Math.PI/2);
- const rim=part(new THREE.CylinderGeometry(0.23,0.23,0.35,9),'#b9bcc2',0,0,0,0,0,Math.PI/2);
- const w=mergeGeometries([tire,rim],false);
+ // One wheel = a tyre + a bright alloy barrel + a set of radial SPOKES lying in
+ // the wheel's Y-Z plane, so the whole thing visibly rotates with `wheelRot`
+ // (a plain cylinder gives no visual reference for the spin).
+ const parts=[];
+ parts.push(part(new THREE.CylinderGeometry(0.37,0.37,0.34,12),'#17181a',0,0,0,0,0,Math.PI/2));
+ parts.push(part(new THREE.CylinderGeometry(0.23,0.23,0.35,10),'#cfd3d8',0,0,0,0,0,Math.PI/2));
+ // Hub + a gold centre nut, then 5 spokes radiating across the rim face.
+ parts.push(part(new THREE.CylinderGeometry(0.075,0.075,0.37,8),'#aeb3ba',0,0,0,0,0,Math.PI/2));
+ parts.push(part(new THREE.CylinderGeometry(0.032,0.032,0.39,8),'#ffd23f',0,0,0,0,0,Math.PI/2));
+ for(let s=0;s<5;s++){
+  const a=s*Math.PI*2/5 + 0.35;
+  parts.push(part(new THREE.BoxGeometry(0.045,0.40,0.14),'#e3e7ec',0,Math.cos(a)*0.18,Math.sin(a)*0.18,a,0,0));
+ }
+ const w=mergeGeometries(parts,false);
  const w1=w.clone();w1.translate(-0.82,0,0);const w2=w.clone();w2.translate(0.82,0,0);
  axleGeo=mergeGeometries([w1,w2],false);return axleGeo;}
 const drsGeo=new THREE.BoxGeometry(1.42,0.03,0.26);
@@ -775,12 +863,15 @@ function updPoints(S,dt,grow){
  P.needsUpdate=true;A.needsUpdate=true;Sz.needsUpdate=true;
 }
 function sparkBurst(x,y,z,amt){const n=Math.round(amt*26);
- // Hot white core + a stream of orange/amber embers — two passes so a big
- // hit reads as a proper fireworks of sparks rather than a thin drizzle.
+ // Bright yellow-hot core, a stream of orange embers, and a few white-hot
+ // flecks — a proper fireworks of the sparks you expect when metal grinds
+ // metal or the car bottoms out, rather than a thin warm drizzle.
  for(let i=0;i<n;i++)
-  puff(sparks,x,y,z,rand(-9,9),rand(0.5,9),rand(-9,9),rand(0.6,1.6),rand(.18,.5),1,0.95,0.72,-26);
- for(let i=0;i<Math.ceil(n*0.5);i++)
-  puff(sparks,x,y,z,rand(-6,6),rand(2,10),rand(-6,6),rand(1.1,2.4),rand(.4,.8),1,1,0.9,0.5,-30);}
+  puff(sparks,x,y,z,rand(-9,9),rand(0.5,9),rand(-9,9),rand(0.6,1.6),rand(.15,.45),1,0.95,0.25,-26);
+ for(let i=0;i<Math.ceil(n*0.6);i++)
+  puff(sparks,x,y,z,rand(-7,7),rand(2,11),rand(-7,7),rand(1.1,2.6),rand(.35,.75),1,0.5,0.08,-30);
+ for(let i=0;i<Math.ceil(n*0.25);i++)
+  puff(sparks,x,y,z,rand(-5,5),rand(1,9),rand(-5,5),rand(0.4,1.1),rand(.12,.3),1,1,0.6,-26);}
 function confetti(x,y,z){for(let i=0;i<130;i++){const c=new THREE.Color().setHSL(Math.random(),0.85,0.6);
  smk(x+rand(-3,3),y+rand(2,7),z+rand(-3,3),rand(-4,4),rand(1,5),rand(-4,4),rand(1,2),rand(1.4,2.6),c.r,c.g,c.b,-3);}}
 
@@ -1159,10 +1250,14 @@ function buildWorld(idx){
    if(Math.abs(samples[i].curv)<0.010)continue;
    const s=samples[i],s2=samples[(i+1)%N];
    for(const sg of[1,-1]){
-    pos.push(s.p.x+s.n.x*halfW*sg,s.p.y+0.08,s.p.z+s.n.z*halfW*sg,
-     s.p.x+s.n.x*(halfW+1.4)*sg,s.p.y+0.11,s.p.z+s.n.z*(halfW+1.4)*sg,
-     s2.p.x+s2.n.x*halfW*sg,s2.p.y+0.08,s2.p.z+s2.n.z*halfW*sg,
-     s2.p.x+s2.n.x*(halfW+1.4)*sg,s2.p.y+0.11,s2.p.z+s2.n.z*(halfW+1.4)*sg);
+    // Raised, ribbed FIA kerb — the outer edge steps up and down in a sawtooth
+    // along the kerb's length (one rib ~1.2m) so it reads as bumpy, not flat.
+    const ribA=(Math.floor(s.cum/1.2)%2)?0.18:0.0;
+    const ribB=(Math.floor(s2.cum/1.2)%2)?0.18:0.0;
+    pos.push(s.p.x+s.n.x*halfW*sg,s.p.y+0.06,s.p.z+s.n.z*halfW*sg,
+     s.p.x+s.n.x*(halfW+1.4)*sg,s.p.y+0.10+ribA*0.7,s.p.z+s.n.z*(halfW+1.4)*sg,
+     s2.p.x+s2.n.x*halfW*sg,s2.p.y+0.06,s2.p.z+s2.n.z*halfW*sg,
+     s2.p.x+s2.n.x*(halfW+1.4)*sg,s2.p.y+0.10+ribB*0.7,s2.p.z+s2.n.z*(halfW+1.4)*sg);
     const v0=s.cum/2.4,v1=s2.cum/2.4;
     uv.push(0,v0,1,v0,0,v1,1,v1);
     if(sg>0){
@@ -1242,25 +1337,8 @@ function buildWorld(idx){
   world.add(wallMesh);
  }
 
- // 5. Smooth Catch Fence Posts
- {
-  const fCount=Math.ceil(N/8)*2;
-  const postGeo=new THREE.CylinderGeometry(0.06,0.06,2.6,5);
-  const postMat=new THREE.MeshStandardMaterial({color:0x44484f,roughness:0.8,metalness:0.4});
-  const postMesh=new THREE.InstancedMesh(postGeo,postMat,fCount);
-  let pk=0;
-  const postDummy=new THREE.Object3D();
-  for(let i=0;i<N;i+=8){
-   for(const sg of[1,-1]){
-    sampleF(i);
-    postDummy.position.set(_sv.x+_sn.x*(wallDist+0.25)*sg,1.35,_sv.z+_sn.z*(wallDist+0.25)*sg);
-    postDummy.updateMatrix();
-    postMesh.setMatrixAt(pk++,postDummy.matrix);
-   }
-  }
-  postMesh.count=pk;
-  world.add(postMesh);
- }
+ // 5. (removed — the raised catch-fence girders that used to line the track
+ //     here are gone; the low red/white barrier ribbon remains as the boundary)
 
  // 6. Grid Starting Slots
  {
@@ -1303,20 +1381,31 @@ function buildWorld(idx){
 
  const dummy=new THREE.Object3D();
 
- // 8. Trackside Sponsor Billboards (Clean Straightaway Placements)
+ // 8. Trackside Sponsor Billboards (Clean Straightaway Placements) — each
+ // board stands on two wooden posts (real signpost legs) and carries one ad
+ // tile from the strip (`adsT` holds all of them side by side; each board
+ // uses a clone with a different .offset so it shows a single ad).
  {
-  // adsT holds all 8 ads side by side in one strip; each board needs its
-  // own texture instance (same image, different .offset) so it shows just
-  // one ad instead of the whole crammed-together strip.
   let side=1,adIdx=0;
   for(let i=45;i<N-45;i+=38){
    if(Math.abs(samples[i].curv)>0.007)continue;
    side=-side;sampleF(i);
-   const tex=adsT.clone();tex.offset.x=(adIdx++%ADS.length)/ADS.length;tex.needsUpdate=true;
+   const tex=adsT.clone();tex.offset.x=(adIdx++%NA)/NA;tex.needsUpdate=true;
    const am=new THREE.MeshStandardMaterial({map:tex,roughness:0.8});
+   const yaw=Math.atan2(_st.x,_st.z);
+   const bx=_sv.x+_sn.x*(T.latLimit+3.2)*side, bz=_sv.z+_sn.z*(T.latLimit+3.2)*side;
+   const by=_sv.y;
    const w=new THREE.Mesh(new THREE.BoxGeometry(11,2.6,0.35),am);
-   w.position.set(_sv.x+_sn.x*(T.latLimit+3.2)*side,_sv.y+1.35,_sv.z+_sn.z*(T.latLimit+3.2)*side);
-   w.rotation.y=Math.atan2(_st.x,_st.z);w.castShadow=true;world.add(w);
+   w.position.set(bx,by+1.45,bz);w.rotation.y=yaw;w.castShadow=true;world.add(w);
+   // Wooden legs — one either end, angled slightly out, from the ground up to
+   // the board's underside (real hoarding legs rather than a floating panel).
+   const lx=Math.cos(yaw),lz=-Math.sin(yaw); // board's local width direction
+   for(const s of[1,-1]){
+    const legH=1.6;
+    const leg=new THREE.Mesh(new THREE.CylinderGeometry(0.11,0.13,legH,6),woodLegMat);
+    leg.position.set(bx+lx*4.9*s,by+legH*0.45,bz+lz*4.9*s);
+    leg.rotation.z=s*0.05;leg.castShadow=true;world.add(leg);
+   }
   }
  }
 
@@ -1508,6 +1597,56 @@ function buildWorld(idx){
   if(tk>0){tyreMesh.count=tk;tyreMesh.instanceMatrix.needsUpdate=true;tyreMesh.castShadow=true;world.add(tyreMesh);}
  }
 
+ // 9b2. Gravel traps — a coarse, textured gravel bed in the run-off on the
+ //      outside of the sharper corners, exactly where real circuits throw the
+ //      gravel. Built as a *continuous patch* spanning the whole run-off band
+ //      (halfW → wallDist) over each qualifying high-curvature stretch, so a
+ //      car running wide visibly digs into gravel. `T.gravelMask` marks the
+ //      samples this applies to so the physics can slow a car that's in it.
+ {
+  const gravelMask=new Uint8Array(N);
+  const gPos=[],gIdx=[];let gVi=0;
+  let inRun=false,runStart=0;
+  const runs=[]; // [start,end) of corner-outsides to cover
+  for(let i=0;i<N;i++){
+   const cv=Math.abs(samples[i].curv);
+   const active=cv>0.016;
+   if(active&&!inRun){inRun=true;runStart=i;}
+   else if(!active&&inRun){
+    if(i-runStart>=6)runs.push([runStart,i]);
+    inRun=false;
+   }
+  }
+  if(inRun&&N-runStart>=6)runs.push([runStart,N]);
+  for(const[rs,re] of runs){
+   for(let i=rs;i<re;i++)gravelMask[i]=1;
+   // Build a single gravel quad strip for the OUTSIDE of this corner run.
+   // The outside of a corner is the side the curb tilts toward (sign of curv).
+   let side=0;
+   for(let i=rs;i<re;i++){if(Math.abs(samples[i].curv)>0.02){side=Math.sign(samples[i].curv)||1;break;}}
+   if(side===0)side=1;
+   for(let i=rs;i<re;i++){
+    const s=samples[i],s2=samples[(i+1)%N];
+    const gx0=s.p.x+s.n.x*(halfW+1.5)*side, gz0=s.p.z+s.n.z*(halfW+1.5)*side;
+    const gx1=s.p.x+s.n.x*wallDist*side,   gz1=s.p.z+s.n.z*wallDist*side;
+    const gx2=s2.p.x+s2.n.x*(halfW+1.5)*side, gz2=s2.p.z+s2.n.z*(halfW+1.5)*side;
+    const gx3=s2.p.x+s2.n.x*wallDist*side,   gz3=s2.p.z+s2.n.z*wallDist*side;
+    gPos.push(gx0,s.p.y+0.09,gz0, gx1,s.p.y+0.09,gz1, gx2,s2.p.y+0.09,gz2, gx3,s2.p.y+0.09,gz3);
+    if(side>0)gIdx.push(gVi,gVi+2,gVi+1, gVi+1,gVi+2,gVi+3);
+    else gIdx.push(gVi,gVi+1,gVi+2, gVi+1,gVi+3,gVi+2);
+    gVi+=4;
+   }
+  }
+  if(gVi>0){
+   const gGeo=new THREE.BufferGeometry();
+   gGeo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(gPos),3));
+   gGeo.setIndex(gIdx);gGeo.computeVertexNormals();
+   const gMat=new THREE.MeshStandardMaterial({map:gravelT,roughness:1,polygonOffset:true,polygonOffsetFactor:2,polygonOffsetUnits:2});
+   const gMesh=new THREE.Mesh(gGeo,gMat);gMesh.receiveShadow=true;world.add(gMesh);
+   T.gravelMask=gravelMask;
+  }
+ }
+
  // 9c. DRS zone boards — the green boards beside the straights, exactly where
  //     the in-game DRS activation logic actually allows the wing to open.
  {
@@ -1530,8 +1669,12 @@ function buildWorld(idx){
    b.position.set(bx,by+1.6,bz);
    b.lookAt(bx-s.n.x*sg*6,by+1.6,bz-s.n.z*sg*6);
    world.add(b);
-   const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.09,0.12,3.2,5),new THREE.MeshStandardMaterial({color:0x3a3f46}));
-   pole.position.set(bx,by+1.6,bz);world.add(pole);
+   // Two wooden legs either end, straight into the ground.
+   for(const so of[1,-1]){
+    const leg=new THREE.Mesh(new THREE.CylinderGeometry(0.09,0.11,1.6,6),woodLegMat);
+    leg.position.set(bx+s.t.x*2.2*so,by+0.65,bz+s.t.z*2.2*so);
+    leg.castShadow=true;world.add(leg);
+   }
   }
  }
 
@@ -1544,7 +1687,6 @@ function buildWorld(idx){
    cx.fillStyle='#101114';cx.font='700 60px sans-serif';cx.textAlign='center';cx.textBaseline='middle';cx.fillText(txt,64,52);
    return ctex(cn,false);};
   const t100=mkBoard('100'),t50=mkBoard('50');
-  const poleMat=new THREE.MeshStandardMaterial({color:0x3a3f46});
   let lastK=-999,nK=0;
   for(let i=0;i<N;i+=4){
    const cv=samples[i].curv;
@@ -1559,8 +1701,12 @@ function buildWorld(idx){
     p.position.set(bx,by+1.15*big,bz);
     p.lookAt(bx-sj.n.x*sg*4,by+1.15*big,bz-sj.n.z*sg*4);
     world.add(p);
-    const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.07,0.09,2.3*big,5),poleMat);
-    pole.position.set(bx,by+1.15*big,bz);world.add(pole);
+    // Wooden signposts holding the board up.
+    for(const so of[1,-1]){
+     const leg=new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.08,1.3*big,6),woodLegMat);
+     leg.position.set(bx+sj.t.x*1.1*big*so,by+0.6*big,bz+sj.t.z*1.1*big*so);
+     leg.castShadow=true;world.add(leg);
+    }
    }
   }
  }
@@ -1570,7 +1716,7 @@ function buildWorld(idx){
  // (conifer / round broadleaf / slender poplar) mixed by theme, instead of
  // one repeated cone, so the scenery doesn't look so uniform.
  {
-  const nT=Math.round((def.theme==='forest'?380:def.theme==='park'?300:90)*propDensity);
+  const nT=Math.round((def.theme==='forest'?640:def.theme==='park'?320:90)*propDensity);
   const weights=def.theme==='forest'?[0.55,0.3,0.15]:def.theme==='park'?[0.2,0.55,0.25]:[0.34,0.33,0.33];
   const species=[
    {canopyGeo:new THREE.ConeGeometry(2.1,5.2,7),canopyY:2.5,canopyScaleY:1,trunkH:2.3,trunkR0:0.32,trunkR1:0.48,trunkColor:0x6b4a2f,hue:[0.26,0.36],sat:[0.4,0.62],light:[0.22,0.36]},
@@ -1593,14 +1739,14 @@ function buildWorld(idx){
   while(k<nT&&tries<4000){tries++;
    const ts=samples[Math.floor(Math.random()*N)];
    const side=Math.random()<0.5?1:-1;
-   const lat=rand(T.latLimit+9,T.latLimit+65);
+   const lat=rand(T.latLimit+3,T.latLimit+55);
    const x=ts.p.x+ts.n.x*lat*side,z=ts.p.z+ts.n.z*lat*side;
    // The offset above only guarantees clearance from THIS sample's own
    // stretch of track — at a hairpin or chicane, that same (x,z) can still
    // land right next to a completely different part of the lap that loops
    // back nearby. Validate against the true closest point on the whole
    // track before accepting it.
-   if(minTrackDist(x,z)<T.latLimit+8)continue;
+   if(minTrackDist(x,z)<T.latLimit+4)continue;
    const si=speciesIdx(),sp=species[si],canopy=canopyMeshes[si],trunk=trunkMeshes[si];
    const s=rand(0.7,1.7);
    const elevation=getTrackHAtCoords(x,z);
@@ -1701,6 +1847,20 @@ function buildWorld(idx){
   }else T.puddleMat=null;
  }
 
+ // 13. Lake / harbour water — a flat, reflective water disc in the infield for
+ //     circuits that actually run beside water (Albert Park encircles a lake;
+ //     Suzuka has parkland water). Computes a radius that always stays inside
+ //     the lap so it can never spill onto the tarmac.
+ if(def.lake){
+  let minD=1e9;for(const s of samples){const d=Math.hypot(s.p.x-cx,s.p.z-cz);if(d<minD)minD=d;}
+  const lr=Math.max(18,minD*(def.lake.frac||0.9)-4);
+  const ly=terrainHeightAt(cx,cz)+0.12;
+  const lmat=new THREE.MeshStandardMaterial({map:waterT,bumpMap:waterT,bumpScale:0.25,color:0x1b6b86,roughness:0.12,metalness:0.25,transparent:true,opacity:0.88,envMapIntensity:1.4,polygonOffset:true,polygonOffsetFactor:3,polygonOffsetUnits:3});
+  const lake=new THREE.Mesh(new THREE.CircleGeometry(lr,26),lmat);
+  lake.rotation.x=-Math.PI/2;lake.position.set(cx,ly,cz);
+  lake.receiveShadow=true;lake.renderOrder=2;world.add(lake);
+ }
+
  for(let i=0;i<N;i+=90){
   const sg=(i/90)%2?1:-1;sampleF(i);
   const elevation=_sv.y;
@@ -1712,8 +1872,49 @@ function buildWorld(idx){
   // Marshal post flag — the yellow/red flag waved from the observation tower.
   const mflag=new THREE.Mesh(new THREE.PlaneGeometry(1.5,0.95),new THREE.MeshStandardMaterial({color:pick([0xe10600,0xf2d13d,0x2e6fd0,0xe9e9e9]),side:THREE.DoubleSide,roughness:0.7}));
   mflag.position.set(x+0.75,elevation+7.55,z);mflag.userData.ph=rand(0,9);world.add(mflag);T.flags.push(mflag);
-  T.tvCams.push(V3(x,elevation+6.6,z));
+   T.tvCams.push(V3(x,elevation+6.6,z));
  }
+
+ // 14. Tunnel — a covered section over a stretch of track (used by Monaco, the
+ //     Portier→Tunnel→Nouvelle Chicane run). Built as an enclosed arch that
+ //     follows the track's own elevation; `T.tunnel` lets the physics/audio
+ //     know when a car is inside so the engine can rumble and the lighting
+ //     drops. castShadow on the roof naturally darkens the road underneath.
+ if(def.tunnel){
+  const i0=Math.round(def.tunnel.from*N), i1=Math.round(def.tunnel.to*N);
+  const hw=halfW+1.4, roofH=5.2, wallTop=2.7;
+  const tPos=[],tIdx=[];let tVi=0;
+  const arcDr=(i)=>{const s=samples[((i%N)+N)%N];
+   const pts=[ s.p.x+s.n.x*(-hw), s.p.y+0.05, s.p.z+s.n.z*(-hw),
+               s.p.x+s.n.x*(-hw), s.p.y+wallTop, s.p.z+s.n.z*(-hw),
+               s.p.x,             s.p.y+roofH,   s.p.z,
+               s.p.x+s.n.x*(hw),  s.p.y+wallTop, s.p.z+s.n.z*(hw),
+               s.p.x+s.n.x*(hw),  s.p.y+0.05,    s.p.z+s.n.z*(hw)];
+   return pts;};
+  for(let i=i0;i<=i1;i++){
+   const A=arcDr(i),B=arcDr(i+1);
+   tPos.push(...A,...B);
+   for(let k=0;k<4;k++){
+    const a=tVi+k, b=tVi+k+1, c=tVi+5+k, d=tVi+6+k;
+    tIdx.push(a,c,b, b,c,d);
+   }
+   tVi+=10;
+  }
+  const tGeo=new THREE.BufferGeometry();
+  tGeo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(tPos),3));
+  tGeo.setIndex(tIdx);tGeo.computeVertexNormals();
+  const tMat=new THREE.MeshStandardMaterial({color:0x3a3d43,roughness:0.7,metalness:0.2,side:THREE.DoubleSide});
+  const tun=new THREE.Mesh(tGeo,tMat);tun.castShadow=true;tun.receiveShadow=true;world.add(tun);
+  // A few warm tunnel lights along the ceiling for a bit of artificial glow.
+  const lampMat=new THREE.MeshStandardMaterial({color:0x222,emissive:0xffd98a,emissiveIntensity:2.2});
+  const lamps=new THREE.InstancedMesh(new THREE.BoxGeometry(0.5,0.08,0.6),lampMat,Math.max(2,Math.floor((i1-i0)/28)));
+  let li=0;const ld=new THREE.Object3D();
+  for(let i=i0;i<=i1&&li<lamps.count;i+=28){const s=samples[i];
+   ld.position.set(s.p.x,s.p.y+roofH-0.18,s.p.z);ld.updateMatrix();lamps.setMatrixAt(li++,ld.matrix);}
+  lamps.count=li;world.add(lamps);
+  T.tunnel={i0,i1};
+ }
+
  buildMinimapPath();
  clearSkids();
 }
@@ -1729,6 +1930,7 @@ function makeCar(d,isPlayer){
   lap:0,lapStart:0,best:null,finished:false,finishTime:null,key:0,skidAcc:0,skidAmt:0,
   offT:false,onCurb:false,_pv:0,stuck:0,pDiff:0,recT:0,recPhase:0,recSteer:0,
   crash:0,crashMax:0,crashSpark:0,
+  onGravel:false,inTunnel:false,gravelT:0,
   phase:rand(0,9),pos:1,near:null,shiftT:0,hitT:0,reactT:0,dustT:0,exT:0};
 }
 function setupGrid(gridSize){
@@ -2053,8 +2255,13 @@ function updCar(c,dt){
   }
  }
 
- const surface=c.offT?0.45:c.onCurb?0.8:1;
- const grip=c.airborne?0.04:(cur.grip*surface);
+ // Gravel-trap membership: off-track areas flagged on `T.gravelMask` dig the
+ // car in hard (see the run-off patches built for corners). Kerbs, on the
+ // other hand, get progressively more treacherous the wetter it gets.
+ c.onGravel=!c.airborne&&c.offT&&!!T.gravelMask&&!!T.gravelMask[c.ti];
+ const onCurbSlip=(c.onCurb&&cur.wet>0.3)?(1-cur.wet*0.4):1; // wet kerbs are slippery
+ const surface=c.onGravel?0.22:(c.offT?0.45:(c.onCurb?0.8:1));
+ const grip=(c.airborne?0.04:(cur.grip*surface))*onCurbSlip;
  // The player's car is a competitive-but-not-dominant package: faster than
  // the midfield and backmarkers, but a couple of km/h down on the very
  // fastest drivers (who get PH.top*(0.86+skill*0.13) ≈ up to 0.99×PH.top),
@@ -2076,7 +2283,12 @@ function updCar(c,dt){
  const base=3.2-1.9*clamp(Math.abs(sp0)/PH.top,0,1);
  const cap=46*grip/Math.max(Math.abs(sp0),2);
  const yawF=clamp(0.4+Math.abs(sp0)/3.8,0.4,1)*(sp0<-0.5?-1:1);
- c.hdg-=c.steer*Math.min(base,cap)*yawF*dt; /* steer -1 (left) increases hdg, turning left */
+ // A real car cannot yaw in place — you need forward speed (or wheelspin from
+ // a standing start / doughnut) to rotate. Scale the yaw rate by a speed
+ // factor so pressing only left/right while stationary does nothing, while a
+ // hard launch still lets the rear rotate (doughnuts).
+ const rotFac=Math.min(1,clamp(Math.abs(sp0)/6,0,1)+(c.throttle>0.5&&Math.abs(sp0)<17?0.5:0));
+ c.hdg-=c.steer*Math.min(base,cap)*yawF*rotFac*dt; /* steer -1 (left) increases hdg, turning left */
  /* velocity in the NEW heading frame → slip appears naturally */
  const fx=Math.sin(c.hdg),fz=Math.cos(c.hdg),rx=-fz,rz=fx;
  let vF=c.vx*fx+c.vz*fz, vR=c.vx*rx+c.vz*rz;
@@ -2092,6 +2304,7 @@ function updCar(c,dt){
  const k=PH.drag*(c.drsOpen?0.78:1)*(c.slipstream?0.85:1);
  aF-=k*vF*Math.abs(vF)+vF*0.045;
  if(c.offT)aF-=vF*0.14;
+ if(c.onGravel)aF-=Math.min(60,Math.abs(vF))*0.55; /* gravel traps dig in hard */
  vF+=aF*dt;
  if(c.throttle===0&&c.brake===0&&Math.abs(vF)<0.15)vF=0;
  /* lateral tyre grip pulls velocity toward the nose */
@@ -2215,6 +2428,8 @@ function carCollisions(){
 /* ============ per-car visuals ============ */
 function updCarVisual(c,dt){
  const p=c.mesh.g;
+ // Is the car inside the covered tunnel section? Used for audio + lighting.
+ c.inTunnel=!!T.tunnel&&c.ti>=T.tunnel.i0&&c.ti<=T.tunnel.i1;
  const jitter=Math.sin(timeSec*24+c.phase*7)*0.006*clamp(Math.abs(c.vF)/50,0,1);
  p.position.set(c.x, (c.y !== undefined ? c.y : 0.05) + 0.05 + (c.bounceOff||0) + jitter, c.z);
  p.rotation.set(0, c.hdg, 0);
@@ -2340,7 +2555,13 @@ function updCarVisual(c,dt){
    
    // Mud chunks!
    smk(bx,0.4,bz,rand(-2,2)-fx*2,rand(2,5),rand(-2,2)-fz*2,rand(2,4),rand(.5,.9),0.38,0.28,0.22);
-   smk(bx,0.25,bz,rand(-1,1),rand(0.8,2),rand(-1,1),rand(1,2),rand(.6,1),0.5,0.42,0.3);}
+   smk(bx,0.25,bz,rand(-1,1),rand(0.8,2),rand(-1,1),rand(1,2),rand(.6,1),0.5,0.42,0.3);
+   // Gravel-trap spray — a dry, light-stone rooster tail, distinct from the
+   // dark mud thrown up on a grass verge.
+   if(c.onGravel){
+    smk(bx,0.45,bz,rand(-3,3)-fx*3,rand(1.5,3.5),rand(-3,3)-fz*3,rand(1,2),rand(.5,.9),0.72,0.66,0.55);
+    smk(bx,0.3,bz,rand(-1.5,1.5),rand(0.6,1.8),rand(-1.5,1.5),rand(0.8,1.6),rand(.6,1),0.6,0.55,0.46);
+   }}
  }
  // Wet-weather rooster-tail spray — real F1 cars throw up a lot of visible
  // spray in the rain, worse the harder it's raining and the faster you go,
@@ -2423,6 +2644,17 @@ const AudioSys={started:false,
   this.gridf=ctx.createBiquadFilter();this.gridf.type='bandpass';this.gridf.frequency.value=220;this.gridf.Q.value=0.7;
   this.gridg=ctx.createGain();this.gridg.gain.value=0;
   gn.connect(this.gridf);this.gridf.connect(this.gridg);this.gridg.connect(this.master);gn.start();
+  // Tunnel reverb — a short feedback-delay send tapped off the engine bus.
+  // While driving through a covered section the engine is muffled and fed a
+  // slap echo, so the tunnel reads as a big enclosed space (a small taste of
+  // the real Monaco echo).
+  this.tdBuf=ctx.createDelay(0.6);this.tdBuf.delayTime.value=0.14;
+  this.tdFb=ctx.createGain();this.tdFb.gain.value=0;
+  this.tdGain=ctx.createGain();this.tdGain.gain.value=0;
+  this.tdSend=ctx.createGain();this.tdSend.gain.value=1;
+  eg.connect(this.tdSend);this.tdSend.connect(this.tdBuf);
+  this.tdBuf.connect(this.tdFb);this.tdFb.connect(this.tdBuf);
+  this.tdFb.connect(this.tdGain);this.tdGain.connect(this.master);
   this.started=true;},
  shift(){if(!this.started)return;const t=this.ctx.currentTime;
   this.eg.gain.cancelScheduledValues(t);
@@ -2482,7 +2714,13 @@ const AudioSys={started:false,
   this.o2.frequency.setTargetAtTime(f*1.5,t,0.02);
   this.o3.frequency.setTargetAtTime(f*0.5,t,0.02);
   this.o4.frequency.setTargetAtTime(f*2.03,t,0.02);
-  this.eflt.frequency.setTargetAtTime(260+p.throttle*2300+p.audioRpm*1400,t,0.03);
+  // Inside the tunnel the engine is muffled (lower low-pass) and pushed through
+  // a feedback delay for an enclosed, echoing rumble — the signature Monaco
+  // tunnel sound.
+  const tun=player.inTunnel?1:0;
+  this.eflt.frequency.setTargetAtTime((260+p.throttle*2300+p.audioRpm*1400)*(1-tun*0.5),t,0.03);
+  this.tdFb.gain.setTargetAtTime(tun*0.45,t,0.07);
+  this.tdGain.gain.setTargetAtTime(tun?0.55:0,t,0.07);
   this.eg.gain.setTargetAtTime(run?0.13+p.throttle*0.16+p.audioRpm*0.05:0,t,0.05);
   this.eng.gain.setTargetAtTime(run?0.02+p.throttle*0.05:0,t,0.05);
   this.wso.frequency.setTargetAtTime(f*5.2,t,0.02);
