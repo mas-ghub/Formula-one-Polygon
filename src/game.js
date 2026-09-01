@@ -2936,6 +2936,18 @@ function beginRace(){
  if(towerRows){towerRows.clear();}
  const timingTowerEl=$('timingTower');if(timingTowerEl)timingTowerEl.innerHTML='';
  state.mode='countdown';state.paused=false;
+ // On-screen buttons are gone, so a touch device without keystrokes needs
+ // the tilt/gyro path to actually drive. Auto-engage it here — the START tap
+ // is a valid user gesture for iOS gyro permission — and use auto-throttle so
+ // the car is drivable with just tilt-steering and no on-screen gas button.
+ if((matchMedia('(pointer:coarse)').matches||navigator.maxTouchPoints>0)&&!tiltCtrl.enabled){
+  // No on-screen steering/gas buttons anymore, so the device tilt is the
+  // whole control surface: tilt to steer, tilt forward for gas, tilt back to
+  // brake. 'touch' would need buttons; 'auto' leaves no way to brake.
+  tiltCtrl.throttleMode='tilt';
+  try{tiltCtrl.saveSettings();}catch(e){}
+  tiltCtrl.enable().then(()=>tiltCtrl.showToast('TILT STEERING ON · TILT = GAS / BRAKE')).catch(()=>{});
+ }
  for(const c of cars)if(!c.isPlayer)c.reactT=rand(0.12,0.55);
  const yw=player.hdg;
  cam.pos.set(player.x-Math.sin(yw)*10,3.4,player.z-Math.cos(yw)*10);
@@ -3169,6 +3181,11 @@ function updRace(dt){
    for (const [key, row] of towerRows) {
     if (!seen.has(key)) { row.remove(); towerRows.delete(key); }
    }
+   // Sky-F1 broadcast style: the tower is a fixed, transparent feed that
+   // auto-scrolls so YOUR position is always kept in view — whether you're
+   // P1 at the top or P20 at the bottom. Centre on the player row.
+   const myRow = timingTowerEl.querySelector('.tower-row.me');
+   if (myRow) myRow.scrollIntoView({block:'center'});
   }
 
   if(player.pos<lastPos&&state.mode==='race'&&otCool<=0&&player.pos>0){
@@ -3285,14 +3302,50 @@ let dtGlobal=0.016;
 let rainPass=null;
 let qualityMgr=null;
 
+function isFullscreen(){
+ const d=document;
+ return !!(d.fullscreenElement||d.webkitFullscreenElement||d.msFullscreenElement||d.mozFullScreenElement);
+}
+function isIOS(){
+ const ua=navigator.userAgent||'';
+ return (/iPad|iPhone|iPod/.test(ua) && !window.MSStream) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1);
+}
+function fsToast(msg){
+ const t=$('fsToast');
+ if(t){t.textContent=msg;t.classList.add('show');
+  clearTimeout(fsToast._t);fsToast._t=setTimeout(()=>t.classList.remove('show'),3600);}
+}
 function toggleFullscreen(){
- try{
-  if(!document.fullscreenElement){
-   document.documentElement.requestFullscreen().catch(()=>{});
+ const d=document, el=d.documentElement;
+ // Leaving fullscreen.
+ if(isFullscreen()){
+  const ex=d.exitFullscreen||d.webkitExitFullscreen||d.msExitFullscreen||d.mozCancelFullScreen;
+  if(ex){try{ex.call(d);}catch(e){}}
+  return;
+ }
+ // Entering fullscreen — every vendor prefix so it works on iPad/Android,
+ // Firefox and older Chromium. (iPhone Safari has NO DOM fullscreen API, so
+ // this path exits empty there and we fall through to the iOS guide below.)
+ const req=el.requestFullscreen||el.webkitRequestFullscreen||el.mozRequestFullScreen||el.msRequestFullscreen;
+ if(req){
+  try{const r=req.call(el);if(r&&r.then)r.catch(()=>{});}catch(e){}
+ }
+ // Lock to landscape where supported (Android, iPad).
+ try{if(screen.orientation&&screen.orientation.lock)screen.orientation.lock('landscape').catch(()=>{});}catch(e){}
+ // Already running from a home-screen install → it IS fullscreen.
+ if(navigator.standalone){fsToast('FULLSCREEN ACTIVE');return;}
+ const t0=navigator.standalone;
+ setTimeout(()=>{
+  if(isFullscreen()){fsToast('FULLSCREEN ACTIVE');return;}
+  // iPhone Safari: no fullscreen API. Point the player at the one thing that
+  // works — installing to the home screen, which the manifest makes launch
+  // truly fullscreen with the bars gone.
+  if(isIOS()){
+   fsToast('IPHONE: TAP  ▢ RELOAD / SHARE  ➜  ADD TO HOME SCREEN  FOR TRUE FULLSCREEN');
   }else{
-   if(document.exitFullscreen)document.exitFullscreen().catch(()=>{});
+   fsToast('FULLSCREEN BLOCKED — ROTATE & TRY AGAIN, OR ADD TO HOME SCREEN');
   }
- }catch(e){}
+ },320);
 }
 
 addEventListener('keydown',e=>{
@@ -3371,11 +3424,14 @@ if($('tTiltCal'))$('tTiltCal').addEventListener('pointerdown',e=>{e.preventDefau
 
 if($('tC'))$('tC').addEventListener('pointerdown',e=>{e.preventDefault();cycleCam();});
 if($('hCamChip'))$('hCamChip').addEventListener('click',e=>{e.preventDefault();cycleCam();});
+// The readable HUD camera chip doubles as the touch "C" — tap to cycle views.
+if($('hCam'))$('hCam').addEventListener('click',e=>{e.preventDefault();cycleCam();});
 
 if($('tFs'))$('tFs').onclick=toggleFullscreen;
 if($('tFootFs'))$('tFootFs').onclick=toggleFullscreen;
 if($('hFsChip'))$('hFsChip').onclick=toggleFullscreen;
 if($('pFs'))$('pFs').onclick=toggleFullscreen;
+if($('tFsTouch'))$('tFsTouch').addEventListener('pointerdown',e=>{e.preventDefault();toggleFullscreen();});
 if($('hPauseChip'))$('hPauseChip').onclick=togglePause;
 if($('hTowerChip'))$('hTowerChip').onclick=()=>{towerHidden=!towerHidden;applyTowerVisibility();};
 
@@ -3690,6 +3746,10 @@ addEventListener('orientationchange',()=>setTimeout(resize,120));
 rainPass = new RainShaderPass(renderer);
 qualityMgr = new QualityManager(renderer, sunLight, rainPass);
 qualityMgr.apply('AUTO');
+// Probe the display's real refresh rate (120Hz/144Hz/60Hz) so the autotuner
+// targets the panel's max instead of assuming 60fps — on a 120Hz M5 Max the
+// game now actually pushes for 120fps rather than settling at 60.
+qualityMgr.init();
 
 gyroLab.init();
 resize();
