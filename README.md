@@ -1,11 +1,12 @@
 # POLYGON GP — Low-Poly Grand Prix
 
 A browser-based, low-poly F1 racing game built with Three.js. Real circuit
-layouts, a full 2026-calendar roster, dynamic weather (rain, thunderstorms
-and accumulating/melting snow) with a day/dusk/night time-of-day control, a
-Sky F1–style timing tower with live driver photos, and a title screen where
-the whole grid actually races itself under a live broadcast-style camera
-director.
+layouts, the full 2026 F1 grid with true team liveries, dynamic weather
+(sunny, drizzle, rain and thunderstorms) with a day/dusk/night time-of-day
+control, a Sky F1–style timing tower with live driver photos, track-limits
+enforcement (“give the place back” for off-track overtakes), and a title
+screen where the whole grid actually races itself under a live
+broadcast-style camera director.
 
 ## Running it
 

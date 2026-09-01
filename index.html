@@ -65,6 +65,43 @@ canvas{display:block;}
 .dd-list.hidden{display:none;}
 .dd-list .card{margin-bottom:4px;}
 .dd-list .card:last-child{margin-bottom:0;}
+
+/* Circuit hero preview */
+#tHero{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+#tHeroMid{flex:1;min-width:0;}
+#tHeroPv{width:100%;height:auto;display:block;border:1px solid var(--line);border-radius:4px;background:rgba(0,0,0,.4);}
+.hero-arrow{flex:0 0 auto;width:34px;height:60px;font-size:24px;line-height:1;color:var(--dim);background:rgba(255,255,255,.03);border:1px solid var(--line);cursor:pointer;font-family:inherit;transition:all .15s;touch-action:manipulation;}
+.hero-arrow:hover{border-color:var(--red);color:#fff;}
+.hero-name{display:flex;align-items:center;gap:6px;font-weight:700;font-size:14px;letter-spacing:.1em;color:#fff;margin-top:6px;}
+.hero-name #tHeroFlag{font-size:16px;}
+#tHeroMeta{font-size:10.5px;color:var(--dim);letter-spacing:.05em;margin-top:2px;}
+#tHeroQual{font-size:10px;color:#ffd23f;letter-spacing:.06em;margin-top:2px;}
+
+/* Track-limits "give the place back" board — far left, shows the offended driver */
+#giveBack{position:fixed;left:8px;top:50%;transform:translateY(-50%);z-index:45;display:flex;align-items:center;gap:10px;background:rgba(12,14,18,.96);border:2px solid var(--red);border-left:6px solid var(--red);padding:10px 14px;max-width:240px;box-shadow:0 0 26px rgba(225,6,0,.55);pointer-events:none;opacity:0;transition:opacity .18s;}
+#giveBack.show{opacity:1;}
+#giveBack img{width:46px;height:46px;border-radius:6px;border:2px solid #ff5348;background:#000;object-fit:cover;}
+#giveBack .gb-code{font-size:22px;font-weight:700;color:#ff5348;letter-spacing:.1em;line-height:1;}
+#giveBack .gb-txt{font-size:12px;color:#fff;font-weight:700;letter-spacing:.08em;margin-top:3px;}
+#giveBack .gb-name{font-size:9.5px;color:var(--dim);letter-spacing:.06em;margin-top:2px;}
+@keyframes gbShake{0%,100%{transform:translateY(-50%);}20%{transform:translate(-7px,-50%);}40%{transform:translate(6px,-50%);}60%{transform:translate(-5px,-50%);}80%{transform:translate(4px,-50%);}}
+#giveBack.shake{animation:gbShake .55s ease;}
+
+/* Landscape-only lock for phones */
+#rotateOverlay{position:fixed;inset:0;z-index:50000;background:#0b0f16;display:none;align-items:center;justify-content:center;flex-direction:column;gap:16px;text-align:center;padding:28px;color:#47c7fc;}
+#rotateOverlay h2{font-size:clamp(18px,4vw,26px);letter-spacing:.22em;color:#fff;margin:0;}
+#rotateOverlay p{font-size:12px;letter-spacing:.14em;color:var(--dim);margin:0;}
+@media (orientation:portrait) and (pointer:coarse){#rotateOverlay{display:flex;}}
+
+/* Broadcast ticker + demo mode */
+#titleTicker{position:absolute;left:4%;bottom:12px;display:flex;align-items:center;gap:9px;font-size:11px;font-weight:600;letter-spacing:.18em;color:var(--txt);background:rgba(12,14,18,.88);border:1px solid var(--line);border-left:3px solid var(--red);padding:7px 14px;pointer-events:none;white-space:nowrap;}
+#titleTicker .live-dot{width:8px;height:8px;border-radius:50%;background:#e10600;box-shadow:0 0 8px #e10600;animation:livePulse 1.1s ease infinite;flex:0 0 auto;}
+@keyframes livePulse{0%,100%{opacity:1;}50%{opacity:.3;}}
+#demoBanner{position:absolute;left:50%;bottom:15%;transform:translateX(-50%);z-index:30;background:rgba(225,6,0,.94);color:#fff;font-weight:700;font-size:14px;letter-spacing:.16em;padding:13px 24px;border-radius:3px;box-shadow:0 8px 30px rgba(0,0,0,.55);pointer-events:none;white-space:nowrap;animation:demoBlink 1s ease infinite;}
+#demoBanner.hidden{display:none;}
+@keyframes demoBlink{0%,100%{opacity:1;}50%{opacity:.72;}}
+#demoTag{position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:15;background:rgba(225,6,0,.92);color:#fff;font-size:10px;font-weight:700;letter-spacing:.3em;padding:4px 14px;border-radius:2px;pointer-events:none;}
+@media (max-width: 768px){#titleTicker{font-size:9px;letter-spacing:.1em;padding:5px 9px;bottom:8px;}#demoBanner{font-size:11px;padding:10px 14px;}}
 .seg{display:flex;gap:5px;flex-wrap:wrap;}
 .seg4{display:flex;gap:5px;flex-wrap:wrap;}
 .seg button,.seg4 button{flex:1;padding:10px 6px;background:rgba(255,255,255,.03);border:1px solid var(--line);color:var(--txt);font-family:inherit;font-size:11px;font-weight:700;letter-spacing:.08em;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;transition:all .15s;touch-action:manipulation;pointer-events:auto;}
@@ -479,9 +516,19 @@ document.addEventListener('DOMContentLoaded', function() {
   <div id="tPanel" class="panel">
     <div class="sec">
       <label>CIRCUIT LAYOUT</label>
+      <div id="tHero">
+        <button id="tPrev" class="hero-arrow" type="button" title="Previous circuit">‹</button>
+        <div id="tHeroMid">
+          <canvas id="tHeroPv" width="360" height="200"></canvas>
+          <div class="hero-name"><span id="tHeroFlag"></span><span id="tHeroNameTxt"></span></div>
+          <div id="tHeroMeta"></div>
+          <div id="tHeroQual"></div>
+        </div>
+        <button id="tNext" class="hero-arrow" type="button" title="Next circuit">›</button>
+      </div>
       <div id="tTrack" class="dd">
         <button id="tTrackBtn" class="dd-btn" type="button">
-          <canvas id="tTrackBtnPv" width="46" height="30"></canvas>
+          <canvas id="tTrackBtnPv" width="120" height="72"></canvas>
           <div class="dd-btn-info">
             <div class="cn" id="tTrackBtnName"></div>
             <div class="cm" id="tTrackBtnMeta"></div>
@@ -566,6 +613,10 @@ document.addEventListener('DOMContentLoaded', function() {
     <span>FULLSCREEN &amp; AUDIO SYNTHESIS READY</span>
     <button id="tFootFs" class="btn-mini">⛶ FULLSCREEN</button>
   </div>
+  
+  <!-- Live broadcast ticker (bottom-left) + demo mode countdown -->
+  <div id="titleTicker"><i class="live-dot"></i>LIVE</div>
+  <div id="demoBanner" class="hidden"></div>
 </div>
 
 <!-- Race HUD -->
@@ -584,6 +635,7 @@ document.addEventListener('DOMContentLoaded', function() {
     <button class="chip" id="hCam">CHASE</button>
     <button class="chip" id="hQualityChip">HIGH</button>
     <button class="chip tilt-chip" id="hTiltChip">GYRO OFF</button>
+    <button class="chip" id="hTowerChip" title="Toggle timing tower">TOWER ON</button>
     <button class="chip drs" id="hDrs">DRS</button>
     <button class="chip" id="hFsChip" title="Toggle Fullscreen">⛶</button>
     <button class="chip" id="hPauseChip" title="Pause Game">⏸</button>
@@ -591,6 +643,7 @@ document.addEventListener('DOMContentLoaded', function() {
   
   <div id="hMsg"><div id="hMsgMain"></div><div id="hMsgSub"></div></div>
   <div id="camToast"></div>
+  <div id="demoTag" class="hidden">DEMO RACE</div>
   
   <!-- Speedo / Gear -->
   <div id="hBL" class="panel">
@@ -610,6 +663,16 @@ document.addEventListener('DOMContentLoaded', function() {
   <div id="lights"><i></i><i></i><i></i><i></i><i></i></div>
   <div id="hWrong" class="hidden">WRONG WAY</div>
   <div id="slipTag">SLIPSTREAM</div>
+  
+  <!-- Track-limits penalty board: the annoyed driver's face, far left -->
+  <div id="giveBack">
+    <img id="gbImg" alt="">
+    <div>
+      <div class="gb-code" id="gbCode"></div>
+      <div class="gb-txt">GIVE THE PLACE BACK!</div>
+      <div class="gb-name" id="gbName"></div>
+    </div>
+  </div>
   
   <!-- Tilt Gauge Feedback for Mobile Gyro -->
   <div id="tiltGauge">
@@ -818,8 +881,25 @@ document.addEventListener('DOMContentLoaded', function() {
     <div class="irow"><b>⛶ FULLSCREEN</b> Expand to immersive full-screen display.</div>
     <div class="irow" style="margin-top: 10px; color: var(--green);"><b>DRS ZONES:</b> Opens rear wing for +18 km/h top speed when within 1.2s of the car ahead.</div>
     <div class="irow" style="color: var(--cyan);"><b>SLIPSTREAM:</b> Draft closely behind rivals down long straights for maximum acceleration.</div>
+    <div class="irow" style="color: #ff5348;"><b>TRACK LIMITS:</b> Overtaking while off the track is illegal — you must give the place back. The annoyed driver will let you know!</div>
+    <div class="irow" style="color: #f2d13d;"><b>MOBILE:</b> Landscape orientation required — rotate your phone to race.</div>
     <div class="btnrow"><button id="iClose" class="pri">LET'S RACE</button></div>
   </div>
+</div>
+
+<!-- Portrait lock: the game is landscape-only on phones -->
+<div id="rotateOverlay">
+  <svg width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="7" y="2" width="10" height="20" rx="2.2"/>
+    <path d="M11 5h2"/>
+    <path d="M12 18.6v.01"/>
+    <path d="M4 9l-2 2 2 2" opacity=".9"/>
+    <path d="M20 9l2 2-2 2" opacity=".9"/>
+    <path d="M7.5 9v4.5h3.4" opacity=".9"/>
+    <path d="M16.5 15v-4.5h-3.4" opacity=".9"/>
+  </svg>
+  <h2>ROTATE YOUR DEVICE</h2>
+  <p>POLYGON GP must be played in LANDSCAPE.</p>
 </div>
 
 <script>

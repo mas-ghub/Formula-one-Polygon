@@ -9,6 +9,15 @@
     "headshot": "/data/drivers/1.png"
   },
   {
+    "name": "Oscar PIASTRI",
+    "code": "PIA",
+    "team": "McLaren",
+    "color": "#F47600",
+    "colB": "#47C7FC",
+    "num": 81,
+    "headshot": "/data/drivers/81.png"
+  },
+  {
     "name": "Max VERSTAPPEN",
     "code": "VER",
     "team": "Red Bull Racing",
@@ -18,31 +27,40 @@
     "headshot": "/data/drivers/3.png"
   },
   {
-    "name": "Gabriel BORTOLETO",
-    "code": "BOR",
-    "team": "Audi",
-    "color": "#F50537",
-    "colB": "#101418",
-    "num": 5,
-    "headshot": "/data/drivers/5.png"
+    "name": "Isack HADJAR",
+    "code": "HAD",
+    "team": "Red Bull Racing",
+    "color": "#4781D7",
+    "colB": "#FFC800",
+    "num": 6,
+    "headshot": "/data/drivers/6.png"
   },
   {
-    "name": "Pierre GASLY",
-    "code": "GAS",
-    "team": "Alpine",
-    "color": "#00A1E8",
-    "colB": "#FF87BC",
-    "num": 10,
-    "headshot": "/data/drivers/10.png"
+    "name": "Charles LECLERC",
+    "code": "LEC",
+    "team": "Ferrari",
+    "color": "#ED1131",
+    "colB": "#FFE600",
+    "num": 16,
+    "headshot": "/data/drivers/16.png"
   },
   {
-    "name": "Sergio PEREZ",
-    "code": "PER",
-    "team": "Cadillac",
-    "color": "#909090",
-    "colB": "#101418",
-    "num": 11,
-    "headshot": "/data/drivers/11.png"
+    "name": "Lewis HAMILTON",
+    "code": "HAM",
+    "team": "Ferrari",
+    "color": "#ED1131",
+    "colB": "#FFE600",
+    "num": 44,
+    "headshot": "/data/drivers/44.png"
+  },
+  {
+    "name": "George RUSSELL",
+    "code": "RUS",
+    "team": "Mercedes",
+    "color": "#00D7B6",
+    "colB": "#0A0E12",
+    "num": 63,
+    "headshot": "/data/drivers/63.png"
   },
   {
     "name": "Kimi ANTONELLI",
@@ -63,15 +81,6 @@
     "headshot": "/data/drivers/14.png"
   },
   {
-    "name": "Charles LECLERC",
-    "code": "LEC",
-    "team": "Ferrari",
-    "color": "#ED1131",
-    "colB": "#FFE600",
-    "num": 16,
-    "headshot": "/data/drivers/16.png"
-  },
-  {
     "name": "Lance STROLL",
     "code": "STR",
     "team": "Aston Martin",
@@ -79,15 +88,6 @@
     "colB": "#CEDC00",
     "num": 18,
     "headshot": "/data/drivers/18.png"
-  },
-  {
-    "name": "Yuki TSUNODA",
-    "code": "TSU",
-    "team": "Racing Bulls",
-    "color": "#6C98FF",
-    "colB": "#F2F2F2",
-    "num": 22,
-    "headshot": null
   },
   {
     "name": "Alexander ALBON",
@@ -99,6 +99,15 @@
     "headshot": "/data/drivers/23.png"
   },
   {
+    "name": "Carlos SAINZ",
+    "code": "SAI",
+    "team": "Williams",
+    "color": "#1868DB",
+    "colB": "#E8EEF5",
+    "num": 55,
+    "headshot": "/data/drivers/55.png"
+  },
+  {
     "name": "Nico HULKENBERG",
     "code": "HUL",
     "team": "Audi",
@@ -108,31 +117,22 @@
     "headshot": "/data/drivers/27.png"
   },
   {
-    "name": "Liam LAWSON",
-    "code": "LAW",
-    "team": "Red Bull Racing",
-    "color": "#4781D7",
-    "colB": "#FFC800",
-    "num": 30,
-    "headshot": "/data/drivers/30.png"
+    "name": "Gabriel BORTOLETO",
+    "code": "BOR",
+    "team": "Audi",
+    "color": "#F50537",
+    "colB": "#101418",
+    "num": 5,
+    "headshot": "/data/drivers/5.png"
   },
   {
-    "name": "Esteban OCON",
-    "code": "OCO",
-    "team": "Haas F1 Team",
-    "color": "#9C9FA2",
-    "colB": "#E10600",
-    "num": 31,
-    "headshot": "/data/drivers/31.png"
-  },
-  {
-    "name": "Arvid LINDBLAD",
-    "code": "LIN",
-    "team": "Racing Bulls",
-    "color": "#6C98FF",
-    "colB": "#F2F2F2",
-    "num": 41,
-    "headshot": "/data/drivers/41.png"
+    "name": "Pierre GASLY",
+    "code": "GAS",
+    "team": "Alpine",
+    "color": "#00A1E8",
+    "colB": "#FF87BC",
+    "num": 10,
+    "headshot": "/data/drivers/10.png"
   },
   {
     "name": "Franco COLAPINTO",
@@ -144,49 +144,13 @@
     "headshot": "/data/drivers/43.png"
   },
   {
-    "name": "Lewis HAMILTON",
-    "code": "HAM",
-    "team": "Ferrari",
-    "color": "#ED1131",
-    "colB": "#FFE600",
-    "num": 44,
-    "headshot": "/data/drivers/44.png"
-  },
-  {
-    "name": "Carlos SAINZ",
-    "code": "SAI",
-    "team": "Williams",
-    "color": "#1868DB",
-    "colB": "#E8EEF5",
-    "num": 55,
-    "headshot": "/data/drivers/55.png"
-  },
-  {
-    "name": "George RUSSELL",
-    "code": "RUS",
-    "team": "Mercedes",
-    "color": "#00D7B6",
-    "colB": "#0A0E12",
-    "num": 63,
-    "headshot": "/data/drivers/63.png"
-  },
-  {
-    "name": "Valtteri BOTTAS",
-    "code": "BOT",
-    "team": "Cadillac",
-    "color": "#909090",
-    "colB": "#101418",
-    "num": 77,
-    "headshot": "/data/drivers/77.png"
-  },
-  {
-    "name": "Oscar PIASTRI",
-    "code": "PIA",
-    "team": "McLaren",
-    "color": "#F47600",
-    "colB": "#47C7FC",
-    "num": 81,
-    "headshot": "/data/drivers/81.png"
+    "name": "Esteban OCON",
+    "code": "OCO",
+    "team": "Haas F1 Team",
+    "color": "#9C9FA2",
+    "colB": "#E10600",
+    "num": 31,
+    "headshot": "/data/drivers/31.png"
   },
   {
     "name": "Oliver BEARMAN",
@@ -196,5 +160,41 @@
     "colB": "#E10600",
     "num": 87,
     "headshot": "/data/drivers/87.png"
+  },
+  {
+    "name": "Liam LAWSON",
+    "code": "LAW",
+    "team": "Racing Bulls",
+    "color": "#6C98FF",
+    "colB": "#F2F2F2",
+    "num": 30,
+    "headshot": "/data/drivers/30.png"
+  },
+  {
+    "name": "Arvid LINDBLAD",
+    "code": "LIN",
+    "team": "Racing Bulls",
+    "color": "#6C98FF",
+    "colB": "#F2F2F2",
+    "num": 41,
+    "headshot": "/data/drivers/41.png"
+  },
+  {
+    "name": "Sergio PEREZ",
+    "code": "PER",
+    "team": "Cadillac",
+    "color": "#909090",
+    "colB": "#101418",
+    "num": 11,
+    "headshot": "/data/drivers/11.png"
+  },
+  {
+    "name": "Valtteri BOTTAS",
+    "code": "BOT",
+    "team": "Cadillac",
+    "color": "#909090",
+    "colB": "#101418",
+    "num": 77,
+    "headshot": "/data/drivers/77.png"
   }
 ]
