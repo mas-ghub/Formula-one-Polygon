@@ -1,10 +1,17 @@
 # POLYGON GP — Low-Poly Grand Prix
 
+**Current visible version:** `v0.9.1 · BUILD 20260902.2`
+
+The version is displayed in the title-screen footer and included automatically
+in every in-game error report, making stale deployments and cached builds easy
+to identify. Update both the semantic version and build identifier for each
+published test build.
+
 A browser-based, low-poly F1 racing game built with Three.js. Real circuit
 layouts, the full 2026 F1 grid with true team liveries, dynamic weather
 (sunny, drizzle, rain and thunderstorms) with a day/dusk/night time-of-day
 control, a Sky F1–style timing tower with live driver photos, track-limits
-enforcement (“give the place back” for off-track overtakes), and a title
+enforcement ("give the place back" for off-track overtakes), and a title
 screen where the whole grid actually races itself under a live
 broadcast-style camera director.
 
@@ -141,10 +148,26 @@ on the title screen.
   portrait. The image is cropped/compressed to 256×256 and stored only in the
   browser under `polygon_gp_driver_profile_v1`; it is shown as the player's
   timing-tower headshot and remains available to an installed PWA offline.
+  Camera and upload are separate controls: Camera uses the front-facing webcam
+  or phone camera through `getUserMedia`, with a live mirrored preview and an
+  explicit shutter; Upload opens the device file/photo picker.
 - **Tablet stability and controls:** iOS motion permission has explicit
   pending/live/error handling and retry UI. Retina render-target dimensions,
   post-processing MSAA and mobile pixel ratio are constrained to avoid WebGL
-  framebuffer exhaustion.
+  framebuffer exhaustion. HIGH/ULTRA obey a total-pixel/maximum-texture budget
+  and resize every render target immediately when quality changes. The optional
+  multi-pass bloom/grade chain is currently disabled because affected Safari/
+  WebGL drivers silently returned a black image even with a complete 8-bit
+  framebuffer; HIGH/ULTRA still retain their terrain, shadow, weather and prop
+  upgrades through the standard ACES renderer. Render scale is capability-
+  negotiated rather than guessed from a device name: the game reads WebGL's
+  texture/renderbuffer/viewport limits and creates a real RGBA+depth framebuffer
+  at the requested size, accepting it only when the driver reports COMPLETE and
+  no GL error. Failed requests step down and the measured result is cached per
+  viewport and tier. Shadow maps remain capped at 2K and ULTRA terrain at 30k
+  nodes. PMREM blur stays within Three.js's supported 20-sample kernel.
+  The gyro retry is a compact, non-blocking notice in the upper-right rather
+  than a large prompt covering the centre of the driving view.
 - **Rain:** the Heartfelt Shadertoy-derived refraction is used without the old
   canvas blobs overlaid on top, preserving sharp beads, trails and wet-glass
   distortion at racing speed.
@@ -156,6 +179,19 @@ on the title screen.
 - **Commentary mood:** race commentary starts from a happy, enthusiastic
   baseline and adds regular positive atmosphere calls between action events;
   speed, close racing, weather and incidents raise the delivery further.
+- **Engine sound field:** the player's engine and whole-grid bed have more
+  presence, while the four nearest rivals receive independent pitch, filter,
+  stereo pan and smooth distance attenuation. Packs build audibly as they
+  approach and each engine fades naturally as its car drives away.
+- **Encoding-safe UI:** menu country markers use compact ISO-style codes, and
+  source/UI text has been repaired from double-decoded UTF-8 so punctuation,
+  accents, arrows and symbols render correctly instead of mojibake.
+
+- **Visible diagnostics:** uncaught JavaScript errors, rejected promises,
+  internal `console.error` reports and WebGL context loss open an in-game error
+  report with Copy, Keep Playing and Reload actions. A five-second splash
+  watchdog also guarantees a failed or blocked splash can never leave the app
+  hidden behind a permanent blank screen.
 
 Online multiplayer is intentionally not implemented yet; that remains future
 work and will require a shared backend such as Firestore.

@@ -74,7 +74,12 @@ export class PostFX {
   /** quality = resolved tier label. Returns whether the chain is live. */
   apply(quality) {
     this.wanted = quality;
-    const want = quality === 'HIGH' || quality === 'ULTRA';
+    // Keep the optional bloom chain disabled for now. Some WebGL/iPad drivers
+    // report complete render-target support but silently output black once the
+    // multi-pass HIGH/ULTRA chain is enabled. The standard renderer already
+    // supplies ACES tone mapping, shadows, weather and all quality-tier detail;
+    // a visible game is more important than optional bloom.
+    const want = false;
     if (want && !this.ok) this._init();
     this.enabled = want && this.ok;
     this._sync();
@@ -86,13 +91,19 @@ export class PostFX {
       // Keep the graded output honest: the renderer itself must not tone map
       // or colour-space-convert what the chain draws to the canvas.
       this.renderer.toneMapping = THREE.NoToneMapping;
-      // The main canvas already has antialiasing. Multisampling this half-float
-      // post target as well is a large, unnecessary allocation and exceeds
-      // WebKit's renderbuffer budget on Retina iPads.
+      // Use a universally renderable 8-bit target. Several Safari/older-GPU
+      // WebGL implementations advertise half-float textures but cannot render
+      // the complete bloom chain into them; the result is a valid-running game
+      // behind a black HIGH/ULTRA canvas. Tone mapping still happens in the
+      // final grade pass, so this robust target is visually very close.
       const rt = new THREE.WebGLRenderTarget(2, 2, {
-        type: THREE.HalfFloatType,
+        type: THREE.UnsignedByteType,
+        format: THREE.RGBAFormat,
+        minFilter: THREE.LinearFilter,
+        magFilter: THREE.LinearFilter,
         samples: 0,
-        depthBuffer: true
+        depthBuffer: true,
+        stencilBuffer: false
       });
       this.composer = new EffectComposer(this.renderer, rt);
       this.composer.renderToScreen = false;

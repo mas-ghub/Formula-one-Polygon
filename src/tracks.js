@@ -387,7 +387,7 @@ export const TRACKS = [
     runoff: 7.0,
     openf1CircuitKey: 9,
     meetingName: 'United States Grand Prix',
-    desc: 'Steep uphill Turn 1 inspired by Silverstone’s Maggotts-Becketts',
+    desc: "Steep uphill Turn 1 inspired by Silverstone's Maggotts-Becketts",
     pts: ovalPts(225, 205, 20)
   },
   {

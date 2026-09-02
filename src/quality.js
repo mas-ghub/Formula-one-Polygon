@@ -11,9 +11,11 @@ import * as THREE from 'three';
 export const QUALITY_PRESETS = {
   ULTRA: {
     label: 'ULTRA',
-    pixelRatio: 1.6,              // × native devicePixelRatio, further × resScale
+    // ULTRA spends its budget on scene detail, not a dangerously oversized
+    // framebuffer. Retina already supplies ample native resolution.
+    pixelRatio: 1.0,
     shadows: true,
-    shadowSize: 4096,
+    shadowSize: 2048,
     shadowType: 'soft',           // PCFSoftShadowMap — buttery, filmic shadow edges
     smokeParticles: 900,
     sparkParticles: 300,
@@ -23,9 +25,9 @@ export const QUALITY_PRESETS = {
   },
   HIGH: {
     label: 'HIGH',
-    pixelRatio: 1.2,
+    pixelRatio: 0.9,
     shadows: true,
-    shadowSize: 2048,
+    shadowSize: 1536,
     shadowType: 'pcf',
     smokeParticles: 400,
     sparkParticles: 120,
@@ -75,6 +77,49 @@ export class QualityManager {
     this.autoDir = 0;
     this.resScale = 1.0;          // dynamic resolution multiplier
     this.targetFps = 60;          // detected display refresh rate
+    this._safeRatios = new Map(); // measured framebuffer limits per viewport/tier
+  }
+
+  // Ask WebGL itself whether an RGBA colour + depth framebuffer of this exact
+  // size is complete. This is a real allocation test, not a device-name guess.
+  _probeFramebuffer(w, h) {
+    const gl=this.renderer.getContext();
+    const maxTex=gl.getParameter(gl.MAX_TEXTURE_SIZE)||0;
+    const maxRb=gl.getParameter(gl.MAX_RENDERBUFFER_SIZE)||maxTex;
+    const vp=gl.getParameter(gl.MAX_VIEWPORT_DIMS)||[maxTex,maxTex];
+    if(w<2||h<2||w>maxTex||h>maxTex||w>maxRb||h>maxRb||w>vp[0]||h>vp[1])return false;
+    let fb=null,tex=null,depth=null,ok=false;
+    try{
+      for(let i=0;i<8&&gl.getError()!==gl.NO_ERROR;i++){} // discard stale GL flags
+      fb=gl.createFramebuffer();tex=gl.createTexture();depth=gl.createRenderbuffer();
+      gl.bindTexture(gl.TEXTURE_2D,tex);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+      gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,w,h,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+      gl.bindRenderbuffer(gl.RENDERBUFFER,depth);gl.renderbufferStorage(gl.RENDERBUFFER,gl.DEPTH_COMPONENT16,w,h);
+      gl.bindFramebuffer(gl.FRAMEBUFFER,fb);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,tex,0);
+      gl.framebufferRenderbuffer(gl.FRAMEBUFFER,gl.DEPTH_ATTACHMENT,gl.RENDERBUFFER,depth);
+      ok=gl.checkFramebufferStatus(gl.FRAMEBUFFER)===gl.FRAMEBUFFER_COMPLETE&&gl.getError()===gl.NO_ERROR;
+    }catch(e){ok=false;}
+    finally{
+      gl.bindFramebuffer(gl.FRAMEBUFFER,null);gl.bindTexture(gl.TEXTURE_2D,null);gl.bindRenderbuffer(gl.RENDERBUFFER,null);
+      if(fb)gl.deleteFramebuffer(fb);if(tex)gl.deleteTexture(tex);if(depth)gl.deleteRenderbuffer(depth);
+    }
+    return ok;
+  }
+
+  _measuredRatio(desired, mode) {
+    const key=innerWidth+'x'+innerHeight+':'+mode+':'+desired.toFixed(2);
+    if(this._safeRatios.has(key))return this._safeRatios.get(key);
+    const gl=this.renderer.getContext(),vp=gl.getParameter(gl.MAX_VIEWPORT_DIMS)||[4096,4096];
+    const hard=Math.min((gl.getParameter(gl.MAX_TEXTURE_SIZE)||4096)/innerWidth,(gl.getParameter(gl.MAX_RENDERBUFFER_SIZE)||4096)/innerHeight,vp[0]/innerWidth,vp[1]/innerHeight);
+    let ratio=Math.min(desired,hard);
+    // Test the requested allocation, then walk down until this GPU confirms a
+    // complete colour/depth target. LOW is the final universally safe floor.
+    while(ratio>0.55&&!this._probeFramebuffer(Math.floor(innerWidth*ratio),Math.floor(innerHeight*ratio)))ratio*=0.8;
+    ratio=Math.max(0.5,ratio);
+    this._safeRatios.set(key,ratio);
+    return ratio;
   }
 
   // Pick a sensible starting tier for the hardware so AUTO lands close out of
@@ -146,12 +191,11 @@ export class QualityManager {
     // dynamic resolution scale, clamped to sane bounds. This is what lets the
     // tuner trade a little resolution to keep a 120Hz panel at 120fps.
     const dpr = window.devicePixelRatio || 1;
-    const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent || '') || navigator.maxTouchPoints > 1;
-    // Mobile Safari has a much smaller renderbuffer budget than desktop GL.
-    // A hard 2x ceiling keeps the canvas plus bloom/rain targets inside it;
-    // desktop hardware can still supersample up to 3x.
-    const eff = clamp(dpr * cfg.pixelRatio * this.resScale, 0.5, isMobile ? 2 : 3);
+    const requested=clamp(dpr*cfg.pixelRatio*this.resScale,0.5,3);
+    const eff=this._measuredRatio(requested,mode);
     this.renderer.setPixelRatio(eff);
+    const meterChip=document.getElementById('hQualityChip');
+    if(meterChip)meterChip.title=`${cfg.label}: measured ${eff.toFixed(2)}× render scale`;
 
     // Shadow maps — ULTRA uses soft (PCFSoft) shadows at 4K resolution;
     // HIGH/MED get plain PCF; LOW turns shadows off entirely.
