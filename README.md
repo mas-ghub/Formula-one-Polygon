@@ -1,6 +1,6 @@
 # POLYGON GP — Low-Poly Grand Prix
 
-**Current visible version:** `v0.9.4 · BUILD 20260902.5`
+**Current visible version:** `v0.9.5 · BUILD 20260902.6`
 
 The version is displayed in the title-screen footer and included automatically
 in every in-game error report, making stale deployments and cached builds easy
@@ -48,6 +48,39 @@ This writes:
 
 `public/data/` is committed to the repo, so the game loads it as ordinary
 static files — instant, offline-friendly, and immune to OpenF1's rate limit.
+
+## Circuit realism (v0.9.5)
+
+Tracks are no longer identical ribbons of tarmac with different shapes — each
+one carries its own physical character, declared per track in `src/tracks.js`:
+
+- **`width`** — full tarmac width in metres. Monaco is a genuine squeeze at
+  9.5 m (barely two cars side by side), Baku and Singapore run ~11 m street
+  canyons, while Silverstone spreads out to 15 m. The road mesh, kerbs,
+  run-off, racing line amplitude and the AI's overtaking envelope all follow
+  it automatically.
+- **`bank`** — maximum corner banking in degrees. Corners are cambered: the
+  outside edge rises with curvature (heavily smoothed so the road twists into
+  a bowl gradually). Zandvoort gets its real ~16–18° Hugenholtz/Luyendyk speed
+  banks, Jeddah's T13 its 12% banking, street circuits stay nearly flat. The
+  banking is on the *physics* surface, not just the visuals — cars sit flush
+  on the camber, visibly roll with it, and gain up to ~35% cornering grip on
+  the steepest bowls, so a banked sweep really is faster than a flat one.
+- **`water`** — waterside zones `[{ from, to, w, side, boats }]` in lap
+  fractions. Monaco's Port Hercule (inside the lap, with moored boats),
+  Singapore's Marina Bay, Baku's Caspian promenade, Jeddah's Corniche lagoon,
+  Montreal's rowing basin, the Yas Marina and Miami's famous fake marina all
+  get a sheet of animated, reflective water just past the barriers; harbour
+  zones are dressed with low-poly boats. (Albert Park and Suzuka keep their
+  infield `lake`.)
+- **Grass** — the verges now have real 3-D instanced grass tufts (with
+  per-tuft colour variation around the circuit's own `grass` tint) plus mowed
+  light/dark striping in the turf texture, so the trackside reads as groomed
+  lawn instead of a flat green wash.
+
+`node tools/verify_realism.mjs` checks all of it against the real built
+world: per-track width, measured banking on the physics surface, water
+geometry, boat count and tuft count.
 Re-run the script occasionally to pick up roster changes or a circuit that
 had no lap data last time (a brand-new track before its first race, for
 example — as of this writing that's Madrid/Madring, plus Sepang and Marina

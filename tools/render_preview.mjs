@@ -313,4 +313,14 @@ const cam3 = new THREE.PerspectiveCamera(68, W / H, 0.5, 6000);
 cam3.position.set(s2.p.x - s2.n.x * 26, s2.p.y + 8, s2.p.z - s2.n.z * 26);
 cam3.lookAt(s2.p.x, s2.p.y + 1.5, s2.p.z);
 render(cam3, `${outDir}/side_${slug}.png`, sun, 'day');
+/* optional close-up: FRAC=0.63 renders a high three-quarter view at that lap
+   fraction — handy for checking a specific corner, water zone or banking */
+if (process.env.FRAC) {
+  const f = parseFloat(process.env.FRAC);
+  const s4 = track[Math.round(track.length * f) % track.length];
+  const cam4 = new THREE.PerspectiveCamera(58, W / H, 0.5, 6000);
+  cam4.position.set(s4.p.x - s4.t.x * 40 - s4.n.x * 55, s4.p.y + 55, s4.p.z - s4.t.z * 40 - s4.n.z * 55);
+  cam4.lookAt(s4.p.x + s4.t.x * 10, s4.p.y, s4.p.z + s4.t.z * 10);
+  render(cam4, `${outDir}/spot_${slug}.png`, sun, 'day');
+}
 console.log(`${name}: relief ${((trackMaxY - trackMinY) || 0).toFixed(0)} m · steepest ${(bg * 100).toFixed(0)}% · ${world.children.length} top-level objects`);

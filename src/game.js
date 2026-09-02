@@ -554,6 +554,12 @@ for(let i=0;i<65;i++){
   gg.arc(Math.random()*768,Math.random()*768,rand(14,50),0,7);
   gg.fill();
 }
+// Mowed stripes — the broad alternating light/dark bands of a groomed GP
+// verge (the mower flattens the blades in opposite directions pass by pass).
+for(let b=0;b<8;b++){
+ gg.fillStyle=b%2?'rgba(235,245,225,0.05)':'rgba(18,38,14,0.055)';
+ gg.fillRect(b*96,0,96,768);
+}
 const grassT=ctex(gc,true);grassT.repeat.set(120,120);
 
 // High-fidelity procedurally generated Bump/Normal textures for road roughness and terrain clumping
@@ -1409,7 +1415,36 @@ function buildWorld(idx){
  for(let k=0;k<3;k++)for(let i=0;i<N;i++)
   samples[i].line=(samples[(i-1+N)%N].line+samples[i].line*2+samples[(i+1)%N].line)/4;
  
- const halfW=7.0;
+ // Per-track road width. Real circuits differ enormously: Monaco's streets are
+ // barely 9-10 m wide while Silverstone's runway-born tarmac is 15 m+. def.width
+ // is the full tarmac width in metres (default 14 — the old constant behaviour).
+ const halfW=(def.width!==undefined?def.width:14)/2;
+ // The AI racing line amplitude was tuned for a 7 m half-width; on a tight
+ // street circuit it has to breathe in with the road or the ideal line would
+ // ride the kerbs everywhere.
+ {const lineMax=Math.max(1.6,halfW-1.15);
+  for(let i=0;i<N;i++)samples[i].line=clamp(samples[i].line,-lineMax,lineMax);}
+ // BANKED CORNERS ("speed banks"). Real corners are cambered — the outside
+ // edge sits higher than the inside so the road itself pushes the car around
+ // the bend. def.bank is the maximum banking in DEGREES (Zandvoort's
+ // Hugenholtz/Luyendyk bowls run ~18°; a normal GP corner carries 4-7° of
+ // camber; city streets are nearly flat). Per-sample bank ramps up with
+ // curvature and is heavily smoothed so the road twists into and out of a
+ // banked bowl gradually instead of snapping.
+ {
+  const bankMaxDeg=def.bank!==undefined?def.bank:(def.theme==='street'?2.2:5.5);
+  const bankMax=bankMaxDeg*Math.PI/180;
+  for(let i=0;i<N;i++){
+   const cv=samples[i].curv;
+   const mag=clamp(Math.abs(cv)*34,0,1);
+   // tan(bank) per metre of lateral offset, signed so the OUTSIDE of the
+   // corner (the +n side when curv>0 — same convention as the gravel traps)
+   // is the raised edge.
+   samples[i].bk=Math.tan(bankMax*mag)*Math.sign(cv||1)*(cv?1:0);
+  }
+  for(let k=0;k<26;k++)for(let i=0;i<N;i++)
+   samples[i].bk=(samples[(i-1+N)%N].bk+samples[i].bk*2+samples[(i+1)%N].bk)/4;
+ }
  const runoffW=def.runoff!==undefined?def.runoff:6.5;
  // Thinner margins: pull the barrier in closer to the tarmac so you can put
  // all four wheels right at the edge before you hit the wall — the racing
@@ -1418,6 +1453,18 @@ function buildWorld(idx){
  T={N,def,samples,len,halfW,segLen:len/N,canopyMats:[],flags:[],tvCams:[],lampMats:[]};
  T.latLimit=wallDist+0.25;
  T.collideLat=wallDist-0.45;
+ // Height the banked surface adds at a signed lateral offset from the
+ // centreline. Full camber across the tarmac (|lat| ≤ halfW), then fading to
+ // zero at the wall so the barriers and the terrain they stand on stay level.
+ // Used by the road/kerb/run-off meshes AND by nearestTrackY (what the cars
+ // physically sit on), so the rendered surface and the physics surface are
+ // the same surface by construction.
+ const bankOffAt=(bk,lat)=>{
+  const a=Math.abs(lat);
+  const f=a<=halfW?1:Math.max(0,1-(a-halfW)/Math.max(0.5,wallDist-halfW));
+  return bk*clamp(lat,-halfW,halfW)*f;
+ };
+ T.bankOffAt=bankOffAt;
  cam.heliU=0;cam.heliPos=null;cam.heliLook=null;director.target=null;director.timer=0;director.swoop=0;
 
  // Closest point on the track's actual polyline (segment projection + linear
@@ -1461,6 +1508,21 @@ function buildWorld(idx){
  }
  const nearestTrackY=(x,z)=>{
   let bestD2=1e18,bestY=trackMinY;
+  let bestSi=-1,bestSj=0,bestTt=0,bestPx=0,bestPz=0;
+  // Camber-corrected surface height: the flat centreline height plus the
+  // banking offset at this point's lateral distance from the centreline.
+  const bankedY=()=>{
+   if(bestSi<0)return bestY;
+   // (tools slice this function out without the outer helper — degrade to the
+   // flat centreline height there rather than throwing)
+   if(typeof bankOffAt!=='function')return bestY;
+   const A=samples[bestSi],B=samples[bestSj];
+   let nx=A.n.x+(B.n.x-A.n.x)*bestTt,nz=A.n.z+(B.n.z-A.n.z)*bestTt;
+   const nl=Math.hypot(nx,nz)||1;nx/=nl;nz/=nl;
+   const lat=(x-bestPx)*nx+(z-bestPz)*nz;
+   const bk=(A.bk||0)+((B.bk||0)-(A.bk||0))*bestTt;
+   return bestY+bankOffAt(bk,lat);
+  };
   let tested=0;
   if(hashBuckets){
    const gi=Math.floor((x-hashMinX)/hashCell),gj=Math.floor((z-hashMinZ)/hashCell);
@@ -1490,11 +1552,11 @@ function buildWorld(idx){
        const px=a.x+abx*t,pz=a.z+abz*t;
        const dx=x-px,dz=z-pz,d2=dx*dx+dz*dz;
        tested++;
-       if(d2<bestD2){bestD2=d2;bestY=lerp(a.y,b.y,t);}
+       if(d2<bestD2){bestD2=d2;bestY=lerp(a.y,b.y,t);bestSi=si;bestSj=(si+1)%N;bestTt=t;bestPx=px;bestPz=pz;}
       }
      }
     }
-    if(tested)return{dist:Math.sqrt(bestD2),y:bestY,far:false};
+    if(tested)return{dist:Math.sqrt(bestD2),y:bankedY(),far:false};
    }
   }
   // outside the hash bounds → exact full scan
@@ -1506,9 +1568,9 @@ function buildWorld(idx){
    t=clamp(t,0,1);
    const px=a.x+abx*t,pz=a.z+abz*t;
    const dx=x-px,dz=z-pz,d2=dx*dx+dz*dz;
-   if(d2<bestD2){bestD2=d2;bestY=lerp(a.y,b.y,t);}
+   if(d2<bestD2){bestD2=d2;bestY=lerp(a.y,b.y,t);bestSi=i;bestSj=(i+2)%N;bestTt=t;bestPx=px;bestPz=pz;}
   }
-  return{dist:Math.sqrt(bestD2),y:bestY,far:false};
+  return{dist:Math.sqrt(bestD2),y:bankedY(),far:false};
  };
  const minTrackDist=(x,z)=>nearestTrackY(x,z).dist;
  let cx=0,cz=0;for(const s of samples){cx+=s.p.x;cz+=s.p.z;}cx/=N;cz/=N;
@@ -1904,7 +1966,8 @@ function buildWorld(idx){
   const rep=Math.max(1,Math.round(len/9)),vS=len/rep;
   const pos=new Float32Array(N*6),uv=new Float32Array(N*4),index=[];
   for(let i=0;i<N;i++){const s=samples[i],vv=s.cum/vS;
-   pos.set([s.p.x+s.n.x*halfW,s.p.y+0.05,s.p.z+s.n.z*halfW,s.p.x-s.n.x*halfW,s.p.y+0.05,s.p.z-s.n.z*halfW],i*6);
+   const bkE=(s.bk||0)*halfW; // banked edge lift: outside edge up, inside edge down
+   pos.set([s.p.x+s.n.x*halfW,s.p.y+0.05+bkE,s.p.z+s.n.z*halfW,s.p.x-s.n.x*halfW,s.p.y+0.05-bkE,s.p.z-s.n.z*halfW],i*6);
    uv.set([0,vv,1,vv],i*4);
    const a=i*2,b=a+1,c=((i+1)%N)*2,d=c+1;index.push(a,c,b,b,c,d);}
   const g=new THREE.BufferGeometry();
@@ -1929,10 +1992,10 @@ function buildWorld(idx){
     const p4x=s2.p.x+s2.n.x*wallDist*sg, p4z=s2.p.z+s2.n.z*wallDist*sg;
 
     rPos.push(
-      p1x,s.p.y+0.04,p1z,
-      p2x,s.p.y+0.04,p2z,
-      p3x,s2.p.y+0.04,p3z,
-      p4x,s2.p.y+0.04,p4z
+      p1x,s.p.y+0.04+bankOffAt(s.bk||0,halfW*sg),p1z,
+      p2x,s.p.y+0.04+bankOffAt(s.bk||0,wallDist*sg),p2z,
+      p3x,s2.p.y+0.04+bankOffAt(s2.bk||0,halfW*sg),p3z,
+      p4x,s2.p.y+0.04+bankOffAt(s2.bk||0,wallDist*sg),p4z
     );
     rUv.push(0,vv0, 1,vv0, 0,vv1, 1,vv1);
     if(sg>0){
@@ -1965,10 +2028,12 @@ function buildWorld(idx){
    const ribA=(Math.floor(s.cum/1.2)%2)?0.075:0.018;
    const ribB=(Math.floor(s2.cum/1.2)%2)?0.075:0.018;
    for(const sg of[1,-1]){
-    pos.push(s.p.x+s.n.x*curbInner*sg,s.p.y+0.058,s.p.z+s.n.z*curbInner*sg,
-     s.p.x+s.n.x*curbOuter*sg,s.p.y+0.058+ribA,s.p.z+s.n.z*curbOuter*sg,
-     s2.p.x+s2.n.x*curbInner*sg,s2.p.y+0.058,s2.p.z+s2.n.z*curbInner*sg,
-     s2.p.x+s2.n.x*curbOuter*sg,s2.p.y+0.058+ribB,s2.p.z+s2.n.z*curbOuter*sg);
+    const bIn=bankOffAt(s.bk||0,curbInner*sg),bOut=bankOffAt(s.bk||0,curbOuter*sg);
+    const bIn2=bankOffAt(s2.bk||0,curbInner*sg),bOut2=bankOffAt(s2.bk||0,curbOuter*sg);
+    pos.push(s.p.x+s.n.x*curbInner*sg,s.p.y+0.058+bIn,s.p.z+s.n.z*curbInner*sg,
+     s.p.x+s.n.x*curbOuter*sg,s.p.y+0.058+ribA+bOut,s.p.z+s.n.z*curbOuter*sg,
+     s2.p.x+s2.n.x*curbInner*sg,s2.p.y+0.058+bIn2,s2.p.z+s2.n.z*curbInner*sg,
+     s2.p.x+s2.n.x*curbOuter*sg,s2.p.y+0.058+ribB+bOut2,s2.p.z+s2.n.z*curbOuter*sg);
     const v0=s.cum/2.4,v1=s2.cum/2.4;
     uv.push(0,v0,1,v0,0,v1,1,v1);
     if(sg>0)index.push(vi,vi+2,vi+1,vi+1,vi+2,vi+3);
@@ -2385,7 +2450,9 @@ function buildWorld(idx){
     const gx1=s.p.x+s.n.x*wallDist*side,   gz1=s.p.z+s.n.z*wallDist*side;
     const gx2=s2.p.x+s2.n.x*(halfW+1.5)*side, gz2=s2.p.z+s2.n.z*(halfW+1.5)*side;
     const gx3=s2.p.x+s2.n.x*wallDist*side,   gz3=s2.p.z+s2.n.z*wallDist*side;
-    gPos.push(gx0,s.p.y+0.09,gz0, gx1,s.p.y+0.09,gz1, gx2,s2.p.y+0.09,gz2, gx3,s2.p.y+0.09,gz3);
+    const gb0=bankOffAt(s.bk||0,(halfW+1.5)*side),gb1=bankOffAt(s.bk||0,wallDist*side);
+    const gb2=bankOffAt(s2.bk||0,(halfW+1.5)*side),gb3=bankOffAt(s2.bk||0,wallDist*side);
+    gPos.push(gx0,s.p.y+0.09+gb0,gz0, gx1,s.p.y+0.09+gb1,gz1, gx2,s2.p.y+0.09+gb2,gz2, gx3,s2.p.y+0.09+gb3,gz3);
     if(side>0)gIdx.push(gVi,gVi+2,gVi+1, gVi+1,gVi+2,gVi+3);
     else gIdx.push(gVi,gVi+1,gVi+2, gVi+1,gVi+3,gVi+2);
     gVi+=4;
@@ -2466,6 +2533,49 @@ function buildWorld(idx){
  }
 
  const propDensity=(QUALITY_PRESETS[effQuality()]||{}).propDensity!=null?QUALITY_PRESETS[effQuality()].propDensity:1;
+ // 9z. 3-D GRASS TUFTS — the verge isn't just a painted texture any more:
+ //     instanced criss-cross blade cards scattered in the band beyond the
+ //     barriers give the grass actual height and parallax as you drive past.
+ //     Two crossed planes per tuft, one draw call for the whole circuit, so
+ //     even thousands of tufts cost next to nothing.
+ {
+  const nTuft=Math.round((def.theme==='street'?320:def.theme==='forest'?1500:1250)*propDensity);
+  if(nTuft>8){
+   const bladeG=new THREE.PlaneGeometry(0.9,0.55,1,1);
+   bladeG.translate(0,0.24,0);
+   const gBase=new THREE.Color(def.grass!==undefined?def.grass:0x477d3b);
+   const tuftMat=new THREE.MeshStandardMaterial({color:0xffffff,roughness:1,side:THREE.DoubleSide});
+   const tufts=new THREE.InstancedMesh(bladeG,tuftMat,nTuft);
+   const tDummy=new THREE.Object3D();
+   const tc=new THREE.Color();
+   let placed=0,tuftTries=0;
+   while(placed<nTuft&&tuftTries<nTuft*4){
+    tuftTries++;
+    const ts=samples[Math.floor(Math.random()*N)];
+    const side=Math.random()<0.5?1:-1;
+    const lat=rand(T.latLimit+1.2,T.latLimit+16);
+    const x=ts.p.x+ts.n.x*lat*side+rand(-1.2,1.2),z=ts.p.z+ts.n.z*lat*side+rand(-1.2,1.2);
+    if(minTrackDist(x,z)<wallDist+0.9)continue; // never on the road or run-off
+    const y=terrainHeightAt(x,z);
+    tDummy.position.set(x,y+0.01,z);
+    tDummy.rotation.set(0,rand(0,Math.PI),rand(-0.06,0.06));
+    const sc=rand(0.6,1.5);
+    tDummy.scale.set(sc,sc*rand(0.8,1.5),sc);
+    tDummy.updateMatrix();
+    tufts.setMatrixAt(placed,tDummy.matrix);
+    // per-tuft tint: lusher / drier / sun-bleached variation around the
+    // circuit's own grass colour
+    tc.copy(gBase).multiplyScalar(rand(0.85,1.35));
+    tc.g=Math.min(1,tc.g*rand(1.0,1.2));
+    tufts.setColorAt(placed,tc);
+    placed++;
+   }
+   tufts.count=placed;
+   if(tufts.instanceColor)tufts.instanceColor.needsUpdate=true;
+   tufts.instanceMatrix.needsUpdate=true;
+   world.add(tufts);
+  }
+ }
  // 10. Trees & Scenery (Far away from track edges) — three distinct species
  // (conifer / round broadleaf / slender poplar) mixed by theme, instead of
  // one repeated cone, so the scenery doesn't look so uniform.
@@ -2585,7 +2695,7 @@ function buildWorld(idx){
    lastPI=i;
    const s=samples[i],off=rand(-halfW*0.55,halfW*0.55);
    puddleDefs.push({
-    x:s.p.x+s.n.x*off,y:s.p.y+0.056,z:s.p.z+s.n.z*off,
+    x:s.p.x+s.n.x*off,y:s.p.y+0.056+bankOffAt(s.bk||0,off),z:s.p.z+s.n.z*off,
     r:rand(1.5,3.4),rot:Math.atan2(s.t.x,s.t.z)
    });
   }
@@ -2613,6 +2723,77 @@ function buildWorld(idx){
   const lake=new THREE.Mesh(new THREE.CircleGeometry(lr,26),lmat);
   lake.rotation.x=-Math.PI/2;lake.position.set(cx,ly,cz);
   lake.receiveShadow=true;lake.renderOrder=2;world.add(lake);
+ }
+
+ // 13b. WATERSIDE — harbour / sea / river frontage beside the stretches of
+ //      track that genuinely run along water: Monaco's port (inside the lap!),
+ //      Baku's Caspian promenade, Singapore's Marina Bay, Jeddah's Corniche
+ //      lagoon, the Yas Marina, Miami's famous fake marina, Montreal's rowing
+ //      basin. Each zone lays a strip of reflective water just past the
+ //      barriers over [from..to] of the lap. side:'out' (default) faces away
+ //      from the circuit's centroid; side:'in' faces the infield. Harbour
+ //      zones (`boats:true`) also get a scatter of low-poly moored boats.
+ if(def.water&&def.water.length){
+  const wMat=new THREE.MeshStandardMaterial({map:waterT,bumpMap:waterT,bumpScale:0.22,color:0x1e6d8a,roughness:0.13,metalness:0.22,transparent:true,opacity:0.9,envMapIntensity:1.4,side:THREE.DoubleSide});
+  const hullMat=new THREE.MeshStandardMaterial({color:0xf2f4f6,roughness:0.5});
+  const cabinMat=new THREE.MeshStandardMaterial({color:0x2c4a5a,roughness:0.55});
+  for(const zone of def.water){
+   const i0=Math.round(zone.from*N),i1=Math.round(zone.to*N);
+   if(i1-i0<6)continue;
+   const wWide=zone.w!==undefined?zone.w:28,near=wallDist+2.2;
+   const sgn=(i)=>{const sm=samples[((i%N)+N)%N];
+    const outward=Math.sign((sm.p.x-cx)*sm.n.x+(sm.p.z-cz)*sm.n.z)||1;
+    return zone.side==='in'?-outward:outward;};
+   // Water level per cross-section: terrain sampled mid-strip, then smoothed
+   // hard along the run so the surface reads as one calm sheet, not a slope.
+   const lvl=[];
+   for(let i=i0;i<=i1;i++){
+    const sm=samples[i%N],sd=sgn(i);
+    lvl.push(terrainHeightAt(sm.p.x+sm.n.x*(near+wWide*0.5)*sd,sm.p.z+sm.n.z*(near+wWide*0.5)*sd));
+   }
+   for(let k=0;k<30;k++)for(let j=1;j<lvl.length-1;j++)lvl[j]=(lvl[j-1]+lvl[j]*2+lvl[j+1])/4;
+   const wPos=[],wUv=[],wIdx=[];let wVi=0;
+   for(let i=i0;i<i1;i++){
+    const A=samples[i%N],B=samples[(i+1)%N],sdA=sgn(i),sdB=sgn(i+1);
+    // Taper the width in over the first/last few samples so the water ends
+    // in a shoreline point instead of a hard square edge.
+    const tA=clamp(Math.min(i-i0,i1-i)/7,0.1,1),tB=clamp(Math.min(i+1-i0,i1-(i+1))/7,0.1,1);
+    const yA=lvl[i-i0]+0.16,yB=lvl[i+1-i0]+0.16;
+    wPos.push(
+     A.p.x+A.n.x*near*sdA, yA, A.p.z+A.n.z*near*sdA,
+     A.p.x+A.n.x*(near+wWide*tA)*sdA, yA, A.p.z+A.n.z*(near+wWide*tA)*sdA,
+     B.p.x+B.n.x*near*sdB, yB, B.p.z+B.n.z*near*sdB,
+     B.p.x+B.n.x*(near+wWide*tB)*sdB, yB, B.p.z+B.n.z*(near+wWide*tB)*sdB);
+    const v0=A.cum/22,v1=B.cum/22;
+    wUv.push(0,v0,1,v0,0,v1,1,v1);
+    wIdx.push(wVi,wVi+2,wVi+1, wVi+1,wVi+2,wVi+3);
+    wVi+=4;
+   }
+   const wGeo=new THREE.BufferGeometry();
+   wGeo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(wPos),3));
+   wGeo.setAttribute('uv',new THREE.BufferAttribute(new Float32Array(wUv),2));
+   wGeo.setIndex(wIdx);wGeo.computeVertexNormals();
+   const wMesh=new THREE.Mesh(wGeo,wMat);wMesh.receiveShadow=true;wMesh.renderOrder=2;world.add(wMesh);
+   if(zone.boats){
+    const nBoat=Math.max(2,Math.round((i1-i0)/26));
+    for(let b=0;b<nBoat;b++){
+     const i=i0+4+Math.floor(Math.random()*Math.max(1,i1-i0-8));
+     const sm=samples[i%N],sd=sgn(i);
+     const off=near+rand(wWide*0.32,wWide*0.75);
+     const bx=sm.p.x+sm.n.x*off*sd,bz=sm.p.z+sm.n.z*off*sd;
+     const by=lvl[clamp(i-i0,0,lvl.length-1)]+0.16;
+     const boat=new THREE.Group();
+     const hl=rand(4.5,8);
+     const hull=new THREE.Mesh(new THREE.BoxGeometry(hl,0.7,hl*0.32),hullMat);hull.position.y=0.28;boat.add(hull);
+     const bow=new THREE.Mesh(new THREE.BoxGeometry(hl*0.26,0.55,hl*0.26),hullMat);bow.position.set(hl*0.55,0.24,0);bow.rotation.y=Math.PI/4;boat.add(bow);
+     const cab=new THREE.Mesh(new THREE.BoxGeometry(hl*0.38,0.6,hl*0.24),cabinMat);cab.position.set(-hl*0.12,0.9,0);boat.add(cab);
+     if(Math.random()<0.5){const mast=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.07,rand(3,5),5),cabinMat);mast.position.set(hl*0.1,2.2,0);boat.add(mast);}
+     boat.position.set(bx,by,bz);boat.rotation.y=rand(0,Math.PI*2);boat.userData.isBoat=true;
+     boat.traverse(o=>{if(o.isMesh)o.castShadow=true;});
+     world.add(boat);
+    }
+   }
+  }
  }
 
  for(let i=0;i<N;i+=90){
@@ -3069,7 +3250,12 @@ function updCar(c,dt){
  // rain: at full wetness they provide roughly a third of normal-road grip.
  const onCurbSlip=(c.onCurb&&cur.wet>0.2)?(1-cur.wet*0.58):1;
  const surface=c.onGravel?0.22:(c.offT?0.45:(c.onCurb?0.78:1));
- const grip=(c.airborne?0.04:(cur.grip*surface))*onCurbSlip;
+ // Banked corners genuinely help: the camber turns part of the car's weight
+ // into cornering force, so a banked bowl can be taken meaningfully faster
+ // than a flat corner of the same radius (capped ≈ +35% at Zandvoort-grade
+ // banking). Off-track the banking has faded out, so no bonus there.
+ const bankBoost=(!c.offT&&!c.airborne)?1+Math.min(Math.abs((T.samples[c.ti]&&T.samples[c.ti].bk)||0)*1.6,0.35):1;
+ const grip=(c.airborne?0.04:(cur.grip*surface*bankBoost))*onCurbSlip;
  // The player's car is a competitive-but-not-dominant package: faster than
  // the midfield and backmarkers, but a couple of km/h down on the very
  // fastest drivers (who get PH.top*(0.86+skill*0.13) ≈ up to 0.99×PH.top),
@@ -3283,6 +3469,17 @@ function updCarVisual(c,dt){
  p.position.set(c.x, (c.y !== undefined ? c.y : 0.05) + (c.bounceOff||0) + jitter, c.z);
  p.rotation.set(0, c.hdg, 0);
  p.rotateX(-c.pitch || 0);
+ // Surface camber roll — on a banked corner the whole car leans with the
+ // road. The banked surface rises along the track normal at tan(bank)=s.bk
+ // per metre, so the slope under the car's own left-right axis is bk
+ // projected onto that axis; the shell rolls to sit flush on it.
+ {
+  const sB=T.samples[c.ti]||T.samples[0];
+  const nl=(sB.n.x*Math.cos(c.hdg)-sB.n.z*Math.sin(c.hdg));
+  const rollT=c.airborne?0:Math.atan((sB.bk||0)*nl);
+  c.surfRoll=damp(c.surfRoll||0,rollT,10,dt);
+  p.rotateZ(c.surfRoll);
+ }
  // Spanner + depleting "energy back" ring floating over a damaged car.
  if(c.mesh.dmgSprite){
   if(c.crash>0){
@@ -4459,6 +4656,11 @@ function updRace(dt){
 }
 function updAmbient(dt){
  for(const f of T.flags)f.rotation.y=Math.sin(timeSec*2+f.userData.ph)*0.45;
+ // Water is alive: every lake / harbour / puddle-free water surface shares
+ // the one procedural ripple texture, so scrolling its UVs makes all of it
+ // drift and shimmer at once for the cost of two float writes.
+ waterT.offset.y=(timeSec*0.014)%1;
+ waterT.offset.x=Math.sin(timeSec*0.11)*0.035;
  if(T.crowd&&T.crowd.userData.crowd){
   const dummy=new THREE.Object3D();
   T.crowd.userData.crowd.forEach((p,i)=>{
