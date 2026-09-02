@@ -1095,7 +1095,9 @@ function clearSkids(){const z=new THREE.Matrix4().makeScale(0,0,0);
 const RAIN_N=1000;
 const rainGeo=new THREE.BufferGeometry();
 rainGeo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(RAIN_N*6),3).setUsage(THREE.DynamicDrawUsage));
-const rainMat = new THREE.LineBasicMaterial({color:0x9db4c8,transparent:true,opacity:0.45});
+// Darker, glassier streaks — the old near-white 0x9db4c8 at 0.45 opacity read
+// as a curtain of white noise; real rain is mostly transparent.
+const rainMat = new THREE.LineBasicMaterial({color:0x6e879c,transparent:true,opacity:0.26});
 const rainMesh=new THREE.LineSegments(rainGeo,rainMat);
 rainMesh.frustumCulled=false;scene.add(rainMesh);
 const rainP=new Float32Array(RAIN_N*3);
@@ -1318,7 +1320,7 @@ function applyWeatherVisuals(){
  sunLight.intensity=sunBase;
  hemi.color.copy(cur.hS);hemi.groundColor.copy(cur.hG);hemi.intensity=cur.hI*tod.hMul;
  renderer.toneMappingExposure=cur.exp*tod.expMul;
- rainMesh.material.opacity=0.12+cur.rain*0.34;
+ rainMesh.material.opacity=0.055+cur.rain*0.185;
  if(cloudMat){const g=cur.rain;cloudMat.color.setRGB(1-g*0.45,1-g*0.43,1-g*0.40);}
  if(T){const wet=cur.wet;
   // A wet road is not merely a damp one: it goes darker, glassier and it
@@ -1612,7 +1614,12 @@ function buildWorld(idx){
  // depth past the walls where the countryside is free to roll.
  const groundClearance=(lat)=>{
   const t=clamp((Math.abs(lat)-halfW)/Math.max(2,wallDist-halfW),0,1);
-  return 0.05+2.15*(1-Math.exp(-2.6*t))*smoothstep01(t*1.15);
+  // Max drop trimmed from 2.15 m to 1.1 m: from the old value the road stood
+  // on a visible plateau in any aerial/helicopter shot, which read as "the
+  // track is floating in the air". The embankment skirts (built with the
+  // run-off) close the remaining gap so the tarmac is always visually
+  // connected to the countryside.
+  return 0.04+1.1*(1-Math.exp(-2.6*t))*smoothstep01(t*1.15);
  };
  // Deterministic value noise, seeded per circuit, for the distant hills.
  const seedHash=((idx*2654435761)>>>0)||9781;
@@ -2013,6 +2020,47 @@ function buildWorld(idx){
   const rColor=def.theme==='street'?0x3f4248:(def.theme==='forest'?0x4a473e:0x4d5158);
   const rMat=new THREE.MeshStandardMaterial({map:asphaltT,bumpMap:asphaltBumpT,bumpScale:0.075,color:rColor,roughness:0.95,polygonOffset:true,polygonOffsetFactor:2,polygonOffsetUnits:2});
   const rMesh=new THREE.Mesh(rGeo,rMat);rMesh.receiveShadow=true;world.add(rMesh);
+ }
+
+ // 2b. EMBANKMENT SKIRTS — a continuous grassed slope from the foot of the
+ //     barriers down to the terrain on both sides of the whole lap. The
+ //     terrain heightfield deliberately sits below the road bed (so it can
+ //     never overtop the tarmac), but that used to leave the road standing
+ //     proud on an open-sided plateau: from the helicopter/TV cameras the
+ //     track looked like it was FLOATING in mid-air, cars and all. These
+ //     skirts close the gap the way real circuits do — with an earth bank.
+ {
+  const skPos=[],skUv=[],skIdx=[];let skVi=0;
+  const d0=wallDist+0.56;      // just outside the barrier ribbon
+  const dOut=6.5;              // how far the bank reaches before it's pure terrain
+  for(let i=0;i<N;i++){
+   const s=samples[i],s2=samples[(i+1)%N];
+   for(const sg of[1,-1]){
+    const ax=s.p.x+s.n.x*d0*sg, az=s.p.z+s.n.z*d0*sg;
+    const bx=s.p.x+s.n.x*(d0+dOut)*sg, bz=s.p.z+s.n.z*(d0+dOut)*sg;
+    const cx2=s2.p.x+s2.n.x*d0*sg, cz2=s2.p.z+s2.n.z*d0*sg;
+    const dx2=s2.p.x+s2.n.x*(d0+dOut)*sg, dz2=s2.p.z+s2.n.z*(d0+dOut)*sg;
+    // Top edge rides at the road bed (bank faded to zero at the wall);
+    // bottom edge lands ON the terrain the eye sees, wherever that is.
+    skPos.push(
+     ax,s.p.y+0.02,az,
+     bx,terrainHeightAt(bx,bz)+0.02,bz,
+     cx2,s2.p.y+0.02,cz2,
+     dx2,terrainHeightAt(dx2,dz2)+0.02,dz2);
+    const v0=s.cum/9,v1=s2.cum/9;
+    skUv.push(0,v0,1,v0,0,v1,1,v1);
+    if(sg>0)skIdx.push(skVi,skVi+2,skVi+1, skVi+1,skVi+2,skVi+3);
+    else skIdx.push(skVi,skVi+1,skVi+2, skVi+1,skVi+3,skVi+2);
+    skVi+=4;
+   }
+  }
+  const skGeo=new THREE.BufferGeometry();
+  skGeo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(skPos),3));
+  skGeo.setAttribute('uv',new THREE.BufferAttribute(new Float32Array(skUv),2));
+  skGeo.setIndex(skIdx);skGeo.computeVertexNormals();
+  const skMat=new THREE.MeshStandardMaterial({map:grassT,color:def.grass,roughness:1,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:3,polygonOffsetUnits:3});
+  skMat.envMapIntensity=0.25;
+  const skMesh=new THREE.Mesh(skGeo,skMat);skMesh.receiveShadow=true;world.add(skMesh);
  }
 
  // 3. Continuous FIA kerbs. They occupy the outer metre OF the road rather
@@ -3187,14 +3235,21 @@ function updCar(c,dt){
   c.y = groundY;
   c.airborne = false;
   const expectedVy = c.vF * Math.sin(slope);
-  if (expectedVy - c.vy < -3.5 && c.vF > 25) {
+  // A modern F1 car's aero pushes it into the road with several times its
+  // own weight — it does NOT take off over ordinary crests. Only a truly
+  // violent drop-away at very high speed breaks contact now; everything
+  // else stays sucked to the tarmac (which also fixes cars visibly
+  // "flying" in the helicopter shots at Spa/Zandvoort-style crests).
+  if (expectedVy - c.vy < -6.5 && c.vF > 34) {
    c.airborne = true;
   } else {
    c.vy = expectedVy;
   }
  } else {
   c.airborne = true;
-  c.vy -= 18.0 * dt;
+  // Heavier-than-gravity fall: downforce keeps working on the airborne car,
+  // so it slams back down quickly instead of floating balloon-like.
+  c.vy -= 30.0 * dt;
   c.y += c.vy * dt;
   if (c.y < groundY) {
    c.y = groundY;
@@ -3333,7 +3388,11 @@ function updCar(c,dt){
  c._pf=c.f;
  /* gears + rpm */
  const kmh=Math.abs(vF)*3.6;
- const bands=[0,52,88,124,162,202,244,290,340];
+ // A proper 8-speed F1 gearbox. The old bands put 8th at 290 km/h — above
+ // the car's own 284 km/h top speed, so it could never be reached and the
+ // box behaved like a 6/7-speed. Respaced so 8th engages at 240 km/h and
+ // the rev band tops out just past vmax: every gear actually gets used.
+ const bands=[0,46,78,108,138,170,204,240,294];
  let g=1;for(let b=1;b<8;b++)if(kmh>=bands[b])g=b+1;
  if(g!==c.gear&&c.isPlayer&&kmh>8){AudioSys.shift();c.shiftT=0.09;}
  c.gear=g;

@@ -1,6 +1,6 @@
 # POLYGON GP — Low-Poly Grand Prix
 
-**Current visible version:** `v0.9.5 · BUILD 20260902.6`
+**Current visible version:** `v0.9.6 · BUILD 20260902.7`
 
 The version is displayed in the title-screen footer and included automatically
 in every in-game error report, making stale deployments and cached builds easy
