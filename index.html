@@ -176,6 +176,13 @@ canvas{display:block;}
 /* Fullscreen hint for devices without a Fullscreen API (e.g. iPhone Safari) */
 #fsToast{position:absolute;top:34%;left:0;right:0;text-align:center;font-style:italic;font-weight:700;font-size:clamp(14px,2.2vw,22px);letter-spacing:.16em;color:#8be08a;text-shadow:3px 3px 0 rgba(0,0,0,.6);opacity:0;transition:opacity .25s;pointer-events:none;z-index:24;}
 #fsToast.show{opacity:.96;}
+/* Gyroscope retry prompt — shown only when the sensor did NOT come alive, so
+   a missing permission asks for a tap instead of silently driving a dead car */
+#gyroPrompt{position:absolute;top:50%;left:0;right:0;z-index:26;display:none;flex-direction:column;align-items:center;gap:10px;transform:translateY(-50%);pointer-events:none;padding:0 16px;}
+#gyroPrompt.show{display:flex;}
+#gyroPromptText{max-width:min(560px,90vw);text-align:center;font-size:11px;letter-spacing:.14em;color:#f2c14e;background:rgba(8,9,12,.82);border:1px solid rgba(242,193,78,.35);border-radius:6px;padding:8px 12px;font-weight:700;}
+#gyroPromptBtn{pointer-events:auto;font-style:italic;font-weight:800;font-size:clamp(14px,2.4vw,20px);letter-spacing:.18em;color:#0a0c10;background:#00f0ff;border:0;border-radius:4px;padding:12px 22px;cursor:pointer;box-shadow:0 8px 26px rgba(0,240,255,.28);}
+#gyroPromptBtn:active{transform:translateY(1px);}
 
 /* Speedometer & Gear bottom-left */
 #hBL{position:absolute;bottom:14px;left:14px;padding:10px 16px 10px 12px;display:flex;align-items:center;gap:14px;}
@@ -686,6 +693,10 @@ document.addEventListener('DOMContentLoaded', function() {
   <div id="camToast"></div>
   <div id="fsToast">ROTATE TO LANDSCAPE · THEN TAP THE ↺ FULLSCREEN BUTTON</div>
   <div id="demoTag" class="hidden">DEMO RACE</div>
+  <div id="gyroPrompt">
+    <button id="gyroPromptBtn">TAP TO ENABLE GYROSCOPE</button>
+    <div id="gyroPromptText"></div>
+  </div>
   
   <!-- Speedo / Gear -->
   <div id="hBL" class="panel">

@@ -3,15 +3,18 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { TRACKS } from './tracks.js';
 import { loadRealCircuits } from './circuitData.js';
 import { RainShaderPass } from './rainShader.js';
+import { SnowShaderPass } from './snowShader.js';
 import { TiltController } from './tiltControls.js';
 import { QualityManager, QUALITY_PRESETS } from './quality.js';
 import { GyroCalibrationLab } from './gyroLab.js';
 import { accentFor } from './teamLivery.js';
+import { PostFX } from './postfx.js';
 
 /* ============ helpers ============ */
 const $=id=>document.getElementById(id);
 const clamp=(v,a,b)=>v<a?a:v>b?b:v;
 const lerp=(a,b,t)=>a+(b-a)*t;
+const smoothstep01=(t)=>{const x=t<0?0:t>1?1:t;return x*x*(3-2*x);};
 const rand=(a,b)=>a+Math.random()*(b-a);
 const damp=(a,b,l,dt)=>lerp(a,b,1-Math.exp(-l*dt));
 const pick=a=>a[Math.floor(Math.random()*a.length)];
@@ -29,12 +32,15 @@ function effQuality(){ return (qualityMgr&&qualityMgr.resolvedLevel)?qualityMgr.
 const state={mode:'boot',trackIdx:0,wx:'sun',tod:'day',laps:3,grid:20,diffMul:0.97,name:'YOU',camMode:0,muted:false,paused:false,zoom: 52,quality:'AUTO'};
 // Time-of-day mood, independent of weather — mainly to give control over how
 // dark a rainy day reads, without needing a whole night skybox/lighting rig.
+/* Each time of day carries the direction the light comes from as well as its
+   strength: a low sun is not just a dimmer sun, it is long shadows, warm
+   raking light on the cars and a horizon that burns. */
 const TOD={
- day:{sunMul:1.0,hMul:1.0,expMul:1.0,skyMul:1.0},
- dusk:{sunMul:0.72,hMul:0.8,expMul:1.08,skyMul:0.78},
- night:{sunMul:0.22,hMul:0.42,expMul:1.35,skyMul:0.3}
+ day :{sunMul:1.0,hMul:1.0,expMul:1.0,skyMul:1.0,el:0.92,az:0.7 ,haze:0.0 ,stars:0.0,cool:0.0},
+ dusk:{sunMul:0.72,hMul:0.8,expMul:1.08,skyMul:0.78,el:0.13,az:1.9 ,haze:0.9 ,stars:0.15,cool:0.15},
+ night:{sunMul:0.22,hMul:0.42,expMul:1.35,skyMul:0.3,el:0.28,az:3.6 ,haze:0.25,stars:1.0,cool:0.55}
 };
-const CAM_NAMES=['CHASE','HOOD','TV','ORBIT','TOP'];
+const CAM_NAMES=['CHASE','HOOD','HELMET','TV','ORBIT','TOP'];
 
 /* ============ drivers ============ */
 // 2026 season grid — real team colours (OpenF1 / F1 live-timing hexes).
@@ -258,9 +264,12 @@ function getTrackElevation(u, trackName) {
   return y;
 }
 
-// Scenery (trees/buildings) sit visually on the ground mesh, so they should
-// match ITS height — including the clearance dropped below the road so
-// nothing pokes through the tarmac.
+// Scenery (trees, buildings, boards, grandstands) sits ON the ground mesh,
+// so it must be planted with the terrain heightfield's own bilinear sample —
+// the same surface the eye sees — rather than the raw road height. That is the
+// only way a prop on a hillside, an embankment or inside a hairpin loop can
+// be guaranteed to touch down instead of floating over (or sinking under) the
+// slope the road climbs.
 function getTrackHAtCoords(x, z) {
   if (!T || !T.samples) return 0;
   if (T.terrainHeightAt) return T.terrainHeightAt(x, z);
@@ -288,11 +297,20 @@ function getRoadHAtCoords(x, z) {
 const WX={
 sun:{label:'SUNNY',skyT:0x2f6fce,skyH:0xbfd9e8,sunC:0xfff1d0,sunI:2.6,hS:0xbdd7ee,hG:0x6f9457,hI:.8,fog:0xbfd9e8,fogD:.0005,exp:1.12,grip:1,rain:0,snow:0,wet:0},
 driz:{label:'DRIZZLE',skyT:0x5f7488,skyH:0xaeb9c2,sunC:0xd9e2ea,sunI:1.8,hS:0xafc0cd,hG:0x668068,hI:.7,fog:0xaeb9c2,fogD:.0009,exp:1.04,grip:.84,rain:.35,snow:0,wet:.45},
-rain:{label:'RAIN',skyT:0x5b6a76,skyH:0xacb8c1,sunC:0xd8e0e6,sunI:2.6,hS:0xc8d1d9,hG:0x8fac91,hI:1.25,fog:0xacb8c1,fogD:.0007,exp:1.5,grip:.72,rain:1,snow:0,wet:1}};
+rain:{label:'RAIN',skyT:0x5b6a76,skyH:0xacb8c1,sunC:0xd8e0e6,sunI:2.6,hS:0xc8d1d9,hG:0x8fac91,hI:1.25,fog:0xacb8c1,fogD:.0007,exp:1.5,grip:.72,rain:1,snow:0,wet:1},
+ /* Fog is the opposite kind of nasty to rain: the road is nearly dry and the
+    grip is there, but you cannot see the corner you are braking for. So it
+    gets a thick fog, a flattened sky and no rain at all, and the lamps come
+    on because in real mist they always do. */
+mist:{label:'FOG',skyT:0x8f989e,skyH:0xc6cdd2,sunC:0xe8eaec,sunI:1.05,hS:0xb9c1c6,hG:0x74807a,hI:.95,fog:0xc6cdd2,fogD:.0045,exp:1.02,grip:.9,rain:.05,snow:0,wet:.18},
+snow:{label:'SNOW',skyT:0x93a0ae,skyH:0xd4dbe2,sunC:0xeef2f6,sunI:1.15,hS:0xc3ccd6,hG:0xaeb6bd,hI:.85,fog:0xd4dbe2,fogD:.0022,exp:1.08,grip:.55,rain:.55,snow:1,wet:.55},
+};
 const ICONS={
 sun:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2.6M12 19.4V22M2 12h2.6M19.4 12H22M4.9 4.9l1.9 1.9M17.2 17.2l1.9 1.9M19.1 4.9l-1.9 1.9M6.8 17.2l-1.9 1.9"/></svg>',
 driz:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 15h11a3.5 3.5 0 0 0 .6-6.95A5.5 5.5 0 0 0 7 6.6 4 4 0 0 0 6 15Z"/><path d="M9 18v1.6M13 18v2.4M17 18v1.6"/></svg>',
-rain:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 14h11a3.5 3.5 0 0 0 .6-6.95A5.5 5.5 0 0 0 7 5.6 4 4 0 0 0 6 14Z"/><path d="M8 17l-1.4 3.4M12.5 17l-1.4 3.4M17 17l-1.4 3.4"/></svg>'};
+rain:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 14h11a3.5 3.5 0 0 0 .6-6.95A5.5 5.5 0 0 0 7 5.6 4 4 0 0 0 6 14Z"/><path d="M8 17l-1.4 3.4M12.5 17l-1.4 3.4M17 17l-1.4 3.4"/></svg>',
+mist:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 9h16M6 12.5h13M4.5 16h15M7 19.5h10"/></svg>',
+snow:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3v18M4.2 7.5l15.6 9M19.8 7.5l-15.6 9"/><path d="M9.4 5.2 12 7.8l2.6-2.6M9.4 18.8 12 16.2l2.6 2.6"/></svg>'};
 
 /* ============ speech / commentary ============ */
 const Speech={enabled:true,cool:0,voice:null,
@@ -380,6 +398,9 @@ renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
 const scene=new THREE.Scene();
 const camera=new THREE.PerspectiveCamera(62,1,0.3,6000);
 const SUNDIR=V3(0.42,0.55,0.25).normalize();
+// The live sun direction (SUNDIR is the default; the time of day re-aims it)
+// and how cool the shade side of the image should read.
+const sunVec=SUNDIR.clone();let shadowWarm=0,sunBase=2.6;
 const sunLight=new THREE.DirectionalLight(0xfff1d0,2.6);
 sunLight.castShadow=true;sunLight.shadow.mapSize.set(2048,2048);
 // Sized well beyond the old ~600m mini-tracks: a fast chase cam on a real,
@@ -391,20 +412,50 @@ scene.add(sunLight,sunLight.target);
 const hemi=new THREE.HemisphereLight(0xbdd7ee,0x6f9457,0.8);scene.add(hemi);
 scene.fog=new THREE.FogExp2(0xbfd9e8,0.0005);
 const skyMat=new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,fog:false,
-uniforms:{topC:{value:new THREE.Color(0x2f6fce)},horC:{value:new THREE.Color(0xbfd9e8)},sunD:{value:SUNDIR},sunC:{value:new THREE.Color(0xfff1d0).multiplyScalar(2)}},
+uniforms:{topC:{value:new THREE.Color(0x2f6fce)},horC:{value:new THREE.Color(0xbfd9e8)},sunD:{value:SUNDIR},
+ sunC:{value:new THREE.Color(0xfff1d0).multiplyScalar(2)},haze:{value:0.0},stars:{value:0.0},
+ gndC:{value:new THREE.Color(0x6f9457)},night:{value:0.0}},
 vertexShader:'varying vec3 vW;void main(){vec4 wp=modelMatrix*vec4(position,1.0);vW=wp.xyz;gl_Position=projectionMatrix*viewMatrix*wp;}',
-fragmentShader:`uniform vec3 topC;uniform vec3 horC;uniform vec3 sunD;uniform vec3 sunC;varying vec3 vW;
-void main(){vec3 d=normalize(vW);float t=pow(clamp(max(d.y,0.0)*1.4,0.0,1.0),0.72);
-vec3 col=mix(horC,topC,t);float s=clamp(dot(d,sunD),0.0,1.0);
-col+=sunC*(pow(s,600.0)*0.9+pow(s,6.0)*0.10);
-if(d.y<0.0)col=mix(col,horC*0.85,clamp(-d.y*6.0,0.0,1.0));
-gl_FragColor=vec4(col,1.0);}`});
+fragmentShader:`uniform vec3 topC;uniform vec3 horC;uniform vec3 sunD;uniform vec3 sunC;
+uniform float haze;uniform float stars;uniform vec3 gndC;uniform float night;
+varying vec3 vW;
+float h11(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+void main(){
+ vec3 d=normalize(vW);
+ float t=pow(clamp(max(d.y,0.0)*1.4,0.0,1.0),0.72);
+ vec3 col=mix(horC,topC,t);
+ float s=clamp(dot(d,sunD),0.0,1.0);
+ // the disc itself, a tight halo around it, and a wide scatter that washes the
+ // whole half of sky it sits in — that last term is what sells a low sun
+ col+=sunC*(pow(s,3000.0)*6.0+pow(s,42.0)*0.55+pow(s,4.0)*0.16+pow(s,1.4)*0.07*haze);
+ // ground haze: the horizon band brightens and takes the sun's colour when the
+ // light is raking through the air sideways
+ float band=exp(-abs(d.y)*7.0);
+ col=mix(col,horC*1.18+sunC*0.22,band*haze*0.75);
+ if(d.y<0.0){
+  float g=clamp(-d.y*5.0,0.0,1.0);
+  col=mix(col,mix(horC*0.85,gndC*0.55,0.45),g);
+ }
+ if(stars>0.01){
+  vec2 sp=floor(d.xz/max(abs(d.y),0.06)*260.0);
+  float st=h11(sp);
+  float tw=0.55+0.45*sin(st*90.0);
+  col+=vec3(0.85,0.9,1.0)*step(0.9965,st)*tw*stars*clamp(d.y*3.0,0.0,1.0);
+ }
+ // light pollution keeps the horizon of a night circuit from going black
+ col+=vec3(0.16,0.13,0.10)*night*band*0.9;
+ gl_FragColor=vec4(col,1.0);}`});
 const skyGeo=new THREE.SphereGeometry(2600,24,12);
 scene.add(new THREE.Mesh(skyGeo,skyMat));
 const envScene=new THREE.Scene();envScene.add(new THREE.Mesh(skyGeo,skyMat));
 const pmrem=new THREE.PMREMGenerator(renderer);
 let envRT=null;
 function refreshEnv(){try{if(envRT)envRT.dispose();envRT=pmrem.fromScene(envScene,0.05);scene.environment=envRT.texture;}catch(e){}}
+/* Bloom + film grade. Only the two top quality tiers opt in; below that the
+   extra full-screen targets cost more than they give. */
+const postfx=new PostFX(renderer,scene,camera);
+const BASE_TONE=THREE.ACESFilmicToneMapping;
+function postfxActive(){return postfx.enabled&&postfx.ok;}
 
 /* ============ canvas textures ============ */
 function ctex(c,rep){const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;
@@ -605,6 +656,11 @@ const[pc,pg]=mkCanvas(64,64);
 const grd=pg.createRadialGradient(32,32,2,32,32,30);grd.addColorStop(0,'rgba(255,255,255,1)');grd.addColorStop(1,'rgba(255,255,255,0)');
 pg.fillStyle=grd;pg.fillRect(0,0,64,64);
 const softT=ctex(pc,false);
+// One shared additive material for every pool of lamp light on the tarmac.
+// Built at module level because buildWorld() re-runs on every track switch,
+// and the lamps of each new world are registered into T.nightMats.
+const nightPoolMat=new THREE.MeshBasicMaterial({map:softT,color:0xffd9a4,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,opacity:0});
+let nightLevel=0;
 function bannerTex(name){const[cn,cx]=mkCanvas(1024,96);
  cx.fillStyle='#101216';cx.fillRect(0,0,1024,96);
  cx.fillStyle='#e10600';cx.fillRect(0,0,26,96);cx.fillRect(998,0,26,96);
@@ -627,7 +683,11 @@ const woodLegMat=new THREE.MeshStandardMaterial({color:0x6b4a2f,roughness:0.9});
 function tint(geo,color){const col=new THREE.Color(color);const n=geo.attributes.position.count;
  const a=new Float32Array(n*3);for(let i=0;i<n;i++){a[i*3]=col.r;a[i*3+1]=col.g;a[i*3+2]=col.b;}
  geo.setAttribute('color',new THREE.BufferAttribute(a,3));return geo;}
-function part(geo,color,x,y,z,rx=0,ry=0,rz=0){geo.rotateZ(rz);geo.rotateY(ry);geo.rotateX(rx);geo.translate(x,y,z);tint(geo,color);return geo;}
+function part(geo,color,x,y,z,rx=0,ry=0,rz=0){geo.rotateZ(rz);geo.rotateY(ry);geo.rotateX(rx);geo.translate(x,y,z);tint(geo,color);return ensureUV(geo);}
+// mergeGeometries refuses to mix attributes, and TubeGeometry brings no UVs
+// of its own, so anything merged into the body gets a neutral set.
+function ensureUV(geo){if(!geo.attributes.uv){const n=geo.attributes.position.count;
+ geo.setAttribute('uv',new THREE.BufferAttribute(new Float32Array(n*2),2));}return geo;}
 // Tapered, forward-drooping beak for the 2026-style nose — a four-sided
 // frustum whose front face is narrower AND drops lower than its back face, so
 // the nose is a sculpted aerodynamic beak rather than a pointy cone.
@@ -670,11 +730,51 @@ export function getBodyGeo(colA,colB){
  // those struts together (the "cross piece" that reads clearly even at a
  // distance). The arc sits just above the helmet crown like the real
  // titanium piece, and the helmet shows behind/under it from chase cams.
- P.push(part(new THREE.TorusGeometry(0.32,0.055,8,16,Math.PI),'#202226',0,0.70,0.50));
- C(0.045,0.045,0.36,6,'#202226',0,0.52,0.82,-0.38);
- C(0.035,0.035,0.24,6,'#202226',0.24,0.52,0.36,0,0,0.42);
- C(0.035,0.035,0.24,6,'#202226',-0.24,0.52,0.36,0,0,-0.42);
- B(0.48,0.035,0.035,'#202226',0,0.5,0.36);
+ // Halo — modelled as the real titanium ring, not a decoration. It is a single
+ // closed hoop that springs from the chassis on the driver's LEFT, sweeps up and
+ // OVER the crown, comes down on the RIGHT, and is bolted forward to the nose
+ // bulkhead by one strong pillar. The old version was a half torus laid down in
+ // the wrong plane, which is why it read as "half a hoop" from a chase cam.
+ const HALO_R = 0.05;                       // 50 mm tube, like the real piece
+ const haloPts = [];
+ {
+  // side of the cockpit the ring lands on, just ahead of the helmet
+  const my = 0.60, mz = 0.28, topY = 1.10, topZ = 0.22;
+  haloPts.push([0.60, my, mz]);              // left mount, on the tub
+  for (let k = 1; k <= 7; k++) {             // left root rising into the hoop
+   const t = k / 7;
+   haloPts.push([0.60 - 0.60 * t * t, my + (topY - my) * Math.pow(t, 0.85), mz - 0.10 * Math.sin(t * Math.PI)]);
+  }
+  haloPts.push([0, topY, topZ]);              // crown, sitting over the helmet
+  for (let k = 7; k >= 1; k--) {             // mirror down to the right mount
+   const t = k / 7;
+   haloPts.push([-(0.60 - 0.60 * t * t), my + (topY - my) * Math.pow(t, 0.85), mz - 0.10 * Math.sin(t * Math.PI)]);
+  }
+  haloPts.push([-0.60, my, mz]);
+ }
+ {const hg=new THREE.TubeGeometry(new THREE.CatmullRomCurve3(haloPts.map(v => new THREE.Vector3(v[0], v[1], v[2])), false, 'catmullrom', 0.35), 44, HALO_R, 6, false);
+  tint(hg, '#1e2024'); P.push(ensureUV(hg));}
+ // The forward pillar that carries the load into the chassis, with its foot
+ // plate — from the front of the ring, angled down to the bulkhead.
+ C(0.055, 0.07, 0.46, 7, '#1e2024', 0, 0.78, 0.68, 1.02);
+ B(0.26, 0.05, 0.22, '#15161a', 0, 0.58, 0.84);
+ // Moulded winglets either side of the ring (the aero fairings real teams
+ // bonded on) and the mounting pads the hoop is bolted through.
+ for (const sx of [1, -1]) {
+  P.push(part(new THREE.BoxGeometry(0.30, 0.05, 0.16), '#1e2024', sx * 0.50, 0.86, 0.20, 0, 0, sx * 0.22));
+  B(0.17, 0.06, 0.24, '#15161a', sx * 0.60, 0.57, 0.28);
+ }
+ // Rear impact structure behind the driver's head, tying the two sides of the
+ // cockpit together — it is what makes the ring read as part of a chassis.
+ B(0.30, 0.16, 0.10, '#15161a', 0, 0.72, -0.10);
+ // Cockpit surround: rim the driver sits inside, mirror stalks and the dashboard
+ // under the nose of the halo, so the opening is a cockpit and not a gap.
+ for (const sx of [1, -1]) {
+  B(0.07, 0.16, 1.10, colA, sx * 0.50, 0.66, 0.30);
+  C(0.018, 0.018, 0.20, 5, '#101114', sx * 0.55, 0.74, 0.58, 0, 0, sx * 1.1);
+  B(0.13, 0.06, 0.03, '#0b0d10', sx * 0.66, 0.76, 0.60);   // mirror faces
+ }
+ B(0.60, 0.06, 0.44, '#101114', 0, 0.63, 0.52);            // dash / cockpit floor lip
  
  // Engine cover & sidepods
  C(0.09,0.3,1.9,8,colA,0,0.5,-0.95,-Math.PI/2);
@@ -712,13 +812,29 @@ export function makeDriverMesh(colA, helmetCol){
   // Racing gloves
   SB(0.1, 0.08, 0.1, '#17181c', -0.18, 0.52, 0.65);
   SB(0.1, 0.08, 0.1, '#17181c', 0.18, 0.52, 0.65);
-  // F1 Steering wheel with digital display
-  SB(0.32, 0.16, 0.04, '#17181c', 0, 0.52, 0.68, 0.3);
-  SB(0.14, 0.08, 0.05, '#00f0ff', 0, 0.53, 0.68, 0.3);
+
+  // The steering wheel is its own mesh so it can actually turn — a yoke with
+  // a rim, three spokes and a lit display, angled back like the real thing.
+  const wheelParts = [];
+  const WB = (w,h,d,c,x,y,z,rx=0,ry=0,rz=0)=>wheelParts.push(part(new THREE.BoxGeometry(w,h,d),c,x,y,z,rx,ry,rz));
+  WB(0.30, 0.035, 0.03, '#101114', 0, 0.075, 0);              // top of the rim
+  WB(0.26, 0.035, 0.03, '#101114', 0, -0.065, 0, 0, 0, 0);   // bottom of the rim
+  WB(0.035, 0.10, 0.03, '#101114', -0.145, 0.005, 0);
+  WB(0.035, 0.10, 0.03, '#101114', 0.145, 0.005, 0);
+  WB(0.05, 0.11, 0.03, '#1a1d22', 0, 0.0, 0.005);             // centre spoke
+  WB(0.045, 0.055, 0.03, '#1a1d22', -0.10, -0.03, 0.005, 0, 0, 0.6);
+  WB(0.045, 0.055, 0.03, '#1a1d22', 0.10, -0.03, 0.005, 0, 0, -0.6);
+  WB(0.15, 0.075, 0.012, '#00f0ff', 0, 0.02, 0.03);           // lap-time display
+  WB(0.03, 0.028, 0.02, '#e10600', -0.075, 0.055, 0.02);
+  WB(0.03, 0.028, 0.02, '#ffd23f', 0.075, 0.055, 0.02);
+  const steering = new THREE.Mesh(mergeGeometries(wheelParts, false), matBody);
+  steering.position.set(0, 0.52, 0.68); steering.rotation.x = 0.3;
+  driverGroup.userData.steering = steering;
 
   const suitMesh = new THREE.Mesh(mergeGeometries(suitParts, false), matBody);
   suitMesh.castShadow = true;
   driverGroup.add(suitMesh);
+  driverGroup.add(steering);
 
   // 2. Articulated Head & Aerodynamic Helmet — raised so the crown of the
   // helmet sits just under the halo arc and clearly shows above the cockpit
@@ -735,6 +851,12 @@ export function makeDriverMesh(colA, helmetCol){
   hParts.push(part(new THREE.CylinderGeometry(0.14, 0.16, 0.08, 8), '#202226', 0, -0.02, 0));
   // Top aero spoiler fin
   hParts.push(part(new THREE.BoxGeometry(0.03, 0.04, 0.16), '#17181c', 0, 0.23, -0.02));
+  // Sun-visour above the eyeline and the onboard camera pod on the crown —
+  // two features that make a helmet read as an F1 helmet at 100 m.
+  hParts.push(part(new THREE.BoxGeometry(0.24, 0.028, 0.09), '#101114', 0, 0.155, 0.10, -0.30));
+  hParts.push(part(new THREE.BoxGeometry(0.07, 0.05, 0.07), '#0d0f12', 0, 0.205, -0.03));
+  hParts.push(part(new THREE.BoxGeometry(0.20, 0.05, 0.05), '#17181c', 0, -0.03, 0.10));  // HANS tether
+  hParts.push(part(new THREE.BoxGeometry(0.05, 0.19, 0.20), '#f2f2f0', 0, 0.09, -0.10));  // centre stripe
   // Tinted Iridium Visor
   hParts.push(part(new THREE.BoxGeometry(0.24, 0.08, 0.1), '#1a1d24', 0, 0.09, 0.13, 0.08));
   hParts.push(part(new THREE.PlaneGeometry(0.22, 0.065), '#00f0ff', 0, 0.09, 0.185, 0.08));
@@ -748,8 +870,8 @@ export function makeDriverMesh(colA, helmetCol){
   return { driverGroup, helmetGroup };
 }
 
-let axleGeo=null;
-export function getAxleGeo(){if(axleGeo)return axleGeo;
+let axleGeo=null, brakeGeo=null;
+export function getAxleGeo(){if(axleGeo&&brakeGeo)return axleGeo;
  // One wheel = a tyre + a bright alloy barrel + a set of radial SPOKES lying in
  // the wheel's Y-Z plane, so the whole thing visibly rotates with `wheelRot`
  // (a plain cylinder gives no visual reference for the spin).
@@ -763,9 +885,26 @@ export function getAxleGeo(){if(axleGeo)return axleGeo;
   const a=s*Math.PI*2/5 + 0.35;
   parts.push(part(new THREE.BoxGeometry(0.045,0.40,0.14),'#e3e7ec',0,Math.cos(a)*0.18,Math.sin(a)*0.18,a,0,0));
  }
+  // The uprights, pushrod and wishbones are suspension hardware: they turn
+ // with the steered wheel rather than spinning with it, so they are merged
+ // into a separate geometry that the front axle uses and the rear ignores.
+ for(const sx of[1,-1]){
+  parts.push(part(new THREE.BoxGeometry(0.09,0.30,0.20),'#202226',sx*0.79,0.30,0));            // upright
+  parts.push(part(new THREE.CylinderGeometry(0.032,0.032,0.42,6),'#9aa0a8',sx*0.66,0.40,0.10,0,0,Math.PI/2)); // pushrod
+  parts.push(part(new THREE.CylinderGeometry(0.026,0.026,0.34,6),'#787f88',sx*0.64,0.22,-0.12,0,0,Math.PI/2)); // lower wishbone
+  parts.push(part(new THREE.BoxGeometry(0.05,0.16,0.26),'#14161a',sx*0.60,0.37,0));            // brake duct
+ }
+ const discs=[];
+ for(const sx of[1,-1]){
+  const d=new THREE.CylinderGeometry(0.255,0.255,0.05,14);
+  d.rotateZ(Math.PI/2);d.translate(sx*0.735,0,0);tint(d,'#3a2018');discs.push(ensureUV(d));
+ }
  const w=mergeGeometries(parts,false);
  const w1=w.clone();w1.translate(-0.82,0,0);const w2=w.clone();w2.translate(0.82,0,0);
- axleGeo=mergeGeometries([w1,w2],false);return axleGeo;}
+ axleGeo=mergeGeometries([w1,w2],false);
+ const d1=discs[0].clone();d1.translate(-0.82,0,0);const d2=discs[1].clone();d2.translate(0.82,0,0);
+ brakeGeo=mergeGeometries([d1,d2],false);
+ return axleGeo;}
 const drsGeo=new THREE.BoxGeometry(1.42,0.03,0.26);
 /* Animated spanner placeholder that floats over a car blown off into the
    gravel / clouted by another car. A wrench + a depleting gold countdown
@@ -799,8 +938,28 @@ function makeCarMesh(d){
  const g=new THREE.Group();
  const body=new THREE.Mesh(getBodyGeo(d.colA,d.colB),matBody);body.castShadow=true;
  const { driverGroup, helmetGroup } = makeDriverMesh(d.colA, d.helmet);
- const axleF=new THREE.Mesh(getAxleGeo(),matWheel);axleF.rotation.order='YXZ';axleF.position.set(0,0.37,1.62);
+ getAxleGeo();
+ const axleF=new THREE.Mesh(axleGeo,matWheel);axleF.rotation.order='YXZ';axleF.position.set(0,0.37,1.62);
  const axleR=new THREE.Mesh(getAxleGeo(),matWheel);axleR.position.set(0,0.37,-1.62);
+ // Brake discs sit behind the rims and do NOT spin with the axle — instead
+ // their emissive colour climbs from cold grey to cherry red under braking
+ // and fades back over a couple of seconds, which is what makes a car
+ // visibly slowing into a corner read as slowing.
+ const brakeMat=new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.5,metalness:0.2,emissive:0xff4a12,emissiveIntensity:0});
+ const brakes=new THREE.Mesh(brakeGeo,brakeMat);brakes.position.set(0,0.37,0);
+ // Night & rain lights, done the cheap way round: an additive beam cone, a
+ // pool of light on the road and a red tail glow. Real spotlights for a 20
+ // car grid would blow the light budget and cost a shader recompile per
+ // material; these are three quads, and bloom does the rest.
+ const beamGeo=(()=>{const g=new THREE.ConeGeometry(1.35,15,10,1,true);g.rotateX(Math.PI/2);g.translate(0,-0.15,7.7);return ensureUV(g);})();
+ const beam=new THREE.Mesh(beamGeo,new THREE.MeshBasicMaterial({color:0xfff0cc,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide}));
+ beam.position.set(0,0.52,1.75);beam.renderOrder=3;
+ const pool=new THREE.Mesh(new THREE.PlaneGeometry(13,19),new THREE.MeshBasicMaterial({map:softT,color:0xffe9c4,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false}));
+ pool.rotation.x=-Math.PI/2;pool.position.set(0,0.06,9.4);pool.renderOrder=3;
+ const tailGlow=new THREE.Mesh(new THREE.PlaneGeometry(0.9,0.5),new THREE.MeshBasicMaterial({map:softT,color:0xff2a10,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false}));
+ tailGlow.position.set(0,0.6,-2.6);tailGlow.renderOrder=3;
+ beam.userData.fx=1;pool.userData.fx=1;tailGlow.userData.fx=1;   // not bodywork
+ g.add(beam,pool,tailGlow);
  const drs=new THREE.Mesh(drsGeo,new THREE.MeshStandardMaterial({color:d.colB,flatShading:true,roughness:0.4}));
  drs.position.set(0,1.0,-2.42);
  // Rear brake light — lights up under braking in any weather, and also
@@ -814,8 +973,8 @@ function makeCarMesh(d){
   p.position.set(sx*0.885,0.44,-0.25);p.rotation.y=sx*Math.PI/2;g.add(p);}
  const dmgSprite=makeDamageSprite();
  g.add(dmgSprite);
- g.add(body,driverGroup,axleF,axleR,drs,brakeLight);
- return{g,body,driverGroup,helmetGroup,axleF,axleR,drs,brakeLight,dmgSprite};
+ g.add(body,driverGroup,axleF,axleR,brakes,drs,brakeLight);
+ return{g,body,driverGroup,helmetGroup,axleF,axleR,brakes,brakeMat,drs,brakeLight,beam,pool,tailGlow,dmgSprite,steering:driverGroup.userData.steering||null};
 }
 
 /* ============ particles ============ */
@@ -907,12 +1066,31 @@ const rainP=new Float32Array(RAIN_N*3);
 for(let i=0;i<RAIN_N;i++){rainP[i*3]=rand(-30,30);rainP[i*3+1]=rand(0,26);rainP[i*3+2]=rand(-30,30);}
 
 function updWeatherFX(dt){
+ // Snow builds up and melts back on a slow time constant — an inch of snow does
+ // not appear or vanish in a frame. Everything visible (flake density, gust
+ // strength, how white the road is, how little grip there is) reads off this one
+ // number, so the ground and the air always agree with each other.
+ const snowing=(cur.snow||0)>0.25;
+ snowAccum=clamp(snowAccum+(snowing?dt*0.055:-dt*0.035),0,1);
+ snowGustT-=dt;
+ if(snowing&&snowGustT<=0){snowGustT=rand(7,16);snowGust=1;}
+ snowGust=Math.max(0,snowGust-dt*0.55);
+ cur.grip=cur.gripBase*(1-snowAccum*0.4);
+ if(T&&T.roadMat){
+  T.roadMat.color.lerp(new THREE.Color(0xe9eef4),snowAccum*0.55);
+  T.roadMat.roughness=Math.min(1,T.roadMat.roughness+snowAccum*0.25);
+ }
  const cx=camera.position.x,cz=camera.position.z;
  const rp=rainGeo.attributes.position.array;
  rainMesh.visible=cur.rain>0.03;
+ /* Snow uses the same particle system as rain (it is the only one built) but
+    it must not look like rain: the flakes fall at a fifth of the speed, drift
+    sideways on the wind and stop being drawn as streaks. */
+ const flake=cur.snow>0.4, fall=flake?(4+cur.snow*5):(52+cur.rain*14);
  if(rainMesh.visible){
   for(let i=0;i<RAIN_N;i++){
-   rainP[i*3+1]-=(52+cur.rain*14)*dt;
+   rainP[i*3+1]-=fall*dt;
+   if(flake){rainP[i*3]+=Math.sin(timeSec*0.8+i)*dt*2.4;rainP[i*3+2]+=Math.cos(timeSec*0.6+i*0.7)*dt*2.4;}
    if(rainP[i*3+1]<0){rainP[i*3+1]+=26;rainP[i*3]=rand(-30,30);rainP[i*3+2]=rand(-30,30);}
    const x=cx+rainP[i*3],y=rainP[i*3+1],z=cz+rainP[i*3+2];
    rp[i*6]=x;rp[i*6+1]=y;rp[i*6+2]=z;rp[i*6+3]=x-0.6;rp[i*6+4]=y+0.9;rp[i*6+5]=z;
@@ -1020,31 +1198,60 @@ const cur={skyT:new THREE.Color(),skyH:new THREE.Color(),sunC:new THREE.Color(),
  sunI:2.6,hI:.8,fogD:.0011,exp:1.12,grip:1,rain:0,snow:0,wet:0};
 function applyWeatherVisuals(){
  const tod=TOD[state.tod]||TOD.day;
+ // Place the light: azimuth/elevation per time of day, so dusk really does rake
+ // the scene sideways instead of only dimming.
+ const el=tod.el*(1-cur.rain*0.35),az=tod.az;
+ SUNDIR.set(Math.cos(az)*Math.cos(el),Math.max(0.06,Math.sin(el)),Math.sin(az)*Math.cos(el)).normalize();
+ sunVec.copy(SUNDIR);
+ scene.fog.color.copy(cur.fog).lerp(new THREE.Color(0x8d949c),cur.rain*0.35);
+ skyMat.uniforms.haze.value=tod.haze+cur.rain*0.45;
+ skyMat.uniforms.stars.value=tod.stars*(1-cur.rain*0.8);
+ skyMat.uniforms.night.value=state.tod==='night'?1:state.tod==='dusk'?0.35:0;
+ sunLight.shadow.radius=state.tod==='day'?1.6:3.4;
+ hemi.groundColor.copy(cur.hG).lerp(new THREE.Color(0x1a2230),state.tod==='night'?0.55:0);
+ shadowWarm=tod.cool+cur.rain*0.2;
  skyMat.uniforms.topC.value.copy(cur.skyT).multiplyScalar(tod.skyMul);
  skyMat.uniforms.horC.value.copy(cur.skyH).multiplyScalar(tod.skyMul);
  skyMat.uniforms.sunC.value.copy(cur.sunC).multiplyScalar(2.2*tod.skyMul);
  scene.fog.color.copy(cur.fog).multiplyScalar(tod.skyMul);scene.fog.density=cur.fogD;
- sunLight.color.copy(cur.sunC);sunLight.intensity=cur.sunI*tod.sunMul;
+ sunLight.color.copy(cur.sunC).lerp(new THREE.Color(0xffb066),clamp(tod.el<0.3?0.55:0.12,0,1)*(1-cur.rain*0.6));
+ sunBase=cur.sunI*tod.sunMul*(0.55+0.45*clamp(sunVec.y*1.6,0,1));
+ sunLight.intensity=sunBase;
  hemi.color.copy(cur.hS);hemi.groundColor.copy(cur.hG);hemi.intensity=cur.hI*tod.hMul;
  renderer.toneMappingExposure=cur.exp*tod.expMul;
  rainMesh.material.opacity=0.12+cur.rain*0.34;
  if(cloudMat){const g=cur.rain;cloudMat.color.setRGB(1-g*0.45,1-g*0.43,1-g*0.40);}
  if(T){const wet=cur.wet;
-  T.roadMat.color.copy(new THREE.Color(0x9a9da2)).lerp(new THREE.Color(0x8d9095),wet);
-  T.roadMat.roughness=0.95-wet*0.08;T.roadMat.envMapIntensity=0.1;
+  // A wet road is not merely a damp one: it goes darker, glassier and it
+  // mirrors the sky, which is exactly the effect that makes rain read as
+  // rain from a chase camera.
+  T.roadMat.color.copy(new THREE.Color(0x9a9da2)).lerp(new THREE.Color(0x4c5157),wet);
+  T.roadMat.roughness=0.95-wet*0.78;T.roadMat.metalness=wet*0.32;
+  T.roadMat.envMapIntensity=0.1+wet*1.5;
   if(T.puddleMat)T.puddleMat.opacity=clamp(wet*0.85,0,0.85);
  }
+ setNightGlow();
+}
+/* Night is not just a dimmer sun: dusk starts the lamps, a storm pushes the
+   scene down further. One function owns that level and feeds it to every
+   lamp material in the world, so a weather change lights the whole circuit
+   consistently instead of only making the sky darker. */
+function setNightGlow(){
+ const L=clamp((state.tod==='night'?0.78:state.tod==='dusk'?0.34:0)+cur.rain*0.30+(cur.snow||0)*0.25,0,1);
+ nightLevel=L;
+ nightPoolMat.opacity=L*0.50;
+ if(T&&T.nightMats)for(const m of T.nightMats)m.color.setRGB(0.16+L*0.84,0.15+L*0.79,0.11+L*0.58);
 }
 function snapWeather(k){const p=WX[k];
  cur.skyT.set(p.skyT);cur.skyH.set(p.skyH);cur.sunC.set(p.sunC);cur.hS.set(p.hS);cur.hG.set(p.hG);cur.fog.set(p.fog);
- cur.sunI=p.sunI;cur.hI=p.hI;cur.fogD=p.fogD;cur.exp=p.exp;cur.grip=p.grip;cur.gripBase=p.grip;cur.rain=p.rain;cur.snow=0;cur.wet=p.wet;
+ cur.sunI=p.sunI;cur.hI=p.hI;cur.fogD=p.fogD;cur.exp=p.exp;cur.grip=p.grip;cur.gripBase=p.grip;cur.rain=p.rain;cur.snow=p.snow||0;cur.wet=p.wet;
  applyWeatherVisuals();refreshEnv();}
 
 /* ============ thunderstorm: lightning flash + delayed thunder ============ */
 let lightningFlash=0,lightningTimer=rand(6,14);
 function updLightning(dt){
  lightningFlash=Math.max(0,lightningFlash-dt*3.2);
- if(cur.rain<0.45){lightningTimer=Math.max(lightningTimer,4);}
+ if(cur.wet<0.7){lightningTimer=Math.max(lightningTimer,4);}
  else{
   lightningTimer-=dt;
   if(lightningTimer<=0){
@@ -1056,8 +1263,11 @@ function updLightning(dt){
   }
  }
  const tod=TOD[state.tod]||TOD.day;
- sunLight.intensity=cur.sunI*tod.sunMul+lightningFlash*4.0;
+ // flashes lift the whole scene, not just the key light, or the cars go
+ // black between strikes while the sky is white
+ sunLight.intensity=sunBase+lightningFlash*4.0;
  hemi.intensity=cur.hI*tod.hMul+lightningFlash*1.8;
+ if(scene.fog)scene.fog.density=cur.fogD*(1-lightningFlash*0.35);
 }
 
 /* ============ track build ============ */
@@ -1085,8 +1295,8 @@ function buildWorld(idx){
    raw[i].y = getTrackElevation(i / N, def.name);
   }
  }
- let trackMinY=Infinity;
- for(let i=0;i<N;i++)if(raw[i].y<trackMinY)trackMinY=raw[i].y;
+ let trackMinY=Infinity,trackMaxY=-Infinity;
+ for(let i=0;i<N;i++){if(raw[i].y<trackMinY)trackMinY=raw[i].y;if(raw[i].y>trackMaxY)trackMaxY=raw[i].y;}
  const samples=[];let len=0;
  for(let i=0;i<N;i++){
   const p=raw[i],pn=raw[(i+1)%N],pp=raw[(i-1+N)%N];
@@ -1125,8 +1335,76 @@ function buildWorld(idx){
  // IDW-blending several points into a mushy average — tracks the real road
  // height precisely (so a thin clearance is enough — no visible step at the
  // track edge) while still staying continuous through a hairpin.
+ //
+ // A proper terrain heightfield needs this query at tens of thousands of
+ // vertices, so segments are additionally bucketed into a uniform spatial
+ // hash: an interior lookup then only tests the handful of segments sharing
+ // the cells around the point instead of all 420. A point whose whole
+ // neighbourhood is empty is provably far from every segment, so it can
+ // short-circuit to the conservative far-field answer.
+ const HASH_PAD=140; // wider than the terrain grid's outer margin, so every heightfield vertex is queried inside the hash
+ let tbMinX=Infinity,tbMaxX=-Infinity,tbMinZ=Infinity,tbMaxZ=-Infinity;
+ let hashCell=0,hashW=0,hashH=0,hashMinX=0,hashMinZ=0,hashBuckets=null;
+ {
+  let minX=Infinity,maxX=-Infinity,minZ=Infinity,maxZ=-Infinity;
+  for(const s of samples){minX=Math.min(minX,s.p.x);maxX=Math.max(maxX,s.p.x);minZ=Math.min(minZ,s.p.z);maxZ=Math.max(maxZ,s.p.z);}
+  tbMinX=minX;tbMaxX=maxX;tbMinZ=minZ;tbMaxZ=maxZ;
+  const spanX=maxX-minX+HASH_PAD*2,spanZ=maxZ-minZ+HASH_PAD*2;
+  const target=Math.max(8,Math.round(Math.sqrt(N)/1.7)); // ~15 buckets on a side
+  hashCell=Math.max(spanX,spanZ)/target;
+  hashMinX=minX-HASH_PAD;hashMinZ=minZ-HASH_PAD;
+  hashW=Math.max(1,Math.ceil(spanX/hashCell));hashH=Math.max(1,Math.ceil(spanZ/hashCell));
+  hashBuckets=new Array(hashW*hashH);
+  for(let i=0;i<N;i++){
+   const a=samples[i].p,b=samples[(i+1)%N].p;
+   const i0=clamp(Math.floor((Math.min(a.x,b.x)-8-hashMinX)/hashCell),0,hashW-1);
+   const i1=clamp(Math.floor((Math.max(a.x,b.x)+8-hashMinX)/hashCell),0,hashW-1);
+   const j0=clamp(Math.floor((Math.min(a.z,b.z)-8-hashMinZ)/hashCell),0,hashH-1);
+   const j1=clamp(Math.floor((Math.max(a.z,b.z)+8-hashMinZ)/hashCell),0,hashH-1);
+   for(let j=j0;j<=j1;j++)for(let ii=i0;ii<=i1;ii++){
+    const ci=j*hashW+ii;(hashBuckets[ci]||(hashBuckets[ci]=[])).push(i);
+   }
+  }
+ }
  const nearestTrackY=(x,z)=>{
   let bestD2=1e18,bestY=trackMinY;
+  let tested=0;
+  if(hashBuckets){
+   const gi=Math.floor((x-hashMinX)/hashCell),gj=Math.floor((z-hashMinZ)/hashCell);
+   if(gi>=0&&gj>=0&&gi<hashW&&gj<hashH){
+    // Nothing in the 3×3 neighbourhood → provably farther from the track than
+    // the distance any segment could have produced, so skip the scan.
+    let any=false;
+    for(let j=gj-1;j<=gj+1&&!any;j++){
+     if(j<0||j>=hashH)continue;
+     const row=j*hashW;
+     for(let i=gi-1;i<=gi+1;i++){if(i<0||i>=hashW)continue;if(hashBuckets[row+i]){any=true;break;}}
+    }
+    if(!any)return{dist:hashCell*1.2,y:trackMinY,far:true};
+    for(let j=gj-1;j<=gj+1;j++){
+     if(j<0||j>=hashH)continue;
+     const row=j*hashW;
+     for(let i=gi-1;i<=gi+1;i++){
+      if(i<0||i>=hashW)continue;
+      const bkt=hashBuckets[row+i];
+      if(!bkt)continue;
+      for(let k=0;k<bkt.length;k++){
+       const si=bkt[k],a=samples[si].p,b=samples[(si+1)%N].p;
+       const abx=b.x-a.x,abz=b.z-a.z;
+       const abLen2=abx*abx+abz*abz||1e-6;
+       let t=((x-a.x)*abx+(z-a.z)*abz)/abLen2;
+       t=clamp(t,0,1);
+       const px=a.x+abx*t,pz=a.z+abz*t;
+       const dx=x-px,dz=z-pz,d2=dx*dx+dz*dz;
+       tested++;
+       if(d2<bestD2){bestD2=d2;bestY=lerp(a.y,b.y,t);}
+      }
+     }
+    }
+    if(tested)return{dist:Math.sqrt(bestD2),y:bestY,far:false};
+   }
+  }
+  // outside the hash bounds → exact full scan
   for(let i=0;i<N;i+=2){
    const a=samples[i].p,b=samples[(i+2)%N].p;
    const abx=b.x-a.x,abz=b.z-a.z;
@@ -1137,58 +1415,394 @@ function buildWorld(idx){
    const dx=x-px,dz=z-pz,d2=dx*dx+dz*dz;
    if(d2<bestD2){bestD2=d2;bestY=lerp(a.y,b.y,t);}
   }
-  return{dist:Math.sqrt(bestD2),y:bestY};
+  return{dist:Math.sqrt(bestD2),y:bestY,far:false};
  };
- // Scenery placement used to check distance-to-track with a coarse
- // nearest-VERTEX search (every 4th of up to 840 samples) — on a long real
- // circuit that's a 20-40m gap between checked points, so an object sitting
- // mid-straight could read as much farther from the track than it truly is
- // and slip past the clearance check onto the road. Reuse the precise
- // segment-projection distance instead.
  const minTrackDist=(x,z)=>nearestTrackY(x,z).dist;
  let cx=0,cz=0;for(const s of samples){cx+=s.p.x;cz+=s.p.z;}cx/=N;cz/=N;
  T.center={x:cx,z:cz};
  let rad=0;for(const s of samples)rad=Math.max(rad,Math.hypot(s.p.x-cx,s.p.z-cz));rad+=180;
-
- // Ground terrain — a heightfield that follows the track's own elevation near
- // the road, offset safely below the tarmac/runoff/kerb meshes so the grass
- // never pokes through the road surface, and settles gradually to a flat
- // baseline further out so hilly real circuits read as one continuous rolling
- // landscape (not a road on an isolated mound, and never a bridge).
- // Now that the road height is found by precise segment projection rather
- // than a broad blend, a small clearance is enough — no visible "wall"
- // between the track edge and the surrounding grass.
- const clearance=1.7;
- const nearR=T.latLimit+9,farR=nearR+430;
- const terrainHeightAt=(x,z)=>{
-  const{dist,y}=nearestTrackY(x,z);
-  const s=clamp((dist-nearR)/(farR-nearR),0,1);
-  const sm=s*s*(3-2*s);
-  return lerp(y-clearance,trackMinY-4,sm);
+ // ---------------------------------------------------------------------------
+ // GROUND / TERRAIN — elevation belongs to the LAND, not just to the tarmac.
+ // The old ground was one flat plane grid at ~50 m per cell, while a real
+ // OpenF1 circuit changes height every few metres (Spa climbs ~102 m, up to a
+ // 14% grade at Eau Rouge/Raidillon), so the road visibly lifted off the grass
+ // and looked like it was driving up a ramp of its own. The ground is now a
+ // genuine heightfield:
+ //   • sampled at a cell size tied to a vertex budget — 6-15 m next to the
+ //     road, so the terrain cannot lag the tarmac's slope by much;
+ //   • locked to the road bed inside the run-off, propped up where a node
+ //     falls between two stretches of the same road and capped so it can never
+ //     overtop the ribbon — which keeps a climb on solid ground without burying
+ //     a lower road that passes beside it;
+ //   • smoothed by a cone-limited fill, so the dips between sections that loop
+ //     back on each other become embankments instead of slits;
+ //   • wrapped by a coarse outer band that shares the grid's exact border
+ //     vertices (one continuous surface, no T-junction cracks), out to a flat
+ //     plane that holds the horizon;
+ //   • and given rolling hills of its own, so the countryside is not a dead
+ //     plane that the circuit climbs away from.
+ // Everything — props, cars, physics, this mesh — reads height through the
+ // same functions, so nothing can disagree with anything else. The surface
+ // stays a little under the road so it can never poke through the tarmac; that
+ // clearance widens across the run-off, where the walls stand, and narrows
+ // beyond it, which is where grandstands, boards and trees are anchored.
+ // ---------------------------------------------------------------------------
+ const baseY=trackMinY-4; // the landscape floor
+ const nearR=T.latLimit+14,farR=nearR+200;
+ // How far below the tarmac the land is held, as a function of distance from
+ // the centre line. It has to start at nothing on the asphalt itself — a
+ // clearance here is a step of earth alongside the road, and a step is exactly
+ // what made the cars look like they were flying — then open up across the
+ // run-off so the surface can never puncture the ribbon, and reach its full
+ // depth past the walls where the countryside is free to roll.
+ const groundClearance=(lat)=>{
+  const t=clamp((Math.abs(lat)-halfW)/Math.max(2,wallDist-halfW),0,1);
+  return 0.05+2.15*(1-Math.exp(-2.6*t))*smoothstep01(t*1.15);
  };
- // The real, un-lowered road/track surface height — this is what cars must
- // sit on. It must never include the ground mesh's clearance offset.
- const trueTrackHeightAt=(x,z)=>nearestTrackY(x,z).y;
- // World-space Y offsets between ground/runoff/road/curbs are only a few cm
- // apart, which floating-point depth-buffer precision can't reliably hold at
- // real-circuit distances — that's what caused the persistent ground/road
- // seam z-fighting. polygonOffset biases depth at the rasterizer instead, so
- // the draw order stays correct (ground behind runoff behind road behind
- // curbs/lines/decals) no matter how far the camera is.
- const groundMat=new THREE.MeshStandardMaterial({map:grassT,bumpMap:grassBumpT,bumpScale:0.4,color:def.grass,roughness:1,polygonOffset:true,polygonOffsetFactor:4,polygonOffsetUnits:4});
- groundMat.envMapIntensity=0.25;
+ // Deterministic value noise, seeded per circuit, for the distant hills.
+ const seedHash=((idx*2654435761)>>>0)||9781;
+ const vnoise=(x,z)=>{
+  const xi=Math.floor(x),zi=Math.floor(z),fx=x-xi,fz=z-zi;
+  const u=fx*fx*(3-2*fx),v=fz*fz*(3-2*fz);
+  const h=(a,b)=>{let n=(Math.imul(a,374761393)+Math.imul(b,668265263)+seedHash)>>>0;
+   n=Math.imul(n^(n>>>13),1274126177)>>>0;return((n^(n>>>16))>>>0)/4294967295;};
+  const a=h(xi,zi),b=h(xi+1,zi),c=h(xi,zi+1),d=h(xi+1,zi+1);
+  return(a+(b-a)*u+(c-a)*v+(a-b-c+d)*u*v)*2-1;
+ };
+ const reliefAmp=clamp((trackMaxY-trackMinY)*0.18,2.5,16);
+ // The hills fade out with distance: the outer horizon is a flat plane, and
+ // a noise field that kept its full amplitude out there would send ridges
+ // poking through it — a floating landscape in the far distance.
+ const reliefAt=(x,z)=>{
+  const dR=Math.hypot(x-cx,z-cz),fade=1-smoothstep01((dR-(farR+260))/900);
+  return (vnoise(x*0.0022,z*0.0022)*0.65+vnoise(x*0.0061+11.3,z*0.0061-7.7)*0.28+vnoise(x*0.019-3.1,z*0.019+5.3)*0.07)*reliefAmp*fade;
+ };
+ // --- support raise / corridor carve ----------------------------------------
+ // A heightfield only knows the road where it has nodes, so on a circuit that
+ // winds, climbs and doubles back a ribbon can straddle two cells whose heights
+ // were read from two different stretches — the tarmac then looks like it is
+ // driving off a ramp of its own. Two per-cell rules settle it in both
+ // directions, and they bracket the height rather than replace it:
+ //   • FLOOR — the land under a stretch of road is propped up to that road's
+ //     bed. This is what stops the tarmac floating on a hillside, and what
+ //     turns the empty space inside a loop into a supportable embankment.
+ //   • CEILING — a cell a road runs over stays at or below that road's
+ //     surface, because tarmac and run-off are a flat band and ground higher
+ //     than them would punch straight through the track. Where two ribbons
+ //     overlap in plan view (a hairpin passing a climb, a road under a
+ //     bridge), the CEILING is taken from the lower of them, so each keeps
+ //     its own cutting; the upper one simply stands above the ground there,
+ //     which is what that stretch of a real circuit does.
+ let raiseMap=null,capMap=null,supW=0,supH=0,supX0=0,supZ0=0,supDx=1,supDz=1;
+ const buildSupportMaps=(g)=>{
+  const w=g.w,h=g.h,nPts=w*h;
+  const raise=new Float32Array(nPts).fill(-1e9);
+  const cap=new Float32Array(nPts).fill(1e9);
+  const reach=wallDist+4,reach2=reach*reach+g.dx*g.dx,tol=g.dx*0.75;
+  // one ownership test per cell (which stretch the raw rule is reading),
+  // shared by every road sample that reaches it
+  const ownDist=new Float32Array(nPts).fill(-1),ownY=new Float32Array(nPts);
+  for(let i=0;i<N;i++){
+   const s=samples[i];
+   const gi0=clamp(Math.floor((s.p.x-reach-g.x0)/g.dx),0,w-1);
+   const gi1=clamp(Math.floor((s.p.x+reach-g.x0)/g.dx),0,w-1);
+   const gj0=clamp(Math.floor((s.p.z-reach-g.z0)/g.dz),0,h-1);
+   const gj1=clamp(Math.floor((s.p.z+reach-g.z0)/g.dz),0,h-1);
+   for(let j=gj0;j<=gj1;j++){
+    const nzp=g.z0+g.dz*j,dz=s.p.z-nzp;
+    for(let k2=gi0;k2<=gi1;k2++){
+     const id=j*w+k2,nxp=g.x0+g.dx*k2;
+     const dx=s.p.x-nxp,d2=dx*dx+dz*dz;
+     if(d2>reach2)continue;
+     let nd=ownDist[id];
+     if(nd<0){const r=nearestTrackY(nxp,nzp);nd=r.dist;ownY[id]=r.y;ownDist[id]=nd;}
+     // FLOOR: inside the owning stretch's corridor the cell is its bed
+     if(d2<=(nd+tol)*(nd+tol)){
+      const lvl=ownY[id]-groundClearance(nd);
+      if(lvl>raise[id])raise[id]=lvl;
+     }
+     // CEILING: any stretch running over the cell keeps the ground below it,
+     // and the lowest of them wins, so a ribbon that passes a climb on the
+     // side (or under it) keeps its own cutting. The embankment the fill
+     // builds then stops at the far edge of that corridor instead of
+     // swallowing the track.
+     const capR=Math.min(Math.max(wallDist,nd+tol),reach);
+     if(d2<=capR*capR){
+      const cv=s.p.y-groundClearance(Math.sqrt(d2));
+      if(cv<cap[id])cap[id]=cv;
+     }
+    }
+   }
+  }
+  raiseMap=raise;capMap=cap;
+  supW=w;supH=h;supX0=g.x0;supZ0=g.z0;supDx=g.dx;supDz=g.dz;
+ };
+ // Both maps are read whole-cell, never interpolated: smoothing across the
+ // border of a corridor cell would drag the floor or the cut out into the
+ // hillside beside the track, which is the opposite of what they are for.
+ const mapAt=(m,x,z,sentinel)=>{
+  if(!m)return sentinel;
+  const fi=(x-supX0)/supDx,fj=(z-supZ0)/supDz;
+  if(fi<0||fj<0||fi>supW-1||fj>supH-1)return sentinel;
+  return m[Math.min(Math.floor(fj),supH-1)*supW+Math.min(Math.floor(fi),supW-1)];
+ };
+ // Exact terrain height at any world point (no cache) — what the meshes and
+ // the fill are built from. Raw terrain is the nearest stretch's bed, blended
+ // out to rolling hills; the two support maps then bracket it.
+ const rawTerrainAt=(x,z)=>{
+  const r=nearestTrackY(x,z);
+  const d=r.dist;
+  // Inside the run-off the land IS the road bed: locked to its height, never
+  // more than the small clearance below it, so the tarmac can neither float
+  // above the grass nor be buried by it on a climb.
+  let h=r.y-groundClearance(d);
+  if(d>nearR){
+   const s=clamp((d-nearR)/(farR-nearR),0,1),sm=s*s*(3-2*s);
+   h=lerp(h,baseY+reliefAt(x,z),sm);
+  }
+  return h;
+ };
+ // Bracket a raw terrain height by the two support rules. Kept in one place so
+ // the exact function, the fill and the far band can never disagree about a
+ // crossing.
+ let terrainHeightAt=(x,z)=>{
+  const h=rawTerrainAt(x,z);
+  const up=mapAt(raiseMap,x,z,-1e9);
+  const cap=mapAt(capMap,x,z,1e9);
+  let v=Math.max(Math.min(h,cap),up);
+  // The same hard invariant as the grid fill, for callers outside it (the far
+  // band, anything that asks the land for a height directly).
+  const nr=nearestTrackY(x,z);
+  if(nr.dist<halfW+6){const lim=nr.y-0.04;if(v>lim)v=lim;}
+  return v;
+ };
  const groundSize=Math.max(4600,rad*2.4);
  const q=effQuality();
- const segs=q==='LOW'?52:q==='MED'?74:q==='ULTRA'?140:92;
- const groundGeo=new THREE.PlaneGeometry(groundSize,groundSize,segs,segs).rotateX(-Math.PI/2);
- const gpos=groundGeo.attributes.position;
- for(let i=0;i<gpos.count;i++){
-  gpos.setY(i,terrainHeightAt(gpos.getX(i)+cx,gpos.getZ(i)+cz));
+ // --- height grid -----------------------------------------------------------
+ const sampleGrid=(g,x,z)=>{
+  let fx=(x-g.x0)/g.dx,fz=(z-g.z0)/g.dz;
+  if(fx<0)fx=0;else if(fx>g.w-1)fx=g.w-1;
+  if(fz<0)fz=0;else if(fz>g.h-1)fz=g.h-1;
+  const i=Math.min(Math.floor(fx),g.w-2),j=Math.min(Math.floor(fz),g.h-2);
+  const tx=fx-i,tz=fz-j;
+  const a=g.data[j*g.w+i],b=g.data[j*g.w+i+1],c=g.data[(j+1)*g.w+i],d=g.data[(j+1)*g.w+i+1];
+  return a+(b-a)*tx+(c-a)*tz+(a-b-c+d)*tx*tz;
+ };
+ const mkGrid=(cell,x0,z0,nx,nz)=>({x0,z0,dx:cell,dz:cell,w:nx,h:nz,data:new Float32Array(nx*nz)});
+ // Cone-limited fill (a two-way distance transform): the surface may not fall
+ // away from the road faster than a natural bank, which turns the dips between
+ // sections that loop back on each other into embankments and spreads every
+ // support raise into a slope instead of a step. Each sweep is bracketed by the
+ // two maps, so an embankment stops exactly at the corridor it runs into
+ // instead of being smoothed over the track — or into a hill a tunnel passes
+ // through.
+ const groundRelief=0.62;
+ const gridFill2=(g,fn,maxCell)=>{
+  const n=g.data.length;
+  const floorArr=new Float32Array(n),ceilArr=new Float32Array(n);
+  {let k=0;
+   for(let j=0;j<g.h;j++){const z=g.z0+g.dz*j;
+    for(let i=0;i<g.w;i++,k++){
+     const x=g.x0+g.dx*i,h=fn(x,z);
+     floorArr[k]=h;ceilArr[k]=h;
+     const up=mapAt(raiseMap,x,z,-1e9);if(up>floorArr[k])floorArr[k]=up;
+     const cap=mapAt(capMap,x,z,1e9);if(cap<ceilArr[k])ceilArr[k]=cap;
+     // Hard invariant, applied to every cell rather than only to the ones a
+     // support map happens to cover: no vertex of the landscape may sit above
+     // a piece of tarmac running under it. Without it a circuit that loops
+     // back on itself (Suzuka's chicane, Interlagos' back straight) can end up
+     // with a hill standing in the middle of the track.
+     const nr=nearestTrackY(x,z);
+     if(nr.dist<halfW+6){const lim=nr.y-0.04;if(ceilArr[k]>lim)ceilArr[k]=lim;}
+     g.data[k]=Math.max(floorArr[k],Math.min(ceilArr[k],h));
+    }
+   }
+  }
+  const out=new Float32Array(n);
+  for(let pass=0;pass<2;pass++){
+   out.set(g.data);
+   for(let j=0;j<g.h;j++)for(let i=0;i<g.w;i++){
+    const k=j*g.w+i;let v=g.data[k];
+    if(i>0&&out[k-1]-maxCell>v)v=out[k-1]-maxCell;
+    if(j>0&&out[k-g.w]-maxCell>v)v=out[k-g.w]-maxCell;
+    out[k]=Math.max(floorArr[k],Math.min(ceilArr[k],v));
+   }
+   for(let j=g.h-1;j>=0;j--)for(let i=g.w-1;i>=0;i--){
+    const k=j*g.w+i;let v=out[k];
+    if(i<g.w-1&&out[k+1]-maxCell>v)v=out[k+1]-maxCell;
+    if(j<g.h-1&&out[k+g.w]-maxCell>v)v=out[k+g.w]-maxCell;
+    out[k]=Math.max(floorArr[k],Math.min(ceilArr[k],v));
+   }
+   g.data.set(out);
+  }
+ };
+ // Vertex budget, not a fixed resolution: a tight street circuit gets a fine
+ // mesh and a 7 km monster a coarser one, and neither blows the triangle
+ // budget on a tablet. Cell size still stays well under the distance over
+ // which the road itself changes height appreciably.
+ const hfBudget=q==='LOW'?9000:q==='MED'?15000:q==='ULTRA'?46000:26000;
+ const fineBuf=(farR-T.latLimit)+150;
+ const spanX=tbMaxX-tbMinX+fineBuf*2,spanZ=tbMaxZ-tbMinZ+fineBuf*2;
+ const fineCell=Math.max(6,Math.sqrt((spanX*spanZ)/hfBudget));
+ const fineNX=clamp(Math.round(spanX/fineCell)+1,4,460);
+ const fineNZ=clamp(Math.round(spanZ/fineCell)+1,4,460);
+ const fineG=mkGrid(fineCell,tbMinX-fineBuf,tbMinZ-fineBuf,fineNX,fineNZ);
+ buildSupportMaps(fineG);
+ gridFill2(fineG,terrainHeightAt,fineCell*groundRelief);
+ T.hf=fineG;
+ // Everything that stands on grass reads terrain through this: O(1), bilinear
+ // over the very grid being rendered, so a prop on a bank is on the bank.
+ T.terrainSample=(x,z)=>{
+  const g=fineG;
+  if(x>=g.x0&&z>=g.z0&&x<=g.x0+g.dx*(g.w-1)&&z<=g.z0+g.dz*(g.h-1))return sampleGrid(g,x,z);
+  return terrainHeightAt(x,z);
+ };
+ // --- meshes ----------------------------------------------------------------
+ const groundMat=new THREE.MeshStandardMaterial({map:grassT,bumpMap:grassBumpT,bumpScale:0.4,color:def.grass,roughness:1,polygonOffset:true,polygonOffsetFactor:4,polygonOffsetUnits:4});
+ groundMat.envMapIntensity=0.25;
+ // Textures tile at a constant real-world size (≈38 m per tile, the scale the
+ // old full-circuit plane produced) rather than stretching over the extent.
+ const GROUND_UV=38;
+ const groundUVs=(pos)=>{
+  const n=pos.length/3,uv=new Float32Array(n*2);
+  for(let k=0;k<n;k++){uv[k*2]=pos[k*3]/GROUND_UV;uv[k*2+1]=pos[k*3+2]/GROUND_UV;}
+  return uv;
+ };
+ // Grass must face the sky: a down-facing triangle is culled by this
+ // single-sided material and would open a hole onto the void underneath. The
+ // two ground layers wind their loops independently (and a coarse band can
+ // fold at a corner), so orientation is asserted triangle by triangle.
+ const orientUp=(pos,idx)=>{
+  for(let k=0;k<idx.length;k+=3){
+   const a=idx[k]*3,b=idx[k+1]*3,c=idx[k+2]*3;
+   const crY=(pos[b+2]-pos[a+2])*(pos[c]-pos[b])-(pos[b]-pos[a])*(pos[c+2]-pos[b+2]);
+   if(crY<0){const t=idx[k+1];idx[k+1]=idx[k+2];idx[k+2]=t;}
+  }
+ };
+ const makeGroundMesh=(pos,idx,mat)=>{
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(pos),3));
+  g.setAttribute('uv',new THREE.BufferAttribute(groundUVs(pos),2));
+  orientUp(pos,idx);
+  g.setIndex(idx);g.computeVertexNormals();
+  const m=new THREE.Mesh(g,mat);m.receiveShadow=true;world.add(m);return m;
+ };
+ const {pos:gPos,idx:gIdx}=(()=>{
+  const pos=[],idx=[],g=fineG;
+  for(let j=0;j<g.h;j++){const z=g.z0+g.dz*j,row=j*g.w;
+   for(let i=0;i<g.w;i++)pos.push(g.x0+g.dx*i,g.data[row+i],z);}
+  for(let j=0;j<g.h-1;j++)for(let i=0;i<g.w-1;i++){
+   const a=j*g.w+i,b=a+1,c=a+g.w,d=c+1;
+   idx.push(a,b,c,b,d,c);
+  }
+  return{pos,idx};
+ })();
+ makeGroundMesh(gPos,gIdx,groundMat);
+ // Border of that grid, walked in the same corner order, so the outer band can
+ // start from exactly the same vertices.
+ const border=[],borderY=[];
+ for(let i=0;i<fineG.w;i++){border.push([fineG.x0+fineG.dx*i,fineG.z0]);borderY.push(fineG.data[i]);}
+ for(let j=0;j<fineG.h;j++){border.push([fineG.x0+fineG.dx*(fineG.w-1),fineG.z0+fineG.dz*j]);borderY.push(fineG.data[j*fineG.w+fineG.w-1]);}
+ for(let i=0;i<fineG.w;i++){border.push([fineG.x0+fineG.dx*(fineG.w-1-i),fineG.z0+fineG.dz*(fineG.h-1)]);borderY.push(fineG.data[(fineG.h-1)*fineG.w+(fineG.w-1-i)]);}
+ for(let j=0;j<fineG.h;j++){border.push([fineG.x0,fineG.z0+fineG.dz*(fineG.h-1-j)]);borderY.push(fineG.data[(fineG.h-1-j)*fineG.w]);}
+ // One coarse band carries the surface out past the fog. The first ring has
+ // one vertex per grid edge, offset outward, so the shared border stays exactly
+ // coincident; further rings are uniform rectangles, out where the land is
+ // flat enough that a T-junction is millimetres rather than a gap onto the void.
+ {
+  const bx0=fineG.x0,bx1=fineG.x0+fineG.dx*(fineG.w-1);
+  const bz0=fineG.z0,bz1=fineG.z0+fineG.dz*(fineG.h-1);
+  const reachOut=Math.max(groundSize/2,Math.max(bx1-bx0,bz1-bz0)/2+600)-Math.max(bx1-cx,cz-bz0);
+  const ringLevels=q==='LOW'?4:q==='ULTRA'?7:6;
+  const ringPer=q==='LOW'?8:q==='ULTRA'?14:11;
+  const ringStep0=Math.max(110,reachOut/ringLevels*0.5);
+  const loops=[border];
+  for(let l=0;l<ringLevels;l++){
+   const step=ringStep0*Math.pow(1.55,l),L=loops[loops.length-1],out=[];
+   if(l===0){
+    for(let k=0;k<L.length;k++){
+     const a=L[k],b=L[(k+1)%L.length];
+     const nx=b[0]-a[0],nz=b[1]-a[1],nl=Math.hypot(nx,nz)||1;
+     out.push([a[0]+nz/nl*step,a[1]-nx/nl*step]);
+    }
+   }else{
+    const grow=ringStep0*((Math.pow(1.55,l+1)-1)/0.55);
+    const r={x0:bx0-grow,x1:bx1+grow,z0:bz0-grow,z1:bz1+grow};
+    for(let i=0;i<ringPer;i++){const t=i/ringPer;out.push([r.x0+(r.x1-r.x0)*t,r.z0]);}
+    for(let i=0;i<ringPer;i++){const t=i/ringPer;out.push([r.x1,r.z0+(r.z1-r.z0)*t]);}
+    for(let i=0;i<ringPer;i++){const t=i/ringPer;out.push([r.x1-(r.x1-r.x0)*t,r.z1]);}
+    for(let i=0;i<ringPer;i++){const t=i/ringPer;out.push([r.x0,r.z1-(r.z1-r.z0)*t]);}
+   }
+   loops.push(out);
+  }
+  const bandPos=[],bandIdx=[],starts=[],counts=[];
+  let base=0;
+  for(let l=0;l<loops.length;l++){
+   const L=loops[l];
+   starts.push(base);counts.push(L.length);
+   for(let k=0;k<L.length;k++)
+    bandPos.push(L[k][0],l===0?borderY[k]:terrainHeightAt(L[k][0],L[k][1]),L[k][1]);
+   base+=L.length;
+  }
+  for(let l=0;l<loops.length-1;l++){
+   const n0=counts[l],n1=counts[l+1],s0=starts[l],s1=starts[l+1];
+   const count=n0===n1?n0:n1;
+   for(let k=0;k<count;k++){
+    const t0=k/count,t1=(k+1)/count;
+    const a=s0+Math.floor(t0*n0),b=s0+Math.min(n0-1,Math.floor(t1*n0));
+    const c=s1+k,d=s1+((k+1)%n1);
+    if(a===b||c===d)continue;
+    bandIdx.push(a,c,b,b,c,d);
+   }
+  }
+  makeGroundMesh(bandPos,bandIdx,groundMat);
+  const farMat=new THREE.MeshStandardMaterial({color:new THREE.Color(def.grass).multiplyScalar(0.8),roughness:1,metalness:0});
+  farMat.envMapIntensity=0.2;
+  const farSize=Math.max(groundSize*3.2,9000);
+  const farPlane=new THREE.Mesh(new THREE.PlaneGeometry(farSize,farSize).rotateX(-Math.PI/2),farMat);
+  farPlane.position.set(cx,baseY-2.5,cz);
+  world.add(farPlane);
+  T.farPlane=farPlane;
  }
- groundGeo.computeVertexNormals();
- const ground=new THREE.Mesh(groundGeo,groundMat);
- ground.position.set(cx,0,cz);
- ground.receiveShadow=true;world.add(ground);T.groundMat=groundMat;T.terrainHeightAt=terrainHeightAt;T.trueTrackHeightAt=trueTrackHeightAt;
+ T.groundMat=groundMat;
+ // A single nearest-branch lookup shared by every system: the renderer, the
+ // physics, the props and any diagnostic all ask the same question and get
+ // the same answer, so they cannot drift apart at a crossing.
+ T.nearestTrackY=(x,z)=>nearestTrackY(x,z);
+ // --- one authority for "how high is the land here" -------------------------
+ // The rendered surface is a fine heightfield plus a coarse ring band, and a
+ // bilinear read of the fine grid alone disagrees with the band badly at the
+ // scale of the band's 100 m triangles. So build a second, coarse grid over the
+ // whole ground extent — sampling THAT agrees with what is drawn everywhere,
+ // because it is filled from exactly the same numbers the band was.
+ const coarseCell=Math.max(48,fineCell*4);
+ const cSpan=Math.max(groundSize,rad*2+400);
+ const cHalf=cSpan/2;
+ const coarseG=mkGrid(coarseCell,cx-cHalf,cz-cHalf,Math.ceil(cSpan/coarseCell)+1,Math.ceil(cSpan/coarseCell)+1);
+ {let k=0;
+  for(let j=0;j<coarseG.h;j++){const z=coarseG.z0+coarseG.dz*j;
+   for(let i=0;i<coarseG.w;i++,k++){
+    let h=terrainHeightAt(coarseG.x0+coarseG.dx*i,z);
+    // the far band draws these same numbers, so keep the invariant here too:
+    // nothing in the landscape may sit above a piece of tarmac running under it
+    const nr=nearestTrackY(coarseG.x0+coarseG.dx*i,z);
+    if(nr.dist<halfW+6){const lim=nr.y-0.04;if(h>lim)h=lim;}
+    coarseG.data[k]=h;
+   }
+  }
+ }
+ T.coarse=coarseG;
+ const surfaceHeightAt=(x,z)=>{
+  const g=fineG;
+  if(x>=g.x0&&z>=g.z0&&x<=g.x0+g.dx*(g.w-1)&&z<=g.z0+g.dz*(g.h-1))return sampleGrid(g,x,z);
+  return sampleGrid(coarseG,x,z);
+ };
+ // From here on, "what is the ground" means "what is the ground the player can
+ // see" — raw terrain is only used to build the meshes.
+ terrainHeightAt=surfaceHeightAt;
+ T.terrainSample=surfaceHeightAt;
+ T.trueTrackHeightAt=(x,z)=>nearestTrackY(x,z).y; // what cars sit on (no clearance)
+ T.terrainHeightAt=surfaceHeightAt;               // what grass, props and stands sit on
 
  // 1. Road Tarmac Ribbon
  {
@@ -1376,7 +1990,40 @@ function buildWorld(idx){
   const ban=new THREE.Mesh(new THREE.PlaneGeometry(halfW*2+3.6,1.0),
    new THREE.MeshStandardMaterial({map:bannerTex(def.name),side:THREE.DoubleSide,roughness:0.7}));
   ban.position.set(0,7.1,-0.35);gp.add(ban);
-  gp.position.set(_sv.x,0,_sv.z);gp.rotation.y=yaw;world.add(gp);
+  // A bare 0 here dropped the whole gantry to world-origin height, so on any
+ // circuit whose start sits above or below zero its legs ended in mid-air.
+ gp.position.set(_sv.x,terrainHeightAt(_sv.x,_sv.z),_sv.z);gp.rotation.y=yaw;world.add(gp);
+ }
+
+ /* Night lighting. What you actually see on a lit circuit at night is the
+    POOL each mast throws on the tarmac plus the glare of the lamp head, not
+    a spotlight cone hanging in the air. So: light rigs spaced along the
+    track, each with a mast, a double lamp head and a wide additive glow on
+    the road. Everything fades in with darkness (and inside tunnels). */
+ T.nightMats=[];
+ {
+  const lm=new THREE.MeshStandardMaterial({color:0x3a3e45,roughness:0.7,metalness:0.45});
+  const gm=new THREE.MeshStandardMaterial({color:0x30343a,roughness:0.6,metalness:0.3,side:THREE.DoubleSide});
+  const stepN=Math.max(14,Math.min(26,Math.round(T.len/240)));
+  for(let i=0;i<stepN;i++){
+   const si=Math.floor(i*T.N/stepN),sa=samples[si];
+   for(const sg of[1,-1]){
+    const lx=sa.p.x+sa.n.x*(T.latLimit+3.4)*sg,lz=sa.p.z+sa.n.z*(T.latLimit+3.4)*sg;
+    const gy=terrainHeightAt(lx,lz),yaw=Math.atan2(sa.t.x,sa.t.z);
+    const grp=new THREE.Group();grp.position.set(lx,gy,lz);grp.rotation.y=yaw;
+    const mast=new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.26,16,7),lm);mast.position.y=8;mast.castShadow=true;grp.add(mast);
+    const arm=new THREE.Mesh(new THREE.BoxGeometry(2.2,0.18,0.18),lm);arm.position.set(-sg*1.0,15.6,0);grp.add(arm);
+    const headMat=new THREE.MeshBasicMaterial({color:0x2a2717});
+    T.nightMats.push(headMat);
+    for(const oz of[-0.42,0.42]){const hd=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.2,0.34),headMat);hd.position.set(-sg*1.9,15.5,oz);grp.add(hd);}
+    const shade=new THREE.Mesh(new THREE.BoxGeometry(0.14,0.34,1.06),gm);shade.position.set(-sg*1.66,15.5,0);grp.add(shade);
+    world.add(grp);
+    const rx=sa.p.x,rz=sa.p.z,ry=nearestTrackY(rx,rz).y;
+    const pl=new THREE.Mesh(new THREE.PlaneGeometry(60,40),nightPoolMat);
+    pl.rotation.order='YXZ';pl.rotation.y=yaw;pl.rotation.x=-Math.PI/2;pl.renderOrder=2;
+    pl.position.set(rx,ry+0.14,rz);world.add(pl);
+   }
+  }
  }
 
  const dummy=new THREE.Object3D();
@@ -1394,7 +2041,9 @@ function buildWorld(idx){
    const am=new THREE.MeshStandardMaterial({map:tex,roughness:0.8});
    const yaw=Math.atan2(_st.x,_st.z);
    const bx=_sv.x+_sn.x*(T.latLimit+3.2)*side, bz=_sv.z+_sn.z*(T.latLimit+3.2)*side;
-   const by=_sv.y;
+   // Hoarding datum = ground under it (see the marshal posts): the board is
+   // lifted clear of the grass by its legs rather than hung at tarmac height.
+   const by=Math.max(terrainHeightAt(bx,bz),_sv.y-0.4);
    const w=new THREE.Mesh(new THREE.BoxGeometry(11,2.6,0.35),am);
    w.position.set(bx,by+1.45,bz);w.rotation.y=yaw;w.castShadow=true;world.add(w);
    // Wooden legs — one either end, angled slightly out, from the ground up to
@@ -1435,8 +2084,9 @@ function buildWorld(idx){
    const tv=new THREE.Vector3(samples[i].t.x,0,samples[i].t.z);
    const nv=new THREE.Vector3(samples[i].n.x,0,samples[i].n.z);
 
-   const standY=nearestTrackY(bx,bz).y;
+   const standY=terrainHeightAt(bx,bz);
    const baseW=28;
+   T.stands=T.stands||[];T.stands.push({x:bx,z:bz,y:standY,yaw});
    const stand=new THREE.Mesh(new THREE.BoxGeometry(9.0,0.8,baseW),standMat);
    stand.position.set(bx,standY+0.4,bz);stand.rotation.y=yaw;stand.castShadow=true;world.add(stand);
 
@@ -1506,8 +2156,8 @@ function buildWorld(idx){
    if(minTrackDist(bx,bz)<T.latLimit+32)continue;
    const tv=new THREE.Vector3(samples[si].t.x,0,samples[si].t.z);
    const nv=new THREE.Vector3(samples[si].n.x,0,samples[si].n.z);
-   const standY=nearestTrackY(bx,bz).y;
-   const baseW=36; // the main straight gets the biggest grandstand
+   const standY=terrainHeightAt(bx,bz);
+   const baseW=36;T.stands=T.stands||[];T.stands.push({x:bx,z:bz,y:standY,yaw}); // the main straight gets the biggest grandstand
    const stand=new THREE.Mesh(new THREE.BoxGeometry(9.0,0.8,baseW),standMat);
    stand.position.set(bx,standY+0.4,bz);stand.rotation.y=yaw;stand.castShadow=true;world.add(stand);
    for(let r=0;r<6;r++){
@@ -1584,7 +2234,7 @@ function buildWorld(idx){
    for(let c=0;c<clusters&&tk<300;c++){
     const off=(c-(clusters-1)/2)*2.5;
     const tx=bx+s.t.x*off,tz=bz+s.t.z*off;
-    const h=nearestTrackY(tx,tz).y;
+    const h=terrainHeightAt(tx,tz);
     for(let ty=0;ty<3&&tk<300;ty++){
      td.position.set(tx,h+0.25+ty*0.5,tz);
      td.rotation.set(0,yaw,0);td.scale.set(1,1,1);
@@ -1664,7 +2314,7 @@ function buildWorld(idx){
    lastB=i;if(++nB>3)break;
    const s=samples[i],sg=nB%2?1:-1;
    const bx=s.p.x+s.n.x*(T.latLimit+3.6)*sg,bz=s.p.z+s.n.z*(T.latLimit+3.6)*sg;
-   const by=nearestTrackY(bx,bz).y;
+   const by=terrainHeightAt(bx,bz);
    const b=new THREE.Mesh(new THREE.PlaneGeometry(5.4,2.6),drsMat);
    b.position.set(bx,by+1.6,bz);
    b.lookAt(bx-s.n.x*sg*6,by+1.6,bz-s.n.z*sg*6);
@@ -1696,7 +2346,7 @@ function buildWorld(idx){
    for(const [dist,txtTex,big] of [[26,t100,1.0],[14,t50,0.85]]){
     const j=(i-dist+N)%N,sj=samples[j];
     const bx=sj.p.x+sj.n.x*(T.latLimit+2.8)*sg,bz=sj.p.z+sj.n.z*(T.latLimit+2.8)*sg;
-    const by=nearestTrackY(bx,bz).y;
+    const by=terrainHeightAt(bx,bz);
     const p=new THREE.Mesh(new THREE.PlaneGeometry(2.8*big,2.1*big),new THREE.MeshStandardMaterial({map:txtTex,roughness:0.8,side:THREE.DoubleSide}));
     p.position.set(bx,by+1.15*big,bz);
     p.lookAt(bx-sj.n.x*sg*4,by+1.15*big,bz-sj.n.z*sg*4);
@@ -1863,16 +2513,20 @@ function buildWorld(idx){
 
  for(let i=0;i<N;i+=90){
   const sg=(i/90)%2?1:-1;sampleF(i);
-  const elevation=_sv.y;
   const x=_sv.x+_sn.x*(T.latLimit+12)*sg,z=_sv.z+_sn.z*(T.latLimit+12)*sg;
+  // The post stands on the GROUND, twelve metres of run-off away from the
+  // tarmac — so its datum has to be the terrain height there, not the road
+  // height. On a hillside the difference is several metres, which is exactly
+  // the "everything is hovering" tell.
+  const gy=terrainHeightAt(x,z), ry=_sv.y;
   const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.14,0.18,7,5),new THREE.MeshStandardMaterial({color:0x3a3f46}));
-  pole.position.set(x,elevation+3.45,z);world.add(pole);
+  pole.position.set(x,gy+3.45,z);pole.castShadow=true;world.add(pole);
   const box=new THREE.Mesh(new THREE.BoxGeometry(0.9,0.5,0.7),new THREE.MeshStandardMaterial({color:0x14161a}));
-  box.position.set(x,elevation+7.2,z);box.lookAt(_sv.x,elevation+1,_sv.z);world.add(box);
+  box.position.set(x,gy+7.2,z);box.lookAt(_sv.x,ry+1,_sv.z);world.add(box);
   // Marshal post flag — the yellow/red flag waved from the observation tower.
   const mflag=new THREE.Mesh(new THREE.PlaneGeometry(1.5,0.95),new THREE.MeshStandardMaterial({color:pick([0xe10600,0xf2d13d,0x2e6fd0,0xe9e9e9]),side:THREE.DoubleSide,roughness:0.7}));
-  mflag.position.set(x+0.75,elevation+7.55,z);mflag.userData.ph=rand(0,9);world.add(mflag);T.flags.push(mflag);
-   T.tvCams.push(V3(x,elevation+6.6,z));
+  mflag.position.set(x+0.75,gy+7.55,z);mflag.userData.ph=rand(0,9);world.add(mflag);T.flags.push(mflag);
+   T.tvCams.push(V3(x,gy+6.6,z));
  }
 
  // 14. Tunnel — a covered section over a stretch of track (used by Monaco, the
@@ -1981,6 +2635,13 @@ function placeCar(c){
  // tarmac, which reads as "the cars are missing" on the lights-out grid.
  c.y=getRoadHAtCoords(c.x,c.z);
  c.vy=0;c.airborne=false;c.pitch=0;c.bounceOff=0;c.bounceVel=0;
+ // The tarmac skin is drawn 0.05 above the centreline the physics sits on, so
+// the car group goes at the raw road height: the tyre bottoms then press just
+// into the painted surface instead of resting tangentially on top of it,
+// which is what read as "the cars are flying".
+// The tarmac skin is drawn 0.05 m above the centreline the cars are tracked
+ // on, so the car rides with it: wheel bottoms land exactly on the visible
+ // surface — no gap to read as "flying", and no sink into the paint.
  c.mesh.g.position.set(c.x,c.y+0.05,c.z);
  c.mesh.g.rotation.y=c.hdg;
 }
@@ -2147,11 +2808,26 @@ function aiThink(c,dt){
  const dTerm=clamp((diff-c.pDiff)/Math.max(dt,0.001)*0.05,-0.35,0.35);
  c.pDiff=diff;
  c.steer=clamp(-diff*2.7-dTerm,-1,1);
- /* speed target from curvature ahead */
- let cmax=0;
+ /* Speed target from curvature.  This used to be  tv = sqrt(21/cmax), a
+    magic constant that had nothing to do with the car it was driving: the
+    same car's own yaw authority is  cap = 46*grip/v  (see below), so the
+    grip-limited corner speed is sqrt(46*grip/cmax).  Measured with
+    tools/ai_pace_calib.mjs on the real OpenF1 circuit geometry, the old law
+    left the front-runners crawling through every bend -- minimum corner speed
+    ~5 km/h at Monaco with 31% of the lap under 28 km/h, and it cost roughly
+    15% of lap time at Monza -- which is exactly the "why is everyone slowing
+    down for no reason" complaint.  The new law asks the car for the speed the
+    physics can actually hold, clipped by the track's own braked speed profile
+    (T.samples[].v, propagated backwards at 23 m/s^2), and scales that by
+    driver skill and difficulty so a 1.0-skill field sits at ~0.93 of the
+    limit and RELAXED/NORMAL/PRO land at 0.82/0.90/0.97 of the same limit
+    rather than being three different physics models. */
+ let cmax=0,vAhead=1e9;
  const look=6+Math.floor(vF*0.5);
- for(let k=2;k<look;k+=3)cmax=Math.max(cmax,Math.abs(T.samples[(fi+k)%T.N].curv));
- let tv=Math.sqrt(21/Math.max(cmax,1e-4))*c.d.skill*state.diffMul*Math.sqrt(Math.max(cur.grip,0.35));
+ for(let k=2;k<look;k+=3){const si=(fi+k)%T.N,smp=T.samples[si];
+  cmax=Math.max(cmax,Math.abs(smp.curv));vAhead=Math.min(vAhead,smp.v);}
+ const tvLim=Math.min(Math.sqrt(46*Math.max(cur.grip,0.3)/Math.max(cmax,1e-4)),vAhead);
+ let tv=tvLim*(0.88+c.d.skill*0.05)*state.diffMul;
  tv=Math.min(tv,PH.top*(0.86+c.d.skill*0.13));
  if(ah&&ah.dist<20)tv=Math.min(tv,Math.min(ah.c.vF*1.02,ah.c.vF+(ah.dist-9)));
  const dv=tv-vF;
@@ -2290,6 +2966,7 @@ function updCar(c,dt){
  const rotFac=Math.min(1,clamp(Math.abs(sp0)/6,0,1)+(c.throttle>0.5&&Math.abs(sp0)<17?0.5:0));
  c.hdg-=c.steer*Math.min(base,cap)*yawF*rotFac*dt; /* steer -1 (left) increases hdg, turning left */
  /* velocity in the NEW heading frame → slip appears naturally */
+ const acc=dt>0?(c.vF-c._pv)/dt:0;
  const fx=Math.sin(c.hdg),fz=Math.cos(c.hdg),rx=-fz,rz=fx;
  let vF=c.vx*fx+c.vz*fz, vR=c.vx*rx+c.vz*rz;
  /* longitudinal */
@@ -2426,12 +3103,52 @@ function carCollisions(){
 }
 
 /* ============ per-car visuals ============ */
+/* A damped spring integrator, used for everything the driver's body does that
+   should LAG the car rather than follow it: head roll under lateral load, the
+   chin snapping forward under braking, the whole shell rising over a kerb.
+   k is stiffness, b damping; both tuned so it settles in a couple of tenths
+   of a second and rings once on an impulse, like a real helmet on a neck. */
+function spring(cur,vel,target,k,b,dt){
+ const a=(target-cur)*k-vel*b;
+ vel+=a*dt;
+ return[cur+vel*dt,vel];
+}
+/* The ground under a wheel, sampled at the two contact patches. Its height and
+   its slope give a genuine bump/skip signal — kerbs, painted verges and the
+   road's own roughness come out of the surface the car is actually driving on
+   instead of a sine wave. */
+const bumpAt=(c)=>{
+ if(c._bT===undefined||timeSec-c._bT>0.04){
+  const fx=Math.sin(c.hdg),fz=Math.cos(c.hdg),rx=-fz,rz=fx;
+  let s=0,sl=0;
+  for(const sg of[1,-1])for(const sd of[1,-1]){
+   const wx=c.x+fx*1.62+rx*0.82*sd,wz=c.z+fz*1.62+rz*0.82*sd;
+   const hh=T.terrainSample?T.terrainSample(wx,wz):0;
+   const ha=T.terrainSample?T.terrainSample(wx+fx*1.6,wz+fz*1.6):hh;
+   s+=hh;sl+=(ha-hh);
+  }
+  c._b=s/4;c._bs=sl/4;c._bT=timeSec;
+ }
+ return[c._b,c._bs];
+};
 function updCarVisual(c,dt){
  const p=c.mesh.g;
+ // Lights: on at night, on in the rain, and on inside a covered section even
+ // at midday. The beam brightens with speed and the tail goes red-hot under
+ // braking, which is how a car slowing ahead of you reads in your mirrors.
+ if(c.mesh.beam){
+  const lit=clamp(nightLevel+(c.inTunnel?0.85:0)+cur.rain*0.4,0,1);
+  const sp01=clamp(Math.abs(c.vF)/PH.top,0,1);
+  c.mesh.beam.material.opacity=lit*(0.05+sp01*0.10);
+  c.mesh.pool.material.opacity=lit*(0.10+sp01*0.26);
+  const braking=c.brake>0.12?1:0;
+  c.mesh.tailGlow.material.opacity=clamp(lit*0.35+braking*(0.35+sp01*0.5)+cur.wet*0.12,0,1);
+  c.mesh.tailGlow.scale.setScalar(1+braking*0.35);
+ }
  // Is the car inside the covered tunnel section? Used for audio + lighting.
  c.inTunnel=!!T.tunnel&&c.ti>=T.tunnel.i0&&c.ti<=T.tunnel.i1;
  const jitter=Math.sin(timeSec*24+c.phase*7)*0.006*clamp(Math.abs(c.vF)/50,0,1);
- p.position.set(c.x, (c.y !== undefined ? c.y : 0.05) + 0.05 + (c.bounceOff||0) + jitter, c.z);
+ p.position.set(c.x, (c.y !== undefined ? c.y : 0.05) + (c.bounceOff||0) + jitter, c.z);
  p.rotation.set(0, c.hdg, 0);
  p.rotateX(-c.pitch || 0);
  // Spanner + depleting "energy back" ring floating over a damaged car.
@@ -2470,28 +3187,51 @@ function updCarVisual(c,dt){
   }
  }
  c.mesh.body.rotation.z=damp(c.mesh.body.rotation.z,clamp(vR*0.011,-0.1,0.1),8,dt);
- const acc=dt>0?(c.vF-c._pv)/dt:0;
  c.mesh.body.rotation.x=damp(c.mesh.body.rotation.x,clamp(-acc*0.0035,-0.05,0.06),6,dt);
  c._pv=c.vF;
 
- // Realistic Driver & Helmet G-Force animation:
+ /* ---- driver motion: the head is on a neck, not on a rail ----------------
+    Everything below is driven by MEASURED forces, so a car that is actually
+    being driven hard shakes hard and a car cruising does not twitch:
+      yawG   = v² · yaw rate, i.e. the real lateral load in the cockpit
+      acc    = longitudinal acceleration (braking nods the chin forward)
+      vF/vb  = the surface under the front tyres (kerbs, bumps, skids)
+      jolt   = an impulse from a wall scrape or a car-to-car thump           */
  if(c.mesh.helmetGroup){
-  // 1. Steering look-ahead apex rotation (helmet turns into corner)
-  const steerTurn = -c.steer * 0.42; 
-  // 2. Lateral G-force head tilt (helmet rolls towards inside/counter-rolls on high Gs)
-  const lateralG = clamp(-c.steer * Math.abs(c.vF) * 0.0045, -0.32, 0.32);
-  // 3. Longitudinal braking/acceleration head nod (helmet pitches forward under hard braking, presses back under acceleration)
-  const accelPitch = clamp(-acc * 0.008, -0.22, 0.15);
-  // 4. Subtle track vibration bounce
-  const bump = (c.onCurb ? Math.sin(timeSec * 45) * 0.05 : Math.sin(timeSec * 22) * 0.012) * Math.min(1.0, Math.abs(c.vF)/15);
-
-  c.mesh.helmetGroup.rotation.y = damp(c.mesh.helmetGroup.rotation.y, steerTurn, 14, dt);
-  c.mesh.helmetGroup.rotation.z = damp(c.mesh.helmetGroup.rotation.z, lateralG, 12, dt);
-  c.mesh.helmetGroup.rotation.x = damp(c.mesh.helmetGroup.rotation.x, accelPitch + bump, 14, dt);
- }
- if(c.mesh.driverGroup){
-  // Subtle driver torso / shoulder lean
-  c.mesh.driverGroup.rotation.z = damp(c.mesh.driverGroup.rotation.z, -c.steer * 0.09, 10, dt);
+  const yawRate=Math.abs(c._py!==undefined?(c.hdg-c._py)/Math.max(dt,1e-4):0);
+  c._py=c.hdg;
+  const yawG=clamp(c.vF*yawRate,-40,40);           // signed, m/s² toward the outside
+  const gLat=clamp(-yawG*0.09,-1,1);
+  const gLon=clamp(-acc*0.055,-1,1);
+  const sp01=clamp(Math.abs(c.vF)/PH.top,0,1);
+  const[,bsl]=bumpAt(c);
+  const vib=(0.0016+sp01*0.0075)*(c.onCurb?3.1:1);
+  const road=Math.sin(timeSec*47+c.phase*5)*vib+bsl*0.035;
+  // kerb strikes are impulses: the shell hops, then the suspension eats it
+  if(c.onCurb&&!c._curb){c._hv=(c._hv||0)-0.055;}
+  c._curb=c.onCurb;
+  const[hop,hov]=spring(c._hOP||0,c._hv||0,0,190,13,dt);
+  c._hOP=hop;c._hv=hov;
+  const[hr,hv]=spring(c.mesh.helmetGroup.rotation.z,c._hrV||0,gLat*0.30+gLon*0.05,58,7.4,dt);
+  const[hp,hpv]=spring(c.mesh.helmetGroup.rotation.x,c._hpV||0,gLon*0.20,46,6.6,dt);
+  const[hy,hyv]=spring(c.mesh.helmetGroup.rotation.y,c._hyV||0,clamp(-c.steer*0.30+gLat*0.16,-0.6,0.6),34,6.0,dt);
+  c._hrV=hv;c._hpV=hpv;c._hyV=hyv;
+  c.mesh.helmetGroup.rotation.set(hp,hy,hr);
+  // a couple of centimetres of slide in the seat, plus the vibration
+  c.mesh.helmetGroup.position.set(gLat*0.022,(c._hOP||0)+road+0.73,gLon*0.018+0.36);
+  // torso follows, slower and blunted; shoulders lead into the corner
+  const[tr,tv2]=spring(c.mesh.driverGroup.rotation.z,c._trV||0,-gLat*0.13,26,7,dt);
+  c._trV=tv2;
+  c.mesh.driverGroup.rotation.z=tr;
+  // the wheel itself: hands turn it, and it kicks back over a kerb
+  if(c.mesh.steering)c.mesh.steering.rotation.z=-c.steer*2.1*Math.max(0.25,1-sp01*0.72)+road*2.2;
+  if(c.mesh.brakes){
+   c.brakeHeat=Math.max(0,(c.brakeHeat||0)-dt*0.42+(c.brake>0.02?dt*c.brake*1.9:0));
+   const bh=clamp(c.brakeHeat,0,1);
+   c.mesh.brakeMat.emissiveIntensity=bh*3.4;
+   // discs also glow at the end of a straight when they are hot even off the
+   // pedals, and go dull in the rain (water cools them)
+  }
  }
 
  if(c.onCurb)p.position.y+=Math.abs(Math.sin(timeSec*38+c.phase))*0.03;
@@ -2981,6 +3721,34 @@ function updCamera(dt){
   camera.position.copy(cam.pos);
   camera.lookAt(pp.x+fx*6,pp.y+1.2,pp.z+fz*6);
   tf=clamp(60+sp*0.24,60,80);
+ }else if(state.camMode===2){
+  /* Helmet cam — the camera rides ON the driver's head, so it inherits every
+     bit of motion the head spring produces: it rolls under lateral load, snaps
+     forward under braking, rings after a kerb strike and buzzes with speed.
+     The head is followed at less than 1:1 and low-passed, because a faithful
+     head-mounted camera is unwatchable at 300 km/h — this is the version that
+     reads as "real" without making you ill. */
+  const yaw=p.hdg,fx=Math.sin(yaw),fz=Math.cos(yaw);
+  const hg=p.mesh.helmetGroup;
+  const lean=hg?hg.rotation.z*0.72:0, nod=hg?hg.rotation.x*0.72:0, look=hg?hg.rotation.y*0.55:0;
+  const sp01=clamp(sp/PH.top,0,1);
+  const buzz=(0.0009+sp01*0.0055)*(p.onCurb?3.2:1);
+  const bx=Math.sin(timeSec*51.3+p.phase)*buzz, by=Math.cos(timeSec*63.7+p.phase*2)*buzz*0.8;
+  const hx=pp.x+fx*0.04, hz=pp.z+fz*0.04;
+  cam.pos.x=damp(cam.pos.x===undefined?hx:cam.pos.x,hx,18,dt);cam.pos.z=damp(cam.pos.z===undefined?hz:cam.pos.z,hz,18,dt);
+  cam.pos.y=damp(cam.pos.y,(hg?hg.position.y-0.73+0.99:pp.y+0.99),16,dt);
+  camera.position.set(cam.pos.x+bx,cam.pos.y+by,cam.pos.z);
+  // where the driver is looking: down the road, turned into the corner, with
+  // the pitch of the head and the road's own slope behind it
+  const ahead=34+sp*0.55;
+  const fyaw=yaw+look;
+  cam.lookX=damp(cam.lookX||0,pp.x+Math.sin(fyaw)*ahead,14,dt);
+  cam.lookZ=damp(cam.lookZ||0,pp.z+Math.cos(fyaw)*ahead,14,dt);
+  cam.lookY=damp(cam.lookY||0,pp.y+0.86+nod*ahead*0.45,12,dt);
+  camera.up.set(Math.sin(lean),Math.cos(lean),0);
+  camera.lookAt(cam.lookX,cam.lookY,cam.lookZ);
+  camera.rotateZ(lean*0.35);
+  tf=clamp(70+sp*0.16,70,86);
  }else if(state.camMode===1){
   // "T-cam": mounted near the airbox/halo, behind the front axle, like the
   // real onboard camera — not out ahead of the front wheels. Putting the
@@ -2992,12 +3760,12 @@ function updCamera(dt){
   camera.position.set(pp.x+fx*0.15,pp.y+1.42,pp.z+fz*0.15);
   camera.lookAt(pp.x+fx*40,pp.y+1.05,pp.z+fz*40);
   tf=58+sp*0.06;
- }else if(state.camMode===2){
+ }else if(state.camMode===3){
   let best=T.tvCams[0],bd=1e18;
   for(const c of T.tvCams){const d=(c.x-pp.x)**2+(c.z-pp.z)**2;if(d<bd){bd=d;best=c;}}
   camera.position.copy(best);camera.lookAt(pp.x,pp.y+1,pp.z);
   tf=clamp(3200/(Math.sqrt(bd)+30),22,55);
- }else if(state.camMode===3){
+ }else if(state.camMode===4){
   cam.orbA+=dt*0.4;
   camera.position.set(pp.x+Math.sin(cam.orbA)*13,pp.y+5.5,pp.z+Math.cos(cam.orbA)*13);
   camera.lookAt(pp.x,pp.y+0.8,pp.z);tf=58;
@@ -3018,7 +3786,7 @@ function updCamera(dt){
  // Both light and target track the car's real elevation (not a hardcoded 0),
  // so the shadow camera stays correctly aimed on hilly real-world circuits
  // instead of drifting off the actual ground and under-covering the scene.
- sunLight.position.set(pp.x+SUNDIR.x*260,pp.y+SUNDIR.y*260+40,pp.z+SUNDIR.z*260);
+ sunLight.position.set(pp.x+sunVec.x*300,pp.y+sunVec.y*300+45,pp.z+sunVec.z*300);
  sunLight.target.position.set(pp.x,pp.y,pp.z);
 }
 
@@ -3178,13 +3946,24 @@ function beginRace(){
  // the tilt/gyro path to actually drive. Auto-engage it here — the START tap
  // is a valid user gesture for iOS gyro permission — and use auto-throttle so
  // the car is drivable with just tilt-steering and no on-screen gas button.
- if((matchMedia('(pointer:coarse)').matches||navigator.maxTouchPoints>0)&&!tiltCtrl.enabled){
+ if((matchMedia('(pointer:coarse)').matches||navigator.maxTouchPoints>0)&&tiltCtrl.gyroState!=='live'){
   // No on-screen steering/gas buttons anymore, so the device tilt is the
   // whole control surface: tilt to steer, tilt forward for gas, tilt back to
   // brake. 'touch' would need buttons; 'auto' leaves no way to brake.
   tiltCtrl.throttleMode='tilt';
   try{tiltCtrl.saveSettings();}catch(e){}
-  tiltCtrl.enable().then(()=>tiltCtrl.showToast('TILT STEERING ON · TILT = GAS / BRAKE')).catch(()=>{});
+  // This tap is the user gesture iOS wants, so ask here — but only celebrate
+  // if the sensor really came alive. When it does not, say so and leave a
+  // tappable retry on screen: the old code toasted "GYROSCOPE ACTIVE"
+  // unconditionally and the car sat still with no explanation.
+  tiltCtrl.enable().then((live)=>{
+   if(live){
+    hideGyroPrompt();
+    tiltCtrl.showToast('TILT STEERING ON · TILT = GAS / BRAKE',2600);
+   }else{
+    showGyroPrompt();
+   }
+  }).catch(()=>showGyroPrompt());
  }
  for(const c of cars)if(!c.isPlayer)c.reactT=rand(0.12,0.55);
  const yw=player.hdg;
@@ -3338,7 +4117,7 @@ function updRace(dt){
  if(demoOn){
   const lead=[...cars].sort((a,b)=>b.key-a.key)[0];
   if(lead){
-   sunLight.position.set(lead.x+SUNDIR.x*260,lead.y+SUNDIR.y*260+40,lead.z+SUNDIR.z*260);
+   sunLight.position.set(lead.x+sunVec.x*300,lead.y+sunVec.y*300+45,lead.z+sunVec.z*300);
    sunLight.target.position.set(lead.x,lead.y,lead.z);
   }
  }
@@ -3538,6 +4317,13 @@ function startDemo(){
 /* ============ input ============ */
 let dtGlobal=0.016;
 let rainPass=null;
+/* src/snowShader.js existed in the project but was never wired in, so 'snow' was
+   a colour grade with no snow in it. snowPass draws the flakes; snowAccum is the
+   thing that makes it a *weather* rather than a particle effect: it builds while
+   it snows and melts back when it stops, and it drives the road colour, the grip
+   and the shader intensity together. */
+let snowPass=null;
+let snowAccum=0, snowGust=0, snowGustT=6;
 let qualityMgr=null;
 
 function isFullscreen(){
@@ -3616,7 +4402,7 @@ addEventListener('keyup',e=>{
  if(k==='Space')keys.space=false;
 });
 addEventListener('wheel', e => {
-  if (state.camMode === 4) { // Only zoom in top down view
+  if (state.camMode === 5) { // Only zoom in top down view
     state.zoom += Math.sign(e.deltaY) * 5;
     state.zoom = Math.max(20, Math.min(150, state.zoom));
   }
@@ -3677,11 +4463,31 @@ if($('hZoomIn'))$('hZoomIn').onclick=()=>{state.zoom=Math.max(20,state.zoom-8);}
 if($('hZoomOut'))$('hZoomOut').onclick=()=>{state.zoom=Math.min(150,state.zoom+8);};
 
 // Tilt mode menu buttons & chips
+// --- gyroscope retry prompt -------------------------------------------------
+// Tilt is the only control surface on a phone, so a gyroscope that never
+// delivers data has to be announced — and fixed with a tap, because iOS only
+// hands out motion permission inside a user gesture. This stays up until a
+// sensor event actually arrives.
+const _gyroPrompt={show(t){
+ const el=$('gyroPrompt');if(!el)return;
+ const tx=$('gyroPromptText');if(tx)tx.textContent=t||'';
+ el.classList.add('show');
+},hide(){const el=$('gyroPrompt');if(el)el.classList.remove('show');}};
+function showGyroPrompt(){
+ _gyroPrompt.show(tiltCtrl.gyroError||'Waiting for the motion sensor…');
+}
+function hideGyroPrompt(){_gyroPrompt.hide();}
+if($('gyroPromptBtn'))$('gyroPromptBtn').onclick=async()=>{
+ const ok=await tiltCtrl.enable();
+ if(ok){hideGyroPrompt();tiltCtrl.showToast('GYROSCOPE LIVE · TILT TO STEER',2600);}
+ else _gyroPrompt.show((tiltCtrl.gyroError||'Still no sensor data.')+' Tap again to retry.');
+};
 if($('btnTiltMode')){
  $('btnTiltMode').onclick = async (e) => {
    e.preventDefault();
-   await tiltCtrl.enable();
-   tiltCtrl.showToast('GYROSCOPE ACTIVE');
+   const ok = await tiltCtrl.enable();
+   if (ok) { hideGyroPrompt(); tiltCtrl.showToast('GYROSCOPE LIVE · TILT TO STEER', 2600); }
+   else { showGyroPrompt(); tiltCtrl.showToast(tiltCtrl.gyroError || 'NO SENSOR DATA FROM THIS DEVICE', 5200); }
  };
 }
 if($('btnTouchMode')){
@@ -3866,8 +4672,8 @@ function buildMenu(){
   document.addEventListener('click',e=>{if(!dd.contains(e.target))closeList();});
  }
 
- seg('tWeather',['SUNNY','DRIZZLE','RAIN'].map((l,i)=>ICONS[['sun','driz','rain'][i]]+'<span>'+l+'</span>'),0,
-  i=>{state.wx=['sun','driz','rain'][i];snapWeather(state.wx);});
+ seg('tWeather',['SUNNY','DRIZZLE','RAIN','FOG','SNOW'].map((l,i)=>ICONS[['sun','driz','rain','mist','snow'][i]]+'<span>'+l+'</span>'),0,
+  i=>{state.wx=['sun','driz','rain','mist','snow'][i];snapWeather(state.wx);});
  seg('tTod',['DAY','DUSK','NIGHT'],0,
   i=>{state.tod=['day','dusk','night'][i];applyWeatherVisuals();refreshEnv();});
  seg('tLaps',['3 LAPS','5 LAPS','8 LAPS'],0,i=>state.laps=[3,5,8][i]);
@@ -3877,14 +4683,14 @@ function buildMenu(){
  const qModes=['AUTO','ULTRA','HIGH','MED','LOW'];
  seg('tQuality',qModes.map(m=>m==='AUTO'?'⚡AUTO':m),0,i=>{
    state.quality=qModes[i];
-   if(qualityMgr){qualityMgr.current='AUTO';qualityMgr.autoLevel=null;qualityMgr.apply(state.quality);}
+   if(qualityMgr){qualityMgr.current='AUTO';qualityMgr.autoLevel=null;qualityMgr.apply(state.quality);postfx.apply(effQuality());}
    // Rebuild immediately so prop density / terrain resolution changes are
    // visible right away on the title screen, not just next race.
    if(state.mode==='title')buildWorld(state.trackIdx);
  });
  seg('pQuality',qModes.map(m=>m==='AUTO'?'⚡AUTO':m),0,i=>{
    state.quality=qModes[i];
-   if(qualityMgr){qualityMgr.current='AUTO';qualityMgr.autoLevel=null;qualityMgr.apply(state.quality);}
+   if(qualityMgr){qualityMgr.current='AUTO';qualityMgr.autoLevel=null;qualityMgr.apply(state.quality);postfx.apply(effQuality());}
  });
 
  $('tSpeech').onclick=()=>{const b=$('tSpeech');b.classList.toggle('on');
@@ -3962,10 +4768,18 @@ function tick(){
   const speedFactor=clamp(speedKmh/280,0,1);
   const effRain=cur.rain*lerp(1.0,0.22,speedFactor);
   if(rainPass && rainShaderOn && state.mode!=='title' && (effRain>0.01||lightningFlash>0.01)){
+   // The windshield pass does its own full-screen composite, so the grade
+   // chain stands down for those frames rather than fighting it for the
+   // canvas. ACES is restored first, so the look stays the same either way.
+   renderer.toneMapping=BASE_TONE;
    rainPass.renderScene(scene,camera);
    rainPass.composite(timeSec,effRain,speedKmh,lightningFlash);
+   if(snowPass&&snowAccum>0.02)snowPass.composite(timeSec,snowAccum*(0.55+0.45*cur.snow),0.3+snowGust*0.7);
   }else{
-   renderer.render(scene,camera);
+   postfx.setMood({rain:cur.rain,wet:cur.wet,night:state.tod==='night',exposure:renderer.toneMappingExposure,time:timeSec});
+   renderer.toneMapping=postfxActive()?THREE.NoToneMapping:BASE_TONE;
+   if(!postfx.render(timeSec))renderer.render(scene,camera);
+   if(snowPass&&snowAccum>0.02&&(QUALITY_PRESETS[effQuality()]||{}).rainShader!==false)snowPass.composite(timeSec,snowAccum*(0.55+0.45*cur.snow),0.3+snowGust*0.7);
   }
  }catch(err){
   console.error('[tick] render error:',err);
@@ -3976,14 +4790,18 @@ function resize(){
  camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();
  sizeDrops();
  if(rainPass)rainPass.resize();
+ if(snowPass)snowPass.resize();
+ postfx.setSize(innerWidth,innerHeight,renderer.getPixelRatio());
 }
 addEventListener('resize',resize);
 addEventListener('orientationchange',()=>setTimeout(resize,120));
 
 /* ============ boot ============ */
 rainPass = new RainShaderPass(renderer);
+snowPass = new SnowShaderPass(renderer);
 qualityMgr = new QualityManager(renderer, sunLight, rainPass);
 qualityMgr.apply('AUTO');
+postfx.apply(effQuality());
 // Probe the display's real refresh rate (120Hz/144Hz/60Hz) so the autotuner
 // targets the panel's max instead of assuming 60fps — on a 120Hz M5 Max the
 // game now actually pushes for 120fps rather than settling at 60.
