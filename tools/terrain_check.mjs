@@ -1,7 +1,10 @@
 import fs from 'fs';
-import * as THREE from '/home/user/Formula-one-Polygon/node_modules/three/build/three.module.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
+const __ROOT__=path.dirname(path.dirname(fileURLToPath(import.meta.url)))+path.sep;
+import * as THREE from '../node_modules/three/build/three.module.js';
 
-const SRC = '/home/user/Formula-one-Polygon/src/game.js';
+const SRC = path.join(__ROOT__, 'src/game.js');
 const game = fs.readFileSync(SRC, 'utf8');
 const slice = (startRe, endRe, name) => {
   const a = game.search(startRe); if (a < 0) throw new Error('start ' + name);
@@ -19,11 +22,11 @@ globalThis.window = { devicePixelRatio: 1, innerWidth: 1000, innerHeight: 800 };
 const tex = { repeat: { set() {} }, anisotropy: 0 };
 const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
 
-const TRACKS = (await import('/home/user/Formula-one-Polygon/src/tracks.js')).TRACKS;
+const TRACKS = (await import(new URL('../src/tracks.js', import.meta.url).href)).TRACKS;
 const name = process.env.TRACK || 'Spa-Francorchamps';
 const q = process.env.QUAL || 'HIGH';
 const def = { ...TRACKS.find(t => t.name === name) };
-const file = `/home/user/Formula-one-Polygon/public/data/circuits/${def.openf1CircuitKey}.json`;
+const file = path.join(__ROOT__, 'public/data/circuits', `${def.openf1CircuitKey}.json`);
 if (fs.existsSync(file)) def.realPts = JSON.parse(fs.readFileSync(file, 'utf8'));
 const pts = def.realPts ? def.realPts.map(p => V3(p[0], p[1], p[2])) : def.pts.map(p => V3(p[0], 0, p[1]));
 const curve = new THREE.CatmullRomCurve3(pts, true, 'centripetal', 0.5);

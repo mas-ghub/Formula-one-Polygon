@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+﻿import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { TRACKS } from './tracks.js';
 import { loadRealCircuits } from './circuitData.js';
@@ -22,15 +22,15 @@ const V3=(x,y,z)=>new THREE.Vector3(x,y,z);
 const nowT=()=>performance.now()/1000;
 const wrapA=a=>Math.atan2(Math.sin(a),Math.cos(a));
 const lerpAngle=(a,b,t)=>a+wrapA(b-a)*t;
-function fmtT(t){if(t==null||!isFinite(t))return'—';const m=Math.floor(t/60),s=t-m*60;return m+':'+s.toFixed(3).padStart(6,'0');}
-function fmtG(t){if(t==null)return'—';return'+'+t.toFixed(3);}
-// The concrete graphics tier actually in use — resolves AUTO (which adapts to
+function fmtT(t){if(t==null||!isFinite(t))return'â€”';const m=Math.floor(t/60),s=t-m*60;return m+':'+s.toFixed(3).padStart(6,'0');}
+function fmtG(t){if(t==null)return'â€”';return'+'+t.toFixed(3);}
+// The concrete graphics tier actually in use â€” resolves AUTO (which adapts to
 // the device's measured FPS) down to one of ULTRA/HIGH/MED/LOW for the
 // rendering decisions (ground resolution, prop density, rain shader, etc.).
 function effQuality(){ return (qualityMgr&&qualityMgr.resolvedLevel)?qualityMgr.resolvedLevel():state.quality; }
 
 const state={mode:'boot',trackIdx:0,wx:'sun',tod:'day',laps:3,grid:20,diffMul:0.97,name:'YOU',camMode:0,muted:false,paused:false,zoom: 52,quality:'AUTO'};
-// Time-of-day mood, independent of weather — mainly to give control over how
+// Time-of-day mood, independent of weather â€” mainly to give control over how
 // dark a rainy day reads, without needing a whole night skybox/lighting rig.
 /* Each time of day carries the direction the light comes from as well as its
    strength: a low sun is not just a dimmer sun, it is long shadows, warm
@@ -43,7 +43,7 @@ const TOD={
 const CAM_NAMES=['CHASE','HOOD','HELMET','TV','ORBIT','TOP'];
 
 /* ============ drivers ============ */
-// 2026 season grid — real team colours (OpenF1 / F1 live-timing hexes).
+// 2026 season grid â€” real team colours (OpenF1 / F1 live-timing hexes).
 // [name, team, skill, num, colA, colB, helmet]
 const DRIVERS=[
 ['Lando Norris','McLaren',1.00,1,'#F47600','#47C7FC','#F47600'],
@@ -58,7 +58,7 @@ const DRIVERS=[
 ['Lance Stroll','Aston Martin',0.86,18,'#229971','#CEDC00','#229971'],
 ['Alexander Albon','Williams',0.90,23,'#1868DB','#E8EEF5','#E8EEF5'],
 ['Carlos Sainz','Williams',0.93,55,'#1868DB','#E8EEF5','#1868DB'],
-['Nico Hülkenberg','Audi',0.89,27,'#F50537','#101418','#101418'],
+['Nico HÃ¼lkenberg','Audi',0.89,27,'#F50537','#101418','#101418'],
 ['Gabriel Bortoleto','Audi',0.86,5,'#F50537','#101418','#F50537'],
 ['Pierre Gasly','Alpine',0.90,10,'#00A1E8','#FF87BC','#FF87BC'],
 ['Franco Colapinto','Alpine',0.87,43,'#00A1E8','#FF87BC','#00A1E8'],
@@ -66,14 +66,14 @@ const DRIVERS=[
 ['Oliver Bearman','Haas F1 Team',0.86,87,'#9C9FA2','#E10600','#9C9FA2'],
 ['Liam Lawson','Racing Bulls',0.87,30,'#6C98FF','#F2F2F2','#6C98FF'],
 ['Arvid Lindblad','Racing Bulls',0.84,41,'#6C98FF','#F2F2F2','#F2F2F2'],
-['Sergio Pérez','Cadillac',0.88,11,'#909090','#101418','#101418'],
+['Sergio PÃ©rez','Cadillac',0.88,11,'#909090','#101418','#101418'],
 ['Valtteri Bottas','Cadillac',0.87,77,'#909090','#101418','#909090'],
 ];
 /* ============ driver personas ============
-   agg — how aggressively they attack/commit to overtakes
-   defend — how hard they defend position when attacked (blocking the
+   agg â€” how aggressively they attack/commit to overtakes
+   defend â€” how hard they defend position when attacked (blocking the
             inside line, breaking the slipstream)
-   risk — how often they crack under pressure and make a mistake
+   risk â€” how often they crack under pressure and make a mistake
    The famous names get their real-world styles; everyone else gets a
    sensible default derived from skill. */
 const DRIVER_PERSONA={
@@ -114,7 +114,7 @@ let openF1Drivers = [];
 
 async function loadOpenF1Drivers() {
   // Pre-downloaded roster + local headshot images (see scripts/fetch-openf1-data.mjs)
-  // — instant, no OpenF1 dependency, no rate limiting. This is what ships to players.
+  // â€” instant, no OpenF1 dependency, no rate limiting. This is what ships to players.
   try {
     const res = await fetch(`${import.meta.env.BASE_URL}data/drivers/manifest.json`);
     if (res.ok) {
@@ -265,8 +265,8 @@ function getTrackElevation(u, trackName) {
 }
 
 // Scenery (trees, buildings, boards, grandstands) sits ON the ground mesh,
-// so it must be planted with the terrain heightfield's own bilinear sample —
-// the same surface the eye sees — rather than the raw road height. That is the
+// so it must be planted with the terrain heightfield's own bilinear sample â€”
+// the same surface the eye sees â€” rather than the raw road height. That is the
 // only way a prop on a hillside, an embankment or inside a hairpin loop can
 // be guaranteed to touch down instead of floating over (or sinking under) the
 // slope the road climbs.
@@ -285,7 +285,7 @@ function getTrackHAtCoords(x, z) {
   return bestH;
 }
 
-// Cars, by contrast, must sit on the actual road surface — never offset by
+// Cars, by contrast, must sit on the actual road surface â€” never offset by
 // the ground mesh's clearance, or they sink below the track and disappear.
 function getRoadHAtCoords(x, z) {
   if (!T || !T.samples) return 0;
@@ -328,7 +328,7 @@ refresh(){try{
   if(name.includes('enhanced'))s+=40;
   if(name.includes('online'))s+=25;
   if(name.includes('multilingual'))s+=20;
-  // Prefer a male-sounding voice for the commentator — a broadcast-caller
+  // Prefer a male-sounding voice for the commentator â€” a broadcast-caller
   // baritone reads more like a real F1 broadcast. Explicit "male"/"female"
   // tags win outright; otherwise fall back to common per-platform voice names.
   if(/\bmale\b/.test(name)&&!/female/.test(name))s+=300;
@@ -348,7 +348,7 @@ say(text,force,opts){
   const u=new SpeechSynthesisUtterance(text);
   if(this.voice)u.voice=this.voice;
   u.lang=(this.voice&&this.voice.lang)||'en-GB';
-  // A punchier baseline rate/pitch than a flat narrator — individual lines
+  // A punchier baseline rate/pitch than a flat narrator â€” individual lines
   // (lights out, overtakes, crashes) already push these higher still for
   // their moment, this just raises the resting energy level between them.
   u.rate=(opts&&opts.rate!=null)?opts.rate:1.06;
@@ -358,33 +358,33 @@ say(text,force,opts){
  }catch(e){}}};
 Speech.init();
 const LINES={
-start:['Lights out and away we go!','And it is lights out — we are racing!'],
-overtake:['Lovely move! Up to P{n}!','She is through — P{n}!','Down the inside, and it sticks — P{n}!'],
-podium:['That is a podium position — brilliant driving!'],
+start:['Lights out and away we go!','And it is lights out â€” we are racing!'],
+overtake:['Lovely move! Up to P{n}!','She is through â€” P{n}!','Down the inside, and it sticks â€” P{n}!'],
+podium:['That is a podium position â€” brilliant driving!'],
 lead:['You are leading this Grand Prix. Keep it clean.'],
-fastest:['Fastest lap of the race — stunning pace.'],
+fastest:['Fastest lap of the race â€” stunning pace.'],
 final:['Final lap! Give it everything you have left.'],
 win:['You win the Grand Prix! What a drive!'],
-finish:['Chequered flag! A superb drive to P{n}.','Chequered flag! P{n} — the team is delighted.'],
+finish:['Chequered flag! A superb drive to P{n}.','Chequered flag! P{n} â€” the team is delighted.'],
 hit:['Ooh, heavy contact! She is still running, keep it together.'],
 crash:['Oh no! They have come together!','Contact! Big moment in the midfield!','Ooh, that was a heavy hit!'],
-lost:['{d} gets back through — you are down to P{n}.','And {d} retakes the position!','{d} sweeps past! Down to P{n} you go.'],
-close:['They are side by side into the corner!','This is brilliant racing — door to door!','The crowd is on their feet, side by side!'],
-rain:['The track is treacherous out there now.','Rain is lashing down — keep it on the black stuff.','This is a proper wet-weather test!'],
-finishClose:['What a finish! Absolute scenes at the line!','They cross the line together — that was a classic!'],
-giveBack:['That overtake was off the track — give the place back to {d}!','{d} is furious! You cut the corner — hand the position back!','Off track! Give {d} the place back right now!','The stewards are watching — hand that place back to {d}!','{d} is absolutely raging! That was illegal — give it back!','You gained an advantage off track — {d} wants it back!'],
-angry:['{d} is livid — he will remember that!','{d} waves his fist — that was a divebomb!','{d} is seeing red after that hit!','{d} is furious — you are on thin ice!'],
-apology:['Stewards are taking a look at that one.','Getting messy out there — the stewards are onto it.'],
+lost:['{d} gets back through â€” you are down to P{n}.','And {d} retakes the position!','{d} sweeps past! Down to P{n} you go.'],
+close:['They are side by side into the corner!','This is brilliant racing â€” door to door!','The crowd is on their feet, side by side!'],
+rain:['The track is treacherous out there now.','Rain is lashing down â€” keep it on the black stuff.','This is a proper wet-weather test!'],
+finishClose:['What a finish! Absolute scenes at the line!','They cross the line together â€” that was a classic!'],
+giveBack:['That overtake was off the track â€” give the place back to {d}!','{d} is furious! You cut the corner â€” hand the position back!','Off track! Give {d} the place back right now!','The stewards are watching â€” hand that place back to {d}!','{d} is absolutely raging! That was illegal â€” give it back!','You gained an advantage off track â€” {d} wants it back!'],
+angry:['{d} is livid â€” he will remember that!','{d} waves his fist â€” that was a divebomb!','{d} is seeing red after that hit!','{d} is furious â€” you are on thin ice!'],
+apology:['Stewards are taking a look at that one.','Getting messy out there â€” the stewards are onto it.'],
 };
 const ATT_LINES=[
 'Welcome to {track}, for the Polygon Grand Prix.',
 '{leader} leads the field around {track} this afternoon.',
-'Just listen to these engines — screaming all the way to fifteen thousand.',
+'Just listen to these engines â€” screaming all the way to fifteen thousand.',
 'Look at those skies above {loc}. A proper test of nerve.',
 'Twenty cars, one apex. This is Polygon GP.'];
 const ENCOURAGE_LINES=[
 'Good luck out there, {name}. Take a breath, trust your lines, and enjoy every lap.',
-'Alright {name}, the team believes in you. Smooth is fast — go get it.',
+'Alright {name}, the team believes in you. Smooth is fast â€” go get it.',
 '{name}, you have got this. Drive your own race and the rest will follow.',
 'Welcome to the grid, {name}. However it goes, be proud of getting out there.',
 '{name}, nice and easy on the first lap, then let it flow. We are right behind you.'];
@@ -426,7 +426,7 @@ void main(){
  vec3 col=mix(horC,topC,t);
  float s=clamp(dot(d,sunD),0.0,1.0);
  // the disc itself, a tight halo around it, and a wide scatter that washes the
- // whole half of sky it sits in — that last term is what sells a low sun
+ // whole half of sky it sits in â€” that last term is what sells a low sun
  col+=sunC*(pow(s,3000.0)*6.0+pow(s,42.0)*0.55+pow(s,4.0)*0.16+pow(s,1.4)*0.07*haze);
  // ground haze: the horizon band brightens and takes the sun's colour when the
  // light is raking through the air sideways
@@ -464,11 +464,11 @@ function mkCanvas(w,h){const c=document.createElement('canvas');c.width=w;c.heig
 
 // High-fidelity asphalt with rubbered racing line & bitumen aggregates.
 // Fine per-pixel speckle alone mips down into a flat grey at any real camera
-// distance — the larger-scale patches, streaks and cracks are what stay
+// distance â€” the larger-scale patches, streaks and cracks are what stay
 // visible and keep the surface from reading as flat.
 const[ac,ag]=mkCanvas(768,768);
 ag.fillStyle='#3c3f43';ag.fillRect(0,0,768,768);
-// Large tonal patches — sun-bleached / resurfaced sections
+// Large tonal patches â€” sun-bleached / resurfaced sections
 for(let i=0;i<26;i++){
   const g=36+Math.random()*26|0;
   ag.fillStyle=`rgba(${g+14},${g+14},${g+16},0.5)`;
@@ -506,7 +506,7 @@ ag.fillRect(240,180,288,12);
 ag.fillRect(240,570,288,12);
 const asphaltT=ctex(ac,true);
 
-// High-fidelity lush grass & soil texture — multi-scale: fine speckle for
+// High-fidelity lush grass & soil texture â€” multi-scale: fine speckle for
 // close-up detail, plus large mottled patches and streaks so it still reads
 // as textured (not a flat green wash) from a normal driving/chase distance.
 const[gc,gg]=mkCanvas(768,768);
@@ -567,7 +567,7 @@ const[cc,cg]=mkCanvas(64,64);
 cg.fillStyle='#d81f2a';cg.fillRect(0,0,64,32);cg.fillStyle='#ecebe6';cg.fillRect(0,32,64,32);
 const curbT=ctex(cc,true);
 
-// Gravel-trap texture — a coarse, speckled tan-and-grey bed of rounded
+// Gravel-trap texture â€” a coarse, speckled tan-and-grey bed of rounded
 // pebbles, so a car that runs wide into the run-off visibly digs into gravel
 // rather than sliding across more asphalt.
 const[glc,glg]=mkCanvas(128,128);
@@ -587,7 +587,7 @@ for(let i=0;i<1600;i++){ // individual pebbles
 }
 const gravelT=ctex(glc,true);gravelT.repeat.set(8,8);
 
-// Water texture — a subtle caustic ripple (blue base + light streaks) used by
+// Water texture â€” a subtle caustic ripple (blue base + light streaks) used by
 // the flat lake/harbour discs, kept mostly for a shimmering highlight layer.
 const[wtc,wtg]=mkCanvas(128,128);
 wtg.fillStyle='#14556f';wtg.fillRect(0,0,128,128);
@@ -599,7 +599,7 @@ for(let i=0;i<40;i++){
 }
 const waterT=ctex(wtc,true);waterT.repeat.set(6,6);
 
-// Tyre tread texture — circumferential grooves and tread blocks over a dark
+// Tyre tread texture â€” circumferential grooves and tread blocks over a dark
 // rubber base, so the wheels read as proper race tyres rather than plain
 // black cylinders when they spin.
 const[tyc,tyg]=mkCanvas(128,64);
@@ -613,7 +613,7 @@ const ADS=[['POLYGON GP','#e9e9e9','#101114'],['APEX FUEL','#e10600','#ffffff'],
  ['STEVE SAUSAGES ARE GGGGGREAT!','#c0392b','#fff3d6'],['LEWIS CHEATS (A LOT) :)','#FFE600','#101114'],['PIT LANE TAKEAWAY','#2e6fd0','#fff'],['BIG STEAMY PUDDINGS','#8e44ad','#fff']];
 const NA=ADS.length;
 const[wc,wg]=mkCanvas(NA*128,128);
-// A small Sparky-the-sparrow silhouette badge in the corner of every board —
+// A small Sparky-the-sparrow silhouette badge in the corner of every board â€”
 // drawn in the same color as that tile's text so it always reads clearly
 // against its own background.
 function drawAdBird(cx,x,y,s,color){
@@ -635,7 +635,7 @@ for(let i=0;i<NA;i++){const[t,bg,fg]=ADS[i];wg.fillStyle=bg;wg.fillRect(i*128,0,
  wg.fillStyle='rgba(0,0,0,.25)';wg.fillRect(i*128,118,128,10);}
 const adsT=ctex(wc,true);
 adsT.repeat.set(1/NA,1);
-// Building facade — richer than a flat grid of squares: panel banding,
+// Building facade â€” richer than a flat grid of squares: panel banding,
 // mullions between windows, and a few warm/cool lit-window tones instead of
 // one flat gold.
 const[bc,bgc]=mkCanvas(128,256);
@@ -667,7 +667,7 @@ function bannerTex(name){const[cn,cx]=mkCanvas(1024,96);
  cx.fillStyle='#f4f1ea';cx.font='italic 700 52px sans-serif';cx.textAlign='center';cx.textBaseline='middle';
  // Mirrored so the banner reads the correct way round when you approach the
  // line (the plane's facing means a normal draw comes out backwards).
- cx.save();cx.translate(512,52);cx.scale(-1,1);cx.fillText(name.toUpperCase()+' · POLYGON GP',0,0,940);cx.restore();
+ cx.save();cx.translate(512,52);cx.scale(-1,1);cx.fillText(name.toUpperCase()+' Â· POLYGON GP',0,0,940);cx.restore();
  return ctex(cn,false);}
 const numCache=new Map();
 function numTex(n){if(numCache.has(n))return numCache.get(n);
@@ -688,7 +688,7 @@ function part(geo,color,x,y,z,rx=0,ry=0,rz=0){geo.rotateZ(rz);geo.rotateY(ry);ge
 // of its own, so anything merged into the body gets a neutral set.
 function ensureUV(geo){if(!geo.attributes.uv){const n=geo.attributes.position.count;
  geo.setAttribute('uv',new THREE.BufferAttribute(new Float32Array(n*2),2));}return geo;}
-// Tapered, forward-drooping beak for the 2026-style nose — a four-sided
+// Tapered, forward-drooping beak for the 2026-style nose â€” a four-sided
 // frustum whose front face is narrower AND drops lower than its back face, so
 // the nose is a sculpted aerodynamic beak rather than a pointy cone.
 function noseGeo(wB,hB,wF,hF,len,drop){
@@ -724,13 +724,13 @@ export function getBodyGeo(colA,colB){
  B(0.09,0.12,0.09,'#202226',0.17,0.26,2.50);            // centre pylons
  B(0.09,0.12,0.09,'#202226',-0.17,0.26,2.50);
  B(0.78,0.2,1.0,colA,0,0.58,0.55);B(0.5,0.1,0.9,'#101114',0,0.66,0.55);
- // Halo protection structure — a real halo shape: a thick front arc running
+ // Halo protection structure â€” a real halo shape: a thick front arc running
  // over the driver's head, a single forward spine down to the nose bulkhead,
  // two rear struts down to the chassis sides, and a rear cross-brace tying
  // those struts together (the "cross piece" that reads clearly even at a
  // distance). The arc sits just above the helmet crown like the real
  // titanium piece, and the helmet shows behind/under it from chase cams.
- // Halo — modelled as the real titanium ring, not a decoration. It is a single
+ // Halo â€” modelled as the real titanium ring, not a decoration. It is a single
  // closed hoop that springs from the chassis on the driver's LEFT, sweeps up and
  // OVER the crown, comes down on the RIGHT, and is bolted forward to the nose
  // bulkhead by one strong pillar. The old version was a half torus laid down in
@@ -755,7 +755,7 @@ export function getBodyGeo(colA,colB){
  {const hg=new THREE.TubeGeometry(new THREE.CatmullRomCurve3(haloPts.map(v => new THREE.Vector3(v[0], v[1], v[2])), false, 'catmullrom', 0.35), 44, HALO_R, 6, false);
   tint(hg, '#1e2024'); P.push(ensureUV(hg));}
  // The forward pillar that carries the load into the chassis, with its foot
- // plate — from the front of the ring, angled down to the bulkhead.
+ // plate â€” from the front of the ring, angled down to the bulkhead.
  C(0.055, 0.07, 0.46, 7, '#1e2024', 0, 0.78, 0.68, 1.02);
  B(0.26, 0.05, 0.22, '#15161a', 0, 0.58, 0.84);
  // Moulded winglets either side of the ring (the aero fairings real teams
@@ -765,7 +765,7 @@ export function getBodyGeo(colA,colB){
   B(0.17, 0.06, 0.24, '#15161a', sx * 0.60, 0.57, 0.28);
  }
  // Rear impact structure behind the driver's head, tying the two sides of the
- // cockpit together — it is what makes the ring read as part of a chassis.
+ // cockpit together â€” it is what makes the ring read as part of a chassis.
  B(0.30, 0.16, 0.10, '#15161a', 0, 0.72, -0.10);
  // Cockpit surround: rim the driver sits inside, mirror stalks and the dashboard
  // under the nose of the halo, so the opening is a cockpit and not a gap.
@@ -813,7 +813,7 @@ export function makeDriverMesh(colA, helmetCol){
   SB(0.1, 0.08, 0.1, '#17181c', -0.18, 0.52, 0.65);
   SB(0.1, 0.08, 0.1, '#17181c', 0.18, 0.52, 0.65);
 
-  // The steering wheel is its own mesh so it can actually turn — a yoke with
+  // The steering wheel is its own mesh so it can actually turn â€” a yoke with
   // a rim, three spokes and a lit display, angled back like the real thing.
   const wheelParts = [];
   const WB = (w,h,d,c,x,y,z,rx=0,ry=0,rz=0)=>wheelParts.push(part(new THREE.BoxGeometry(w,h,d),c,x,y,z,rx,ry,rz));
@@ -836,7 +836,7 @@ export function makeDriverMesh(colA, helmetCol){
   driverGroup.add(suitMesh);
   driverGroup.add(steering);
 
-  // 2. Articulated Head & Aerodynamic Helmet — raised so the crown of the
+  // 2. Articulated Head & Aerodynamic Helmet â€” raised so the crown of the
   // helmet sits just under the halo arc and clearly shows above the cockpit
   // rim, the way it reads on a real car from the chase camera.
   const helmetGroup = new THREE.Group();
@@ -851,7 +851,7 @@ export function makeDriverMesh(colA, helmetCol){
   hParts.push(part(new THREE.CylinderGeometry(0.14, 0.16, 0.08, 8), '#202226', 0, -0.02, 0));
   // Top aero spoiler fin
   hParts.push(part(new THREE.BoxGeometry(0.03, 0.04, 0.16), '#17181c', 0, 0.23, -0.02));
-  // Sun-visour above the eyeline and the onboard camera pod on the crown —
+  // Sun-visour above the eyeline and the onboard camera pod on the crown â€”
   // two features that make a helmet read as an F1 helmet at 100 m.
   hParts.push(part(new THREE.BoxGeometry(0.24, 0.028, 0.09), '#101114', 0, 0.155, 0.10, -0.30));
   hParts.push(part(new THREE.BoxGeometry(0.07, 0.05, 0.07), '#0d0f12', 0, 0.205, -0.03));
@@ -941,7 +941,7 @@ function makeCarMesh(d){
  getAxleGeo();
  const axleF=new THREE.Mesh(axleGeo,matWheel);axleF.rotation.order='YXZ';axleF.position.set(0,0.37,1.62);
  const axleR=new THREE.Mesh(getAxleGeo(),matWheel);axleR.position.set(0,0.37,-1.62);
- // Brake discs sit behind the rims and do NOT spin with the axle — instead
+ // Brake discs sit behind the rims and do NOT spin with the axle â€” instead
  // their emissive colour climbs from cold grey to cherry red under braking
  // and fades back over a couple of seconds, which is what makes a car
  // visibly slowing into a corner read as slowing.
@@ -962,7 +962,7 @@ function makeCarMesh(d){
  g.add(beam,pool,tailGlow);
  const drs=new THREE.Mesh(drsGeo,new THREE.MeshStandardMaterial({color:d.colB,flatShading:true,roughness:0.4}));
  drs.position.set(0,1.0,-2.42);
- // Rear brake light — lights up under braking in any weather, and also
+ // Rear brake light â€” lights up under braking in any weather, and also
  // doubles as the FIA-style flashing rain light when wet and off the
  // brakes, like the real cars' LED strip (a separate light mounted high
  // over the rear wing just read as a stray flashing blob at car scale).
@@ -997,7 +997,7 @@ function makePointsSys(n,blending){
   life:new Float32Array(n),dec:new Float32Array(n),s0:new Float32Array(n),grav:new Float32Array(n)};
 }
 const smoke=makePointsSys(700,THREE.NormalBlending);smoke.pts.renderOrder=3;
-// Big spark budget — sparks are the universal language of an F1 game, so the
+// Big spark budget â€” sparks are the universal language of an F1 game, so the
 // point cloud needs real headroom for a wall of them on a big shunt.
 const sparks=makePointsSys(600,THREE.AdditiveBlending);
 function puff(S,x,y,z,vx,vy,vz,size,life,r,g,b,grav=0){
@@ -1023,7 +1023,7 @@ function updPoints(S,dt,grow){
 }
 function sparkBurst(x,y,z,amt){const n=Math.round(amt*26);
  // Bright yellow-hot core, a stream of orange embers, and a few white-hot
- // flecks — a proper fireworks of the sparks you expect when metal grinds
+ // flecks â€” a proper fireworks of the sparks you expect when metal grinds
  // metal or the car bottoms out, rather than a thin warm drizzle.
  for(let i=0;i<n;i++)
   puff(sparks,x,y,z,rand(-9,9),rand(0.5,9),rand(-9,9),rand(0.6,1.6),rand(.15,.45),1,0.95,0.25,-26);
@@ -1066,7 +1066,7 @@ const rainP=new Float32Array(RAIN_N*3);
 for(let i=0;i<RAIN_N;i++){rainP[i*3]=rand(-30,30);rainP[i*3+1]=rand(0,26);rainP[i*3+2]=rand(-30,30);}
 
 function updWeatherFX(dt){
- // Snow builds up and melts back on a slow time constant — an inch of snow does
+ // Snow builds up and melts back on a slow time constant â€” an inch of snow does
  // not appear or vanish in a frame. Everything visible (flake density, gust
  // strength, how white the road is, how little grip there is) reads off this one
  // number, so the ground and the air always agree with each other.
@@ -1319,7 +1319,7 @@ function buildWorld(idx){
  const halfW=7.0;
  const runoffW=def.runoff!==undefined?def.runoff:6.5;
  // Thinner margins: pull the barrier in closer to the tarmac so you can put
- // all four wheels right at the edge before you hit the wall — the racing
+ // all four wheels right at the edge before you hit the wall â€” the racing
  // line feels tighter and the kerb-edge gamble is more of a real call.
  const wallDist=halfW+runoffW*0.66;
  T={N,def,samples,len,halfW,segLen:len/N,canopyMats:[],flags:[],tvCams:[],lampMats:[]};
@@ -1330,10 +1330,10 @@ function buildWorld(idx){
  // Closest point on the track's actual polyline (segment projection + linear
  // interpolation of elevation along it), not just the closest sample vertex.
  // A hairpin can put two different parts of the lap close together in world
- // space, but projecting onto whichever SEGMENT is truly closest — rather
+ // space, but projecting onto whichever SEGMENT is truly closest â€” rather
  // than snapping to whichever isolated point happens to be nearest, or
- // IDW-blending several points into a mushy average — tracks the real road
- // height precisely (so a thin clearance is enough — no visible step at the
+ // IDW-blending several points into a mushy average â€” tracks the real road
+ // height precisely (so a thin clearance is enough â€” no visible step at the
  // track edge) while still staying continuous through a hairpin.
  //
  // A proper terrain heightfield needs this query at tens of thousands of
@@ -1372,7 +1372,7 @@ function buildWorld(idx){
   if(hashBuckets){
    const gi=Math.floor((x-hashMinX)/hashCell),gj=Math.floor((z-hashMinZ)/hashCell);
    if(gi>=0&&gj>=0&&gi<hashW&&gj<hashH){
-    // Nothing in the 3×3 neighbourhood → provably farther from the track than
+    // Nothing in the 3Ã—3 neighbourhood â†’ provably farther from the track than
     // the distance any segment could have produced, so skip the scan.
     let any=false;
     for(let j=gj-1;j<=gj+1&&!any;j++){
@@ -1404,7 +1404,7 @@ function buildWorld(idx){
     if(tested)return{dist:Math.sqrt(bestD2),y:bestY,far:false};
    }
   }
-  // outside the hash bounds → exact full scan
+  // outside the hash bounds â†’ exact full scan
   for(let i=0;i<N;i+=2){
    const a=samples[i].p,b=samples[(i+2)%N].p;
    const abx=b.x-a.x,abz=b.z-a.z;
@@ -1422,26 +1422,26 @@ function buildWorld(idx){
  T.center={x:cx,z:cz};
  let rad=0;for(const s of samples)rad=Math.max(rad,Math.hypot(s.p.x-cx,s.p.z-cz));rad+=180;
  // ---------------------------------------------------------------------------
- // GROUND / TERRAIN — elevation belongs to the LAND, not just to the tarmac.
+ // GROUND / TERRAIN â€” elevation belongs to the LAND, not just to the tarmac.
  // The old ground was one flat plane grid at ~50 m per cell, while a real
  // OpenF1 circuit changes height every few metres (Spa climbs ~102 m, up to a
  // 14% grade at Eau Rouge/Raidillon), so the road visibly lifted off the grass
  // and looked like it was driving up a ramp of its own. The ground is now a
  // genuine heightfield:
- //   • sampled at a cell size tied to a vertex budget — 6-15 m next to the
+ //   â€¢ sampled at a cell size tied to a vertex budget â€” 6-15 m next to the
  //     road, so the terrain cannot lag the tarmac's slope by much;
- //   • locked to the road bed inside the run-off, propped up where a node
+ //   â€¢ locked to the road bed inside the run-off, propped up where a node
  //     falls between two stretches of the same road and capped so it can never
- //     overtop the ribbon — which keeps a climb on solid ground without burying
+ //     overtop the ribbon â€” which keeps a climb on solid ground without burying
  //     a lower road that passes beside it;
- //   • smoothed by a cone-limited fill, so the dips between sections that loop
+ //   â€¢ smoothed by a cone-limited fill, so the dips between sections that loop
  //     back on each other become embankments instead of slits;
- //   • wrapped by a coarse outer band that shares the grid's exact border
+ //   â€¢ wrapped by a coarse outer band that shares the grid's exact border
  //     vertices (one continuous surface, no T-junction cracks), out to a flat
  //     plane that holds the horizon;
- //   • and given rolling hills of its own, so the countryside is not a dead
+ //   â€¢ and given rolling hills of its own, so the countryside is not a dead
  //     plane that the circuit climbs away from.
- // Everything — props, cars, physics, this mesh — reads height through the
+ // Everything â€” props, cars, physics, this mesh â€” reads height through the
  // same functions, so nothing can disagree with anything else. The surface
  // stays a little under the road so it can never poke through the tarmac; that
  // clearance widens across the run-off, where the walls stand, and narrows
@@ -1450,9 +1450,9 @@ function buildWorld(idx){
  const baseY=trackMinY-4; // the landscape floor
  const nearR=T.latLimit+14,farR=nearR+200;
  // How far below the tarmac the land is held, as a function of distance from
- // the centre line. It has to start at nothing on the asphalt itself — a
+ // the centre line. It has to start at nothing on the asphalt itself â€” a
  // clearance here is a step of earth alongside the road, and a step is exactly
- // what made the cars look like they were flying — then open up across the
+ // what made the cars look like they were flying â€” then open up across the
  // run-off so the surface can never puncture the ribbon, and reach its full
  // depth past the walls where the countryside is free to roll.
  const groundClearance=(lat)=>{
@@ -1472,7 +1472,7 @@ function buildWorld(idx){
  const reliefAmp=clamp((trackMaxY-trackMinY)*0.18,2.5,16);
  // The hills fade out with distance: the outer horizon is a flat plane, and
  // a noise field that kept its full amplitude out there would send ridges
- // poking through it — a floating landscape in the far distance.
+ // poking through it â€” a floating landscape in the far distance.
  const reliefAt=(x,z)=>{
   const dR=Math.hypot(x-cx,z-cz),fade=1-smoothstep01((dR-(farR+260))/900);
   return (vnoise(x*0.0022,z*0.0022)*0.65+vnoise(x*0.0061+11.3,z*0.0061-7.7)*0.28+vnoise(x*0.019-3.1,z*0.019+5.3)*0.07)*reliefAmp*fade;
@@ -1480,13 +1480,13 @@ function buildWorld(idx){
  // --- support raise / corridor carve ----------------------------------------
  // A heightfield only knows the road where it has nodes, so on a circuit that
  // winds, climbs and doubles back a ribbon can straddle two cells whose heights
- // were read from two different stretches — the tarmac then looks like it is
+ // were read from two different stretches â€” the tarmac then looks like it is
  // driving off a ramp of its own. Two per-cell rules settle it in both
  // directions, and they bracket the height rather than replace it:
- //   • FLOOR — the land under a stretch of road is propped up to that road's
+ //   â€¢ FLOOR â€” the land under a stretch of road is propped up to that road's
  //     bed. This is what stops the tarmac floating on a hillside, and what
  //     turns the empty space inside a loop into a supportable embankment.
- //   • CEILING — a cell a road runs over stays at or below that road's
+ //   â€¢ CEILING â€” a cell a road runs over stays at or below that road's
  //     surface, because tarmac and run-off are a flat band and ground higher
  //     than them would punch straight through the track. Where two ribbons
  //     overlap in plan view (a hairpin passing a climb, a road under a
@@ -1546,7 +1546,7 @@ function buildWorld(idx){
   if(fi<0||fj<0||fi>supW-1||fj>supH-1)return sentinel;
   return m[Math.min(Math.floor(fj),supH-1)*supW+Math.min(Math.floor(fi),supW-1)];
  };
- // Exact terrain height at any world point (no cache) — what the meshes and
+ // Exact terrain height at any world point (no cache) â€” what the meshes and
  // the fill are built from. Raw terrain is the nearest stretch's bed, blended
  // out to rolling hills; the two support maps then bracket it.
  const rawTerrainAt=(x,z)=>{
@@ -1594,7 +1594,7 @@ function buildWorld(idx){
  // sections that loop back on each other into embankments and spreads every
  // support raise into a slope instead of a step. Each sweep is bracketed by the
  // two maps, so an embankment stops exactly at the corridor it runs into
- // instead of being smoothed over the track — or into a hill a tunnel passes
+ // instead of being smoothed over the track â€” or into a hill a tunnel passes
  // through.
  const groundRelief=0.62;
  const gridFill2=(g,fn,maxCell)=>{
@@ -1660,7 +1660,7 @@ function buildWorld(idx){
  // --- meshes ----------------------------------------------------------------
  const groundMat=new THREE.MeshStandardMaterial({map:grassT,bumpMap:grassBumpT,bumpScale:0.4,color:def.grass,roughness:1,polygonOffset:true,polygonOffsetFactor:4,polygonOffsetUnits:4});
  groundMat.envMapIntensity=0.25;
- // Textures tile at a constant real-world size (≈38 m per tile, the scale the
+ // Textures tile at a constant real-world size (â‰ˆ38 m per tile, the scale the
  // old full-circuit plane produced) rather than stretching over the extent.
  const GROUND_UV=38;
  const groundUVs=(pos)=>{
@@ -1773,7 +1773,7 @@ function buildWorld(idx){
  // The rendered surface is a fine heightfield plus a coarse ring band, and a
  // bilinear read of the fine grid alone disagrees with the band badly at the
  // scale of the band's 100 m triangles. So build a second, coarse grid over the
- // whole ground extent — sampling THAT agrees with what is drawn everywhere,
+ // whole ground extent â€” sampling THAT agrees with what is drawn everywhere,
  // because it is filled from exactly the same numbers the band was.
  const coarseCell=Math.max(48,fineCell*4);
  const cSpan=Math.max(groundSize,rad*2+400);
@@ -1798,7 +1798,7 @@ function buildWorld(idx){
   return sampleGrid(coarseG,x,z);
  };
  // From here on, "what is the ground" means "what is the ground the player can
- // see" — raw terrain is only used to build the meshes.
+ // see" â€” raw terrain is only used to build the meshes.
  terrainHeightAt=surfaceHeightAt;
  T.terrainSample=surfaceHeightAt;
  T.trueTrackHeightAt=(x,z)=>nearestTrackY(x,z).y; // what cars sit on (no clearance)
@@ -1864,7 +1864,7 @@ function buildWorld(idx){
    if(Math.abs(samples[i].curv)<0.010)continue;
    const s=samples[i],s2=samples[(i+1)%N];
    for(const sg of[1,-1]){
-    // Raised, ribbed FIA kerb — the outer edge steps up and down in a sawtooth
+    // Raised, ribbed FIA kerb â€” the outer edge steps up and down in a sawtooth
     // along the kerb's length (one rib ~1.2m) so it reads as bumpy, not flat.
     const ribA=(Math.floor(s.cum/1.2)%2)?0.18:0.0;
     const ribB=(Math.floor(s2.cum/1.2)%2)?0.18:0.0;
@@ -1951,7 +1951,7 @@ function buildWorld(idx){
   world.add(wallMesh);
  }
 
- // 5. (removed — the raised catch-fence girders that used to line the track
+ // 5. (removed â€” the raised catch-fence girders that used to line the track
  //     here are gone; the low red/white barrier ribbon remains as the boundary)
 
  // 6. Grid Starting Slots
@@ -2028,7 +2028,7 @@ function buildWorld(idx){
 
  const dummy=new THREE.Object3D();
 
- // 8. Trackside Sponsor Billboards (Clean Straightaway Placements) — each
+ // 8. Trackside Sponsor Billboards (Clean Straightaway Placements) â€” each
  // board stands on two wooden posts (real signpost legs) and carries one ad
  // tile from the strip (`adsT` holds all of them side by side; each board
  // uses a clone with a different .offset so it shows a single ad).
@@ -2046,7 +2046,7 @@ function buildWorld(idx){
    const by=Math.max(terrainHeightAt(bx,bz),_sv.y-0.4);
    const w=new THREE.Mesh(new THREE.BoxGeometry(11,2.6,0.35),am);
    w.position.set(bx,by+1.45,bz);w.rotation.y=yaw;w.castShadow=true;world.add(w);
-   // Wooden legs — one either end, angled slightly out, from the ground up to
+   // Wooden legs â€” one either end, angled slightly out, from the ground up to
    // the board's underside (real hoarding legs rather than a floating panel).
    const lx=Math.cos(yaw),lz=-Math.sin(yaw); // board's local width direction
    for(const s of[1,-1]){
@@ -2074,7 +2074,7 @@ function buildWorld(idx){
    
    // Grandstands are deliberately placed at high-curvature (hairpin-ish)
    // points, which is exactly where a real circuit is most likely to loop
-   // back close to itself — the ground terrain there can end up reading its
+   // back close to itself â€” the ground terrain there can end up reading its
    // height from that OTHER nearby section instead of this one, burying or
    // detaching the stand from the terrain beneath it. Require a much larger
    // clearance so grandstands only land somewhere the surrounding terrain
@@ -2143,7 +2143,7 @@ function buildWorld(idx){
      flag.userData.ph=rand(0,9);world.add(flag);T.flags.push(flag);
    }
   }
-  // Main-straight grandstands — this is where the bulk of spectators sit at
+  // Main-straight grandstands â€” this is where the bulk of spectators sit at
   // a real GP: one stand on each side of the start/finish straight, fronted
   // toward the racing line, so the grid launch reads as a packed stadium.
   for(const [si,sd] of [[N-16,-1],[20,1]]){
@@ -2203,7 +2203,7 @@ function buildWorld(idx){
    crowdData.forEach((p,i)=>{
      cCol.setHSL(Math.random(), rand(0.6, 0.9), rand(0.35, 0.65));
      cm.setColorAt(i,cCol);
-     // Set the real position/rotation now, at creation — don't rely solely
+     // Set the real position/rotation now, at creation â€” don't rely solely
      // on the ambient-animation loop to place them on their first frame.
      cDummy.position.set(p.x,p.y,p.z);cDummy.rotation.set(0,p.yaw,0);cDummy.updateMatrix();
      cm.setMatrixAt(i,cDummy.matrix);
@@ -2214,7 +2214,7 @@ function buildWorld(idx){
  }
 
 
- // 9b. Tyre barriers at corner outsides — stacked red/white/blue tyre walls
+ // 9b. Tyre barriers at corner outsides â€” stacked red/white/blue tyre walls
  //     like real circuits use to absorb impacts at the apex runoff.
  {
   const tyreGeo=new THREE.CylinderGeometry(0.55,0.55,0.5,10);
@@ -2247,10 +2247,10 @@ function buildWorld(idx){
   if(tk>0){tyreMesh.count=tk;tyreMesh.instanceMatrix.needsUpdate=true;tyreMesh.castShadow=true;world.add(tyreMesh);}
  }
 
- // 9b2. Gravel traps — a coarse, textured gravel bed in the run-off on the
+ // 9b2. Gravel traps â€” a coarse, textured gravel bed in the run-off on the
  //      outside of the sharper corners, exactly where real circuits throw the
  //      gravel. Built as a *continuous patch* spanning the whole run-off band
- //      (halfW → wallDist) over each qualifying high-curvature stretch, so a
+ //      (halfW â†’ wallDist) over each qualifying high-curvature stretch, so a
  //      car running wide visibly digs into gravel. `T.gravelMask` marks the
  //      samples this applies to so the physics can slow a car that's in it.
  {
@@ -2297,7 +2297,7 @@ function buildWorld(idx){
   }
  }
 
- // 9c. DRS zone boards — the green boards beside the straights, exactly where
+ // 9c. DRS zone boards â€” the green boards beside the straights, exactly where
  //     the in-game DRS activation logic actually allows the wing to open.
  {
   const[dcn,dcx]=mkCanvas(256,96);
@@ -2305,7 +2305,7 @@ function buildWorld(idx){
   dcx.strokeStyle='#ffffff';dcx.lineWidth=6;dcx.strokeRect(4,4,248,88);
   dcx.fillStyle='#ffffff';dcx.font='700 46px sans-serif';dcx.textAlign='center';dcx.textBaseline='middle';
   dcx.fillText('DRS',128,42);
-  dcx.fillStyle='#ffe600';dcx.font='700 18px sans-serif';dcx.fillText('▼ ZONE ▼',128,80);
+  dcx.fillStyle='#ffe600';dcx.font='700 18px sans-serif';dcx.fillText('â–¼ ZONE â–¼',128,80);
   const drsTex=ctex(dcn,false);
   const drsMat=new THREE.MeshStandardMaterial({map:drsTex,roughness:0.7,side:THREE.DoubleSide});
   let lastB=-999,nB=0;
@@ -2362,7 +2362,7 @@ function buildWorld(idx){
  }
 
  const propDensity=(QUALITY_PRESETS[effQuality()]||{}).propDensity!=null?QUALITY_PRESETS[effQuality()].propDensity:1;
- // 10. Trees & Scenery (Far away from track edges) — three distinct species
+ // 10. Trees & Scenery (Far away from track edges) â€” three distinct species
  // (conifer / round broadleaf / slender poplar) mixed by theme, instead of
  // one repeated cone, so the scenery doesn't look so uniform.
  {
@@ -2384,7 +2384,7 @@ function buildWorld(idx){
   const speciesIdx=()=>{const r=Math.random();let acc=0;for(let i=0;i<weights.length;i++){acc+=weights[i];if(r<=acc)return i;}return weights.length-1;};
   // Scatter in a band alongside the track itself (by picking a point along
   // the lap and offsetting laterally a bounded amount) rather than uniformly
-  // across the whole huge bounding square — otherwise nearly everything
+  // across the whole huge bounding square â€” otherwise nearly everything
   // lands far from the road, leaving a wide empty margin right beside it.
   while(k<nT&&tries<4000){tries++;
    const ts=samples[Math.floor(Math.random()*N)];
@@ -2392,7 +2392,7 @@ function buildWorld(idx){
    const lat=rand(T.latLimit+3,T.latLimit+55);
    const x=ts.p.x+ts.n.x*lat*side,z=ts.p.z+ts.n.z*lat*side;
    // The offset above only guarantees clearance from THIS sample's own
-   // stretch of track — at a hairpin or chicane, that same (x,z) can still
+   // stretch of track â€” at a hairpin or chicane, that same (x,z) can still
    // land right next to a completely different part of the lap that loops
    // back nearby. Validate against the true closest point on the whole
    // track before accepting it.
@@ -2420,7 +2420,7 @@ function buildWorld(idx){
   }
  }
 
- // 11. City Buildings for Street Tracks — a boxy tower plus an inset rooftop
+ // 11. City Buildings for Street Tracks â€” a boxy tower plus an inset rooftop
  // cap (and, on the tallest ones, an antenna) so the skyline reads as modern
  // architecture rather than bare rectangular blocks.
  {
@@ -2445,7 +2445,7 @@ function buildWorld(idx){
    const lat=rand(latMin,latMin+90);
    const x=ts.p.x+ts.n.x*lat*side,z=ts.p.z+ts.n.z*lat*side;
    // As with the trees: clearance from this one sample doesn't guarantee
-   // clearance from the whole track — a hairpin can loop back close by.
+   // clearance from the whole track â€” a hairpin can loop back close by.
    // Validate against the true nearest point on the track before placing it.
    if(minTrackDist(x,z)<latMin)continue;
    const elevation=getTrackHAtCoords(x,z);
@@ -2471,7 +2471,7 @@ function buildWorld(idx){
   antennas.count=antCount;world.add(antennas);
  }
 
- // 12. Puddles — reflective patches on straighter sections, shown when wet
+ // 12. Puddles â€” reflective patches on straighter sections, shown when wet
  {
   const puddleDefs=[];let lastPI=-999;
   for(let i=0;i<N;i+=17){
@@ -2497,7 +2497,7 @@ function buildWorld(idx){
   }else T.puddleMat=null;
  }
 
- // 13. Lake / harbour water — a flat, reflective water disc in the infield for
+ // 13. Lake / harbour water â€” a flat, reflective water disc in the infield for
  //     circuits that actually run beside water (Albert Park encircles a lake;
  //     Suzuka has parkland water). Computes a radius that always stays inside
  //     the lap so it can never spill onto the tarmac.
@@ -2515,7 +2515,7 @@ function buildWorld(idx){
   const sg=(i/90)%2?1:-1;sampleF(i);
   const x=_sv.x+_sn.x*(T.latLimit+12)*sg,z=_sv.z+_sn.z*(T.latLimit+12)*sg;
   // The post stands on the GROUND, twelve metres of run-off away from the
-  // tarmac — so its datum has to be the terrain height there, not the road
+  // tarmac â€” so its datum has to be the terrain height there, not the road
   // height. On a hillside the difference is several metres, which is exactly
   // the "everything is hovering" tell.
   const gy=terrainHeightAt(x,z), ry=_sv.y;
@@ -2523,14 +2523,14 @@ function buildWorld(idx){
   pole.position.set(x,gy+3.45,z);pole.castShadow=true;world.add(pole);
   const box=new THREE.Mesh(new THREE.BoxGeometry(0.9,0.5,0.7),new THREE.MeshStandardMaterial({color:0x14161a}));
   box.position.set(x,gy+7.2,z);box.lookAt(_sv.x,ry+1,_sv.z);world.add(box);
-  // Marshal post flag — the yellow/red flag waved from the observation tower.
+  // Marshal post flag â€” the yellow/red flag waved from the observation tower.
   const mflag=new THREE.Mesh(new THREE.PlaneGeometry(1.5,0.95),new THREE.MeshStandardMaterial({color:pick([0xe10600,0xf2d13d,0x2e6fd0,0xe9e9e9]),side:THREE.DoubleSide,roughness:0.7}));
   mflag.position.set(x+0.75,gy+7.55,z);mflag.userData.ph=rand(0,9);world.add(mflag);T.flags.push(mflag);
    T.tvCams.push(V3(x,gy+6.6,z));
  }
 
- // 14. Tunnel — a covered section over a stretch of track (used by Monaco, the
- //     Portier→Tunnel→Nouvelle Chicane run). Built as an enclosed arch that
+ // 14. Tunnel â€” a covered section over a stretch of track (used by Monaco, the
+ //     Portierâ†’Tunnelâ†’Nouvelle Chicane run). Built as an enclosed arch that
  //     follows the track's own elevation; `T.tunnel` lets the physics/audio
  //     know when a car is inside so the engine can rumble and the lighting
  //     drops. castShadow on the roof naturally darkens the road underneath.
@@ -2573,7 +2573,7 @@ function buildWorld(idx){
  clearSkids();
 }
 
-/* ============ cars — true heading-based physics, zero auto-steer ============ */
+/* ============ cars â€” true heading-based physics, zero auto-steer ============ */
 let cars=[],player=null;
 const PH={top:79,eng:20,brk:26,drag:0.00115};
 function makeCar(d,isPlayer){
@@ -2629,7 +2629,7 @@ function placeCar(c){
  c.hdg=Math.atan2(_st.x,_st.z);
  c.vx=0;c.vz=0;c.vF=0;
  c.ti=Math.floor(c.f)%T.N;
- // Sit the car on the ACTUAL road surface elevation — not a hardcoded 0.05.
+ // Sit the car on the ACTUAL road surface elevation â€” not a hardcoded 0.05.
  // A grid start on an elevated circuit (Spa, Red Bull Ring, real telemetry
  // circuits with roll) otherwise leaves the whole grid sunk below the
  // tarmac, which reads as "the cars are missing" on the lights-out grid.
@@ -2641,7 +2641,7 @@ function placeCar(c){
 // which is what read as "the cars are flying".
 // The tarmac skin is drawn 0.05 m above the centreline the cars are tracked
  // on, so the car rides with it: wheel bottoms land exactly on the visible
- // surface — no gap to read as "flying", and no sink into the paint.
+ // surface â€” no gap to read as "flying", and no sink into the paint.
  c.mesh.g.position.set(c.x,c.y+0.05,c.z);
  c.mesh.g.rotation.y=c.hdg;
 }
@@ -2760,7 +2760,7 @@ function aiThink(c,dt){
  if(c.stuck>2.6||(Math.abs(mis)>2.35&&Math.abs(vF)<6)){
   c.recT=2.0;c.recPhase=0;c.recSteer=Math.random()<0.5?-0.9:0.9;c.stuck=0;return;
  }
- /* steer toward a look-ahead point on the racing line (with avoidance) —
+ /* steer toward a look-ahead point on the racing line (with avoidance) â€”
     hold the line tightly; only leave it to attack, avoid or defend */
  const dAgg=c.d.agg||0.5,dDef=c.d.defend||0.5,dRk=c.d.risk||0.5;
  const la=6+clamp(vF*0.55,0,34);
@@ -2795,7 +2795,7 @@ function aiThink(c,dt){
    }
   }
  }
- // Risk-takers crack under pressure occasionally — a sloppy line that
+ // Risk-takers crack under pressure occasionally â€” a sloppy line that
  // opens the door for the car behind.
  if(dRk>0.5&&bh&&bh.dist<24&&Math.random()<dt*0.09*dRk){
   latT=clamp(latT+(Math.random()<0.5?-1:1)*rand(0.9,2.2),-(T.halfW-1.0),T.halfW-1.0);
@@ -2834,7 +2834,7 @@ function aiThink(c,dt){
  c.throttle=dv>0.5?1:dv<-1.5?0:0.45;
  c.brake=dv<-4?clamp(-dv*0.14,0,1):0;
 }
-/* Slow-motion cinematic trigger for the player's big hits — a brief time
+/* Slow-motion cinematic trigger for the player's big hits â€” a brief time
    dilation plus a tightened lens so a shunt lands with real drama. */
 let slowMo=0,slowMoDur=0.8;
 /* Damage / "get the energy back" recovery. A severe hit (or being slammed
@@ -2848,8 +2848,8 @@ function triggerDamage(c,sev){
   // Player-only cinematic & commentary while actually racing.
   if(c.isPlayer&&(state.mode==='race'||state.mode==='finished')){
    slowMo=0.8;slowMoDur=0.8;
-   showMsg('MECHANICAL','SPANNER OUT · '+(Math.round(c.crash))+'s','purple',c.crashMax);
-   Speech.say(pick(['Nasty hit — nurse it home!','She is still running, bring it back slowly!']),true,{rate:0.98,pitch:1.02});
+   showMsg('MECHANICAL','SPANNER OUT Â· '+(Math.round(c.crash))+'s','purple',c.crashMax);
+   Speech.say(pick(['Nasty hit â€” nurse it home!','She is still running, bring it back slowly!']),true,{rate:0.98,pitch:1.02});
   }
 }
 function wallHit(c,sgn,imp){
@@ -2906,12 +2906,12 @@ function updCar(c,dt){
  }
  const targetPitch = c.airborne ? clamp(c.vy * 0.035, -0.22, 0.22) : slope;
  c.pitch = damp(c.pitch, targetPitch, 12, dt);
- // Lightweight suspension spring — landings/impacts compress it, then it
+ // Lightweight suspension spring â€” landings/impacts compress it, then it
  // rebounds and settles, on top of a faint speed-linked road-surface jitter.
  c.bounceVel += (-c.bounceOff * 150 - c.bounceVel * 12) * dt;
  c.bounceOff = clamp(c.bounceOff + c.bounceVel * dt, -0.09, 0.09);
 
- // Puddle splashes — a spray of water kicked up when a wet-weather puddle is crossed at speed.
+ // Puddle splashes â€” a spray of water kicked up when a wet-weather puddle is crossed at speed.
  if(cur.wet>0.15 && T.puddles && T.puddles.length && Math.abs(c.vF)>8){
   c.splashCd=(c.splashCd||0)-dt;
   if(c.splashCd<=0){
@@ -2940,10 +2940,10 @@ function updCar(c,dt){
  const grip=(c.airborne?0.04:(cur.grip*surface))*onCurbSlip;
  // The player's car is a competitive-but-not-dominant package: faster than
  // the midfield and backmarkers, but a couple of km/h down on the very
- // fastest drivers (who get PH.top*(0.86+skill*0.13) ≈ up to 0.99×PH.top),
- // so you can't just blast straight past the front-runners — you have to
+ // fastest drivers (who get PH.top*(0.86+skill*0.13) â‰ˆ up to 0.99Ã—PH.top),
+ // so you can't just blast straight past the front-runners â€” you have to
  // use DRS, slipstream and racecraft to get by them.
- // Damaged / recovering: the car is limping — slower and less urgent until
+ // Damaged / recovering: the car is limping â€” slower and less urgent until
  // the spanner countdown finishes and the "energy comes back".
  if(c.crash>0){
   c.crash-=dt;
@@ -2955,17 +2955,17 @@ function updCar(c,dt){
  const dmg=c.crash>0?(1-0.42*Math.min(c.crash/c.crashMax,1)):1;
  const top=PH.top*(c.isPlayer?0.975:(0.86+c.d.skill*0.13))*dmg;
  const sp0=c.vF;
- /* steering → yaw rate (speed-sensitive, grip-limited, no assists) */
+ /* steering â†’ yaw rate (speed-sensitive, grip-limited, no assists) */
  const base=3.2-1.9*clamp(Math.abs(sp0)/PH.top,0,1);
  const cap=46*grip/Math.max(Math.abs(sp0),2);
  const yawF=clamp(0.4+Math.abs(sp0)/3.8,0.4,1)*(sp0<-0.5?-1:1);
- // A real car cannot yaw in place — you need forward speed (or wheelspin from
+ // A real car cannot yaw in place â€” you need forward speed (or wheelspin from
  // a standing start / doughnut) to rotate. Scale the yaw rate by a speed
  // factor so pressing only left/right while stationary does nothing, while a
  // hard launch still lets the rear rotate (doughnuts).
  const rotFac=Math.min(1,clamp(Math.abs(sp0)/6,0,1)+(c.throttle>0.5&&Math.abs(sp0)<17?0.5:0));
  c.hdg-=c.steer*Math.min(base,cap)*yawF*rotFac*dt; /* steer -1 (left) increases hdg, turning left */
- /* velocity in the NEW heading frame → slip appears naturally */
+ /* velocity in the NEW heading frame â†’ slip appears naturally */
  const acc=dt>0?(c.vF-c._pv)/dt:0;
  const fx=Math.sin(c.hdg),fz=Math.cos(c.hdg),rx=-fz,rz=fx;
  let vF=c.vx*fx+c.vz*fz, vR=c.vx*rx+c.vz*rz;
@@ -3074,13 +3074,13 @@ function carCollisions(){
       if(imp>3&&timeSec-A.hitT>0.4&&timeSec-B.hitT>0.4){
        A.hitT=B.hitT=timeSec;
        // Every car-to-car contact throws sparks at the contact point, not
-       // just the player's — the midfield clatters like a real GP.
+       // just the player's â€” the midfield clatters like a real GP.
        sparkBurst((ax+bx)/2,0.55,(az+bz)/2,1+Math.min(imp*0.12,2));
        AudioSys.clank(Math.min(imp*0.09,0.55));
        // Suspension jounce so a hit visibly rocks both cars.
        A.bounceVel=(A.bounceVel||0)-Math.min(imp*0.05,0.28);
        B.bounceVel=(B.bounceVel||0)-Math.min(imp*0.05,0.28);
-       // A real shunt flips both cars into a brief limp-home recovery — you
+       // A real shunt flips both cars into a brief limp-home recovery â€” you
        // can still steer (crash avoidance!) but the spanner is out.
        if(imp>4.6){triggerDamage(A,imp*0.5);triggerDamage(B,imp*0.5);}
        const nearPlayer=(A.isPlayer||B.isPlayer)||(player&&Math.hypot(player.x-(ax+bx)/2,player.z-(az+bz)/2)<24);
@@ -3114,7 +3114,7 @@ function spring(cur,vel,target,k,b,dt){
  return[cur+vel*dt,vel];
 }
 /* The ground under a wheel, sampled at the two contact patches. Its height and
-   its slope give a genuine bump/skip signal — kerbs, painted verges and the
+   its slope give a genuine bump/skip signal â€” kerbs, painted verges and the
    road's own roughness come out of the surface the car is actually driving on
    instead of a sine wave. */
 const bumpAt=(c)=>{
@@ -3161,7 +3161,7 @@ function updCarVisual(c,dt){
  }
  c.wheelRot+=c.vF/0.37*dt*(1+c.wheelspin*2.2);
  // Real cars need a much smaller steering angle to hold the same line at
- // speed — the input (c.steer) is unchanged, but the visible wheel angle
+ // speed â€” the input (c.steer) is unchanged, but the visible wheel angle
  // should shrink as speed rises, not stay fixed regardless of how fast
  // you're going.
  const steerVis=clamp(1-Math.abs(c.vF)/PH.top*0.75,0.22,1);
@@ -3193,14 +3193,14 @@ function updCarVisual(c,dt){
  /* ---- driver motion: the head is on a neck, not on a rail ----------------
     Everything below is driven by MEASURED forces, so a car that is actually
     being driven hard shakes hard and a car cruising does not twitch:
-      yawG   = v² · yaw rate, i.e. the real lateral load in the cockpit
+      yawG   = vÂ² Â· yaw rate, i.e. the real lateral load in the cockpit
       acc    = longitudinal acceleration (braking nods the chin forward)
       vF/vb  = the surface under the front tyres (kerbs, bumps, skids)
       jolt   = an impulse from a wall scrape or a car-to-car thump           */
  if(c.mesh.helmetGroup){
   const yawRate=Math.abs(c._py!==undefined?(c.hdg-c._py)/Math.max(dt,1e-4):0);
   c._py=c.hdg;
-  const yawG=clamp(c.vF*yawRate,-40,40);           // signed, m/s² toward the outside
+  const yawG=clamp(c.vF*yawRate,-40,40);           // signed, m/sÂ² toward the outside
   const gLat=clamp(-yawG*0.09,-1,1);
   const gLon=clamp(-acc*0.055,-1,1);
   const sp01=clamp(Math.abs(c.vF)/PH.top,0,1);
@@ -3236,8 +3236,8 @@ function updCarVisual(c,dt){
 
  if(c.onCurb)p.position.y+=Math.abs(Math.sin(timeSec*38+c.phase))*0.03;
  const sp=Math.abs(c.vF);
- // Low-speed wheelspin — a standing-start launch, or the tight spin the AI
- // does to turn around after going off — used to fall through both smoke
+ // Low-speed wheelspin â€” a standing-start launch, or the tight spin the AI
+ // does to turn around after going off â€” used to fall through both smoke
  // checks below since they require sp>6/sp>5, exactly the speed range where
  // launch/recovery wheelspin actually happens. Big, thick plumes from both
  // rear tires, distinct from (and on top of) the regular skid smoke.
@@ -3274,7 +3274,7 @@ function updCarVisual(c,dt){
     }
    }}
  }
- // Hard-braking tire-lock marks + glowing brake discs — four straight black
+ // Hard-braking tire-lock marks + glowing brake discs â€” four straight black
  // lines under heavy braking read as "locked the rears" instantly.
  if(c.brake>0.55&&sp>26&&!c.offT){
   c.brkAcc=(c.brkAcc||0)+dt;
@@ -3296,14 +3296,14 @@ function updCarVisual(c,dt){
    // Mud chunks!
    smk(bx,0.4,bz,rand(-2,2)-fx*2,rand(2,5),rand(-2,2)-fz*2,rand(2,4),rand(.5,.9),0.38,0.28,0.22);
    smk(bx,0.25,bz,rand(-1,1),rand(0.8,2),rand(-1,1),rand(1,2),rand(.6,1),0.5,0.42,0.3);
-   // Gravel-trap spray — a dry, light-stone rooster tail, distinct from the
+   // Gravel-trap spray â€” a dry, light-stone rooster tail, distinct from the
    // dark mud thrown up on a grass verge.
    if(c.onGravel){
     smk(bx,0.45,bz,rand(-3,3)-fx*3,rand(1.5,3.5),rand(-3,3)-fz*3,rand(1,2),rand(.5,.9),0.72,0.66,0.55);
     smk(bx,0.3,bz,rand(-1.5,1.5),rand(0.6,1.8),rand(-1.5,1.5),rand(0.8,1.6),rand(.6,1),0.6,0.55,0.46);
    }}
  }
- // Wet-weather rooster-tail spray — real F1 cars throw up a lot of visible
+ // Wet-weather rooster-tail spray â€” real F1 cars throw up a lot of visible
  // spray in the rain, worse the harder it's raining and the faster you go,
  // which also does double duty as a visibility hazard for cars behind.
  if(cur.wet>0.3&&sp>10){
@@ -3376,7 +3376,7 @@ const AudioSys={started:false,
   const rf2=ctx.createBiquadFilter();rf2.type='lowpass';rf2.frequency.value=2400;
   this.rg=ctx.createGain();this.rg.gain.value=0;
   this.ro1.connect(rf2);rf2.connect(this.rg);this.rg.connect(this.master);this.ro1.start();
-  // Whole-grid engine roar — a broadband noise bed representing the other
+  // Whole-grid engine roar â€” a broadband noise bed representing the other
   // ~19 cars revving around you, not just your own engine. Loudest on the
   // grid before lights out (a real F1 start is deafening), fading back once
   // the race is under way and the mix should focus on your own car again.
@@ -3384,7 +3384,7 @@ const AudioSys={started:false,
   this.gridf=ctx.createBiquadFilter();this.gridf.type='bandpass';this.gridf.frequency.value=220;this.gridf.Q.value=0.7;
   this.gridg=ctx.createGain();this.gridg.gain.value=0;
   gn.connect(this.gridf);this.gridf.connect(this.gridg);this.gridg.connect(this.master);gn.start();
-  // Tunnel reverb — a short feedback-delay send tapped off the engine bus.
+  // Tunnel reverb â€” a short feedback-delay send tapped off the engine bus.
   // While driving through a covered section the engine is muffled and fed a
   // slap echo, so the tunnel reads as a big enclosed space (a small taste of
   // the real Monaco echo).
@@ -3417,7 +3417,7 @@ const AudioSys={started:false,
   const g=this.ctx.createGain();g.gain.setValueAtTime(Math.min(0.5,0.1+v*0.25),t);
   g.gain.exponentialRampToValueAtTime(0.001,t+0.22);
   o.connect(g);g.connect(this.master);o.start(t);o.stop(t+0.24);},
- // Metal-on-metal "clank" for car-to-car contact — a short, bright square
+ // Metal-on-metal "clank" for car-to-car contact â€” a short, bright square
  // blip that decays fast, so wheel-to-wheel touches read audibly.
  clank(v){if(!this.started)return;const t=this.ctx.currentTime;
   const o=this.ctx.createOscillator();o.type='square';
@@ -3455,7 +3455,7 @@ const AudioSys={started:false,
   this.o3.frequency.setTargetAtTime(f*0.5,t,0.02);
   this.o4.frequency.setTargetAtTime(f*2.03,t,0.02);
   // Inside the tunnel the engine is muffled (lower low-pass) and pushed through
-  // a feedback delay for an enclosed, echoing rumble — the signature Monaco
+  // a feedback delay for an enclosed, echoing rumble â€” the signature Monaco
   // tunnel sound.
   const tun=player.inTunnel?1:0;
   this.eflt.frequency.setTargetAtTime((260+p.throttle*2300+p.audioRpm*1400)*(1-tun*0.5),t,0.03);
@@ -3480,7 +3480,7 @@ const AudioSys={started:false,
 
 /* ============ Title screen theme ============
    A quiet, original moody blues-rock instrumental for the menu/attract
-   screen — its own chord progression, walking bassline and rhythm, not an
+   screen â€” its own chord progression, walking bassline and rhythm, not an
    arrangement of any existing song. Built the same way as the rest of
    AudioSys (raw oscillators/noise through filters and gain envelopes,
    scheduled ahead of the audio clock so JS-thread jitter can't cause
@@ -3489,7 +3489,7 @@ const AudioSys={started:false,
 const TitleTheme={
  playing:false,gain:null,nextNoteTime:0,step:0,barIdx:0,stepDur:0.25,
  // A driving 1970s rock groove in E minor. Eight eighth-notes per bar at
- // ~120bpm (stepDur 0.25s). The progression and melody are ORIGINAL — it
+ // ~120bpm (stepDur 0.25s). The progression and melody are ORIGINAL â€” it
  // captures that 70s F1-broadcast swagger (walking bass, power chords, a
  // backbeat kit, a singable lead) without reproducing any existing song.
  chords:[
@@ -3585,8 +3585,8 @@ const TitleTheme={
 /* ============ cameras (5 modes incl. top-down, active one always labelled) ============ */
 const cam={pos:V3(0,20,0),shake:0,orbA:0,smHdg:0,heliU:0,heliPos:null};
 // Title-screen "director": cuts between a helicopter establishing shot, a
-// close chase cam, a trackside TV angle and a slow orbit — like a real
-// broadcast director cutting live between cameras on the leading pack —
+// close chase cam, a trackside TV angle and a slow orbit â€” like a real
+// broadcast director cutting live between cameras on the leading pack â€”
 // instead of one static flyover, so the attract screen actually looks like
 // a race in progress.
 const director={shot:'heli',timer:5,target:null};
@@ -3626,7 +3626,7 @@ function updCamera(dt){
    camera.position.copy(cam.pos);
    camera.position.x+=rand(-1,1)*sp*0.0012;camera.position.y+=rand(-1,1)*sp*0.0008;
    camera.lookAt(tp.x+fx*6,tp.y+1.2,tp.z+fz*6);
-   // Camera rolls slightly with the car's lateral slip — a live-camera feel.
+   // Camera rolls slightly with the car's lateral slip â€” a live-camera feel.
    // rotateZ rolls around the view axis only, so it can never flip the view.
    const latV=tc.vx*Math.cos(yaw)-tc.vz*Math.sin(yaw);
    camera.rotateZ(clamp(latV*0.012,-0.08,0.08));
@@ -3645,7 +3645,7 @@ function updCamera(dt){
    camera.fov=damp(camera.fov,58,4,dt);camera.updateProjectionMatrix();return;
   }else if(tc&&director.shot==='cine'){
    // A low, slow tracking dolly just ahead of the leader with a shallow
-   // long lens — a clean, cinematic "cracking view" of the racing line.
+   // long lens â€” a clean, cinematic "cracking view" of the racing line.
    const tp=tc.mesh.g.position,yaw=tc.hdg,fx=Math.sin(yaw),fz=Math.cos(yaw);
    cam.cineU=(cam.cineU||0)+dt*0.13;
    const ahead=24+((cam.cineU*24)%46);
@@ -3659,7 +3659,7 @@ function updCamera(dt){
   // Helicopter establishing shot: sweep along the whole circuit from high
   // above. Positions are interpolated between track samples (via sampleF)
   // rather than snapped to the nearest one, and the whole camera position is
-  // then critically damped — real telemetry-derived tracks have some
+  // then critically damped â€” real telemetry-derived tracks have some
   // sample-to-sample noise in their local normal, and swaying the camera
   // along that noisy, rapidly-rotating frame was what made it look "all over
   // the place". A slow, independent world-space drift plus damping fixes it.
@@ -3683,9 +3683,9 @@ function updCamera(dt){
   }
   // Upside-down guard: a real circuit loops back on itself (hairpins,
   // chicanes, the Parabolica), so the look point can end up nearly straight
-  // beneath the camera — lookAt() then flips the orientation through
+  // beneath the camera â€” lookAt() then flips the orientation through
   // vertical and the whole world appears to invert. Never let the view
-  // pitch steeper than ~58° below horizontal: if the raw target would be
+  // pitch steeper than ~58Â° below horizontal: if the raw target would be
   // too steep, lift it until the view stays shallow and stable.
   const hdx=tx-px,hdz=tz-pz;
   const horiz=Math.hypot(hdx,hdz)||1;
@@ -3705,7 +3705,7 @@ function updCamera(dt){
   camera.position.copy(cam.heliPos);
   camera.up.set(0,1,0);
   camera.lookAt(cam.heliLook);
-  // Gentle banking via a roll around the camera's own view axis only —
+  // Gentle banking via a roll around the camera's own view axis only â€”
   // rotateZ never touches the yaw/pitch, so it can't cause a flip.
   camera.rotateZ((swooping?Math.sin(swoopT*Math.PI)*0.14:0)+Math.sin(timeSec*0.35)*0.03);
   camera.fov=damp(camera.fov,swooping?54:50,4,dt);camera.updateProjectionMatrix();return;}
@@ -3722,11 +3722,11 @@ function updCamera(dt){
   camera.lookAt(pp.x+fx*6,pp.y+1.2,pp.z+fz*6);
   tf=clamp(60+sp*0.24,60,80);
  }else if(state.camMode===2){
-  /* Helmet cam — the camera rides ON the driver's head, so it inherits every
+  /* Helmet cam â€” the camera rides ON the driver's head, so it inherits every
      bit of motion the head spring produces: it rolls under lateral load, snaps
      forward under braking, rings after a kerb strike and buzzes with speed.
      The head is followed at less than 1:1 and low-passed, because a faithful
-     head-mounted camera is unwatchable at 300 km/h — this is the version that
+     head-mounted camera is unwatchable at 300 km/h â€” this is the version that
      reads as "real" without making you ill. */
   const yaw=p.hdg,fx=Math.sin(yaw),fz=Math.cos(yaw);
   const hg=p.mesh.helmetGroup;
@@ -3751,7 +3751,7 @@ function updCamera(dt){
   tf=clamp(70+sp*0.16,70,86);
  }else if(state.camMode===1){
   // "T-cam": mounted near the airbox/halo, behind the front axle, like the
-  // real onboard camera — not out ahead of the front wheels. Putting the
+  // real onboard camera â€” not out ahead of the front wheels. Putting the
   // camera forward of the axle (as before) meant a close, wide-FOV view
   // where the steering wheels' close-range parallax visibly swept over the
   // nose on lock; sitting behind and above the wheels with a narrower FOV
@@ -3769,7 +3769,7 @@ function updCamera(dt){
   cam.orbA+=dt*0.4;
   camera.position.set(pp.x+Math.sin(cam.orbA)*13,pp.y+5.5,pp.z+Math.cos(cam.orbA)*13);
   camera.lookAt(pp.x,pp.y+0.8,pp.z);tf=58;
- }else{ /* top-down 2D — car always points up the screen */
+ }else{ /* top-down 2D â€” car always points up the screen */
   cam.smHdg=lerpAngle(cam.smHdg,p.hdg,1-Math.exp(-5*dt));
   const fx=Math.sin(cam.smHdg),fz=Math.cos(cam.smHdg);
   const cx0=pp.x+fx*8,cz0=pp.z+fz*8;
@@ -3829,7 +3829,7 @@ const rpmBars=[];
 let lastPos=0,otCool=0,resultsShown=false,wwT=0;
 let hudRefreshAcc=0;
 // Track-limits "give the place back" state: when the player completes an
-// overtake while off-track, they must hand the position back — the offended
+// overtake while off-track, they must hand the position back â€” the offended
 // driver's face appears on the far left with an angry board, there's a beep,
 // and the commentary demands the place back.
 let gbActive=0,gbCar=null;
@@ -3837,7 +3837,7 @@ const crossSign=new Map(),gbCool=new Map();
 // Per-driver fury scale: every time you offend a driver their anger rises,
 // so the meter fills up and the reaction gets angrier.
 const angerByDriver=new Map();
-const ANGRY='😠';
+const ANGRY='ðŸ˜ ';
 function angerFor(num){return angerByDriver.get(num)||0;}
 function showDriverBoard(o,txt,dur,n){
  const gb=$('giveBack');
@@ -3861,8 +3861,8 @@ function givePlaceBack(o){
  const anger=Math.min(1+(angerByDriver.get(num)||0),5);
  angerByDriver.set(num,(angerByDriver.get(num)||0)+1);
  // Classification penalty: hold the player just behind the offended car for
- // a few seconds (their world position stays, but the race order — timing
- // tower, positions, results — treats the place as handed back).
+ // a few seconds (their world position stays, but the race order â€” timing
+ // tower, positions, results â€” treats the place as handed back).
  player.f=o.f-1.0;if(player.f<0)player.f+=T.N;
  player.lap=o.lap;
  player._pf=player.f; // keep the lap-crossing tracker consistent with the clamp
@@ -3892,7 +3892,7 @@ function updHUD(dt){
  lastPos=p.pos;
 
  // The on-screen numbers (esp. the millisecond timer) don't need a DOM write
- // every rendered frame — at 60Hz the fast-changing digits just read as
+ // every rendered frame â€” at 60Hz the fast-changing digits just read as
  // flicker. Refreshing at ~12Hz is still perfectly responsive and reads as
  // a steady clock instead of a blur.
  hudRefreshAcc+=dt;
@@ -3904,7 +3904,7 @@ function updHUD(dt){
  $('hTime').textContent=p.finished?fmtT(p.finishTime):fmtT(raceT-p.lapStart);
  $('hBest').textContent=fmtT(p.best);
  const ah=cars.find(c=>c.key>p.key&&!c.isPlayer);
- $('hGap').textContent=ah&&Math.abs(p.vF)>8?fmtG((ah.key-p.key)*T.segLen/Math.abs(p.vF)):(p.pos===1?'LEADER':'—');
+ $('hGap').textContent=ah&&Math.abs(p.vF)>8?fmtG((ah.key-p.key)*T.segLen/Math.abs(p.vF)):(p.pos===1?'LEADER':'â€”');
  $('hGear').textContent=p.vF<-0.5?'R':(Math.abs(p.vF)<0.5&&p.throttle===0?'N':p.gear);
  $('hGear').className=p.rpm>0.95?'hot':'';
  $('hSpeed').textContent=Math.round(Math.abs(p.vF)*3.6);
@@ -3918,7 +3918,7 @@ function updHUD(dt){
 
 /* ============ race flow ============ */
 let raceT=0,cdT=0,cdGo=0,posTimer=0,towerRows=null,cdLastOn=0;
-// Timing tower visibility — auto-hidden on small screens where it eats the
+// Timing tower visibility â€” auto-hidden on small screens where it eats the
 // view, with a HUD chip to bring it back (or drop it) at any time.
 let towerHidden=innerWidth<768;
 function applyTowerVisibility(){
@@ -3943,8 +3943,8 @@ function beginRace(){
  const timingTowerEl=$('timingTower');if(timingTowerEl)timingTowerEl.innerHTML='';
  state.mode='countdown';state.paused=false;
  // On-screen buttons are gone, so a touch device without keystrokes needs
- // the tilt/gyro path to actually drive. Auto-engage it here — the START tap
- // is a valid user gesture for iOS gyro permission — and use auto-throttle so
+ // the tilt/gyro path to actually drive. Auto-engage it here â€” the START tap
+ // is a valid user gesture for iOS gyro permission â€” and use auto-throttle so
  // the car is drivable with just tilt-steering and no on-screen gas button.
  if((matchMedia('(pointer:coarse)').matches||navigator.maxTouchPoints>0)&&tiltCtrl.gyroState!=='live'){
   // No on-screen steering/gas buttons anymore, so the device tilt is the
@@ -3952,14 +3952,14 @@ function beginRace(){
   // brake. 'touch' would need buttons; 'auto' leaves no way to brake.
   tiltCtrl.throttleMode='tilt';
   try{tiltCtrl.saveSettings();}catch(e){}
-  // This tap is the user gesture iOS wants, so ask here — but only celebrate
+  // This tap is the user gesture iOS wants, so ask here â€” but only celebrate
   // if the sensor really came alive. When it does not, say so and leave a
   // tappable retry on screen: the old code toasted "GYROSCOPE ACTIVE"
   // unconditionally and the car sat still with no explanation.
   tiltCtrl.enable().then((live)=>{
    if(live){
     hideGyroPrompt();
-    tiltCtrl.showToast('TILT STEERING ON · TILT = GAS / BRAKE',2600);
+    tiltCtrl.showToast('TILT STEERING ON Â· TILT = GAS / BRAKE',2600);
    }else{
     showGyroPrompt();
    }
@@ -3992,7 +3992,7 @@ function updCountdown(dt){
   c.audioRpm=c.isPlayer?clamp(0.12+player.throttle*0.85,0.12,0.97)
    :clamp(0.14+0.4*(0.5+0.5*Math.sin(timeSec*(2.2+c.phase*0.3)+c.phase)),0.12,0.6);
  }
- // placeCar() only resets position/heading — without this the cars keep
+ // placeCar() only resets position/heading â€” without this the cars keep
  // whatever wheel angle/brake-light/suspension pose they had on the last
  // attract-mode frame, frozen through the whole lights sequence, which is
  // why they'd "sort themselves out" the instant the race actually starts.
@@ -4009,7 +4009,7 @@ function updCountdown(dt){
  }
 }
 function onLap(c){
- if(state.mode!=='race'){return;} // attract-mode cars just loop forever — gridPlace() resets laps before a real race
+ if(state.mode!=='race'){return;} // attract-mode cars just loop forever â€” gridPlace() resets laps before a real race
  if(c.lap>state.laps&&!c.finished){
   c.finished=true;c.finishTime=raceT;
   if(c.isPlayer)finishRace();
@@ -4017,8 +4017,8 @@ function onLap(c){
  }
  const lt=raceT-c.lapStart;c.lapStart=raceT;
  // c.lap was just incremented above: on the very first crossing since the
- // grid start it goes 0→1, which is only the short hop from the grid to
- // the line, not a completed lap — a genuine lap-1 time only exists once
+ // grid start it goes 0â†’1, which is only the short hop from the grid to
+ // the line, not a completed lap â€” a genuine lap-1 time only exists once
  // c.lap reaches 2 (the SECOND crossing, line to line). Gating on elapsed
  // time alone was fragile: a slow-starting car easily out-lasted the old
  // 5-second cutoff and got credited with a "fastest lap" for that partial
@@ -4051,13 +4051,13 @@ function showResults(){
  const sorted=[...cars].sort((a,b)=>b.key-a.key);
  const leader=sorted[0];
  $('rTitle').textContent=player.pos===1?'VICTORY':'CHEQUERED FLAG';
- $('rSub').textContent=TRACKS[state.trackIdx].name.toUpperCase()+' · '+WX[state.wx].label+' · '+state.laps+' LAPS';
+ $('rSub').textContent=TRACKS[state.trackIdx].name.toUpperCase()+' Â· '+WX[state.wx].label+' Â· '+state.laps+' LAPS';
  let html='';
  sorted.forEach((c,i)=>{
   let gap;
   if(c.finished&&leader.finished)gap=c===leader?fmtT(c.finishTime):fmtG(c.finishTime-leader.finishTime);
   else gap=c.finished?fmtT(c.finishTime):fmtG((leader.key-c.key)*T.segLen/Math.max(Math.abs(c.vF),15));
-  const bl=c.best?fmtT(c.best):'—';
+  const bl=c.best?fmtT(c.best):'â€”';
   html+=`<div class="rrow${c.isPlayer?' me':''}"><span class="rp">${i+1}</span>
    <span class="sw" style="background:${c.d.colB}"></span>
    <span class="rn">${c.d.name}<small>${c.d.team}</small></span>
@@ -4096,7 +4096,7 @@ function resetPlayer(){
 function updRace(dt){
  raceT+=dt;
  // Commentator excitement meter: fast, on the limit, side-by-side or in
- // the rain → the voice gets faster, higher and more emotional.
+ // the rain â†’ the voice gets faster, higher and more emotional.
  {
   const exT=clamp(0.25
    +(Math.abs(player.vF)/PH.top)*0.35
@@ -4199,7 +4199,7 @@ function updRace(dt){
     if (!seen.has(key)) { row.remove(); towerRows.delete(key); }
    }
    // Sky-F1 broadcast style: the tower is a fixed, transparent feed that
-   // auto-scrolls so YOUR position is always kept in view — whether you're
+   // auto-scrolls so YOUR position is always kept in view â€” whether you're
    // P1 at the top or P20 at the bottom. Centre on the player row.
    const myRow = timingTowerEl.querySelector('.tower-row.me');
    if (myRow) myRow.scrollIntoView({block:'center'});
@@ -4212,7 +4212,7 @@ function updRace(dt){
    else Speech.say(pick(LINES.overtake).replace('{n}',player.pos),false,{rate:1.16,pitch:1.06});
    showMsg('OVERTAKE','P'+player.pos,'green',1.4);
   }else if(player.pos>lastPos&&state.mode==='race'&&otCool<=0&&player.pos>0&&!player.finished){
-   // Lost a place — find who got through and call it with emotion.
+   // Lost a place â€” find who got through and call it with emotion.
    otCool=4;
    exCur=Math.max(exCur,0.6);
    const passer=[...cars].filter(c=>!c.isPlayer&&c.key>player.key).sort((a,b)=>a.key-b.key)[0];
@@ -4221,7 +4221,7 @@ function updRace(dt){
    showMsg('LOST POSITION','P'+player.pos,'red',1.4);
   }
   lastPos=player.pos;
-  // Side-by-side drama — occasional "they are racing wheel to wheel!" call.
+  // Side-by-side drama â€” occasional "they are racing wheel to wheel!" call.
   if(state.mode==='race'&&timeSec-closeT>25){
    let close=false;
    for(const o of cars){if(o.isPlayer)continue;
@@ -4229,7 +4229,7 @@ function updRace(dt){
     if(df*T.segLen<14&&Math.abs(o.lat-player.lat)<4.2&&Math.abs(o.vF)>30&&Math.abs(player.vF)>30){close=true;break;}}
    if(close){closeT=timeSec;exCur=Math.max(exCur,0.7);Speech.say(pick(LINES.close),true,exOpts());}
   }
-  // Wet-weather commentary — a tense, slower line when the rain is heavy.
+  // Wet-weather commentary â€” a tense, slower line when the rain is heavy.
   if(cur.rain>0.5&&timeSec-rainLineT>45&&state.mode==='race'){
    rainLineT=timeSec;Speech.say(pick(LINES.rain),false,exOpts());
   }
@@ -4278,11 +4278,11 @@ function updTitle(dt){
    let gap='';
    if(sorted.length>1&&lead){
     const g=(lead.key-sorted[1].key)*T.segLen/Math.max(Math.abs(sorted[1].vF),15);
-    gap=' · P2 +'+g.toFixed(1)+'s';
+    gap=' Â· P2 +'+g.toFixed(1)+'s';
    }
    el.innerHTML='<i class="live-dot"></i>LIVE&nbsp;&nbsp;'+TRACKS[state.trackIdx].name.toUpperCase()
-    +' · LAP '+Math.max(1,Math.round(lead?lead.lap:0))
-    +' · P1 '+(lead?lead.d.name.toUpperCase():'')+gap;
+    +' Â· LAP '+Math.max(1,Math.round(lead?lead.lap:0))
+    +' Â· P1 '+(lead?lead.d.name.toUpperCase():'')+gap;
   }
  }
 
@@ -4293,7 +4293,7 @@ function updTitle(dt){
   if(demoArmed>0){
    const remain=Math.ceil(6-(nowT()-demoArmed));
    const b=$('demoBanner');
-   if(b){b.classList.remove('hidden');b.textContent='DEMO RACE STARTING IN '+Math.max(0,remain)+' — PRESS ANY KEY TO SKIP';}
+   if(b){b.classList.remove('hidden');b.textContent='DEMO RACE STARTING IN '+Math.max(0,remain)+' â€” PRESS ANY KEY TO SKIP';}
    if(nowT()-demoArmed>=6)startDemo();
   }
  }
@@ -4303,7 +4303,7 @@ let attractT=6;
 // broadcast-style race by itself, with the whole grid (player included)
 // driven by the AI under the director's cameras. Any input returns to menu.
 let demoOn=false,demoArmed=0,lastInput=nowT();
-// Commentator "excitement" meter — drives rate/pitch of emotional lines.
+// Commentator "excitement" meter â€” drives rate/pitch of emotional lines.
 let exCur=0.25,tickAcc=0,closeT=0,rainLineT=0;
 function exOpts(){return{rate:clamp(1.0+exCur*0.32,1.0,1.38),pitch:clamp(1.02+exCur*0.12,1.02,1.15)};}
 function startDemo(){
@@ -4347,7 +4347,7 @@ function toggleFullscreen(){
   if(ex){try{ex.call(d);}catch(e){}}
   return;
  }
- // Entering fullscreen — every vendor prefix so it works on iPad/Android,
+ // Entering fullscreen â€” every vendor prefix so it works on iPad/Android,
  // Firefox and older Chromium. (iPhone Safari has NO DOM fullscreen API, so
  // this path exits empty there and we fall through to the iOS guide below.)
  const req=el.requestFullscreen||el.webkitRequestFullscreen||el.mozRequestFullScreen||el.msRequestFullscreen;
@@ -4356,18 +4356,18 @@ function toggleFullscreen(){
  }
  // Lock to landscape where supported (Android, iPad).
  try{if(screen.orientation&&screen.orientation.lock)screen.orientation.lock('landscape').catch(()=>{});}catch(e){}
- // Already running from a home-screen install → it IS fullscreen.
+ // Already running from a home-screen install â†’ it IS fullscreen.
  if(navigator.standalone){fsToast('FULLSCREEN ACTIVE');return;}
  const t0=navigator.standalone;
  setTimeout(()=>{
   if(isFullscreen()){fsToast('FULLSCREEN ACTIVE');return;}
   // iPhone Safari: no fullscreen API. Point the player at the one thing that
-  // works — installing to the home screen, which the manifest makes launch
+  // works â€” installing to the home screen, which the manifest makes launch
   // truly fullscreen with the bars gone.
   if(isIOS()){
-   fsToast('IPHONE: TAP  ▢ RELOAD / SHARE  ➜  ADD TO HOME SCREEN  FOR TRUE FULLSCREEN');
+   fsToast('IPHONE: TAP  â–¢ RELOAD / SHARE  âžœ  ADD TO HOME SCREEN  FOR TRUE FULLSCREEN');
   }else{
-   fsToast('FULLSCREEN BLOCKED — ROTATE & TRY AGAIN, OR ADD TO HOME SCREEN');
+   fsToast('FULLSCREEN BLOCKED â€” ROTATE & TRY AGAIN, OR ADD TO HOME SCREEN');
   }
  },320);
 }
@@ -4448,7 +4448,7 @@ if($('tTiltCal'))$('tTiltCal').addEventListener('pointerdown',e=>{e.preventDefau
 
 if($('tC'))$('tC').addEventListener('pointerdown',e=>{e.preventDefault();cycleCam();});
 if($('hCamChip'))$('hCamChip').addEventListener('click',e=>{e.preventDefault();cycleCam();});
-// The readable HUD camera chip doubles as the touch "C" — tap to cycle views.
+// The readable HUD camera chip doubles as the touch "C" â€” tap to cycle views.
 if($('hCam'))$('hCam').addEventListener('click',e=>{e.preventDefault();cycleCam();});
 
 if($('tFs'))$('tFs').onclick=toggleFullscreen;
@@ -4465,7 +4465,7 @@ if($('hZoomOut'))$('hZoomOut').onclick=()=>{state.zoom=Math.min(150,state.zoom+8
 // Tilt mode menu buttons & chips
 // --- gyroscope retry prompt -------------------------------------------------
 // Tilt is the only control surface on a phone, so a gyroscope that never
-// delivers data has to be announced — and fixed with a tap, because iOS only
+// delivers data has to be announced â€” and fixed with a tap, because iOS only
 // hands out motion permission inside a user gesture. This stays up until a
 // sensor event actually arrives.
 const _gyroPrompt={show(t){
@@ -4474,19 +4474,19 @@ const _gyroPrompt={show(t){
  el.classList.add('show');
 },hide(){const el=$('gyroPrompt');if(el)el.classList.remove('show');}};
 function showGyroPrompt(){
- _gyroPrompt.show(tiltCtrl.gyroError||'Waiting for the motion sensor…');
+ _gyroPrompt.show(tiltCtrl.gyroError||'Waiting for the motion sensorâ€¦');
 }
 function hideGyroPrompt(){_gyroPrompt.hide();}
 if($('gyroPromptBtn'))$('gyroPromptBtn').onclick=async()=>{
  const ok=await tiltCtrl.enable();
- if(ok){hideGyroPrompt();tiltCtrl.showToast('GYROSCOPE LIVE · TILT TO STEER',2600);}
+ if(ok){hideGyroPrompt();tiltCtrl.showToast('GYROSCOPE LIVE Â· TILT TO STEER',2600);}
  else _gyroPrompt.show((tiltCtrl.gyroError||'Still no sensor data.')+' Tap again to retry.');
 };
 if($('btnTiltMode')){
  $('btnTiltMode').onclick = async (e) => {
    e.preventDefault();
    const ok = await tiltCtrl.enable();
-   if (ok) { hideGyroPrompt(); tiltCtrl.showToast('GYROSCOPE LIVE · TILT TO STEER', 2600); }
+   if (ok) { hideGyroPrompt(); tiltCtrl.showToast('GYROSCOPE LIVE Â· TILT TO STEER', 2600); }
    else { showGyroPrompt(); tiltCtrl.showToast(tiltCtrl.gyroError || 'NO SENSOR DATA FROM THIS DEVICE', 5200); }
  };
 }
@@ -4616,21 +4616,21 @@ function drawTrackPreview(cv,t){
  c.strokeStyle='rgba(0,0,0,.5)';c.lineWidth=1;c.stroke();
 }
 const TRACK_FLAGS={
-'Monza':'🇮🇹','Silverstone':'🇬🇧','Spa-Francorchamps':'🇧🇪','Monaco':'🇲🇨','Red Bull Ring':'🇦🇹',
-'Suzuka':'🇯🇵','Albert Park':'🇦🇺','Shanghai':'🇨🇳','Bahrain International Circuit':'🇧🇭',
-'Jeddah Corniche':'🇸🇦','Miami International Autodrome':'🇺🇸','Circuit Gilles Villeneuve':'🇨🇦',
-'Circuit de Barcelona-Catalunya':'🇪🇸','Hungaroring':'🇭🇺','Circuit Zandvoort':'🇳🇱','Madring':'🇪🇸',
-'Baku City Circuit':'🇦🇿','Sepang':'🇲🇾','Marina Bay':'🇸🇬','Circuit of the Americas':'🇺🇸',
-'Autódromo Hermanos Rodríguez':'🇲🇽','Interlagos':'🇧🇷','Las Vegas Strip Circuit':'🇺🇸',
-'Lusail International Circuit':'🇶🇦','Yas Marina':'🇦🇪'};
+'Monza':'ðŸ‡®ðŸ‡¹','Silverstone':'ðŸ‡¬ðŸ‡§','Spa-Francorchamps':'ðŸ‡§ðŸ‡ª','Monaco':'ðŸ‡²ðŸ‡¨','Red Bull Ring':'ðŸ‡¦ðŸ‡¹',
+'Suzuka':'ðŸ‡¯ðŸ‡µ','Albert Park':'ðŸ‡¦ðŸ‡º','Shanghai':'ðŸ‡¨ðŸ‡³','Bahrain International Circuit':'ðŸ‡§ðŸ‡­',
+'Jeddah Corniche':'ðŸ‡¸ðŸ‡¦','Miami International Autodrome':'ðŸ‡ºðŸ‡¸','Circuit Gilles Villeneuve':'ðŸ‡¨ðŸ‡¦',
+'Circuit de Barcelona-Catalunya':'ðŸ‡ªðŸ‡¸','Hungaroring':'ðŸ‡­ðŸ‡º','Circuit Zandvoort':'ðŸ‡³ðŸ‡±','Madring':'ðŸ‡ªðŸ‡¸',
+'Baku City Circuit':'ðŸ‡¦ðŸ‡¿','Sepang':'ðŸ‡²ðŸ‡¾','Marina Bay':'ðŸ‡¸ðŸ‡¬','Circuit of the Americas':'ðŸ‡ºðŸ‡¸',
+'AutÃ³dromo Hermanos RodrÃ­guez':'ðŸ‡²ðŸ‡½','Interlagos':'ðŸ‡§ðŸ‡·','Las Vegas Strip Circuit':'ðŸ‡ºðŸ‡¸',
+'Lusail International Circuit':'ðŸ‡¶ðŸ‡¦','Yas Marina':'ðŸ‡¦ðŸ‡ª'};
 function updateHero(i){
  const hpv=$('tHeroPv');if(!hpv)return;
  const t=TRACKS[i];
  drawTrackPreview(hpv,t);
  const hn=$('tHeroNameTxt');if(hn)hn.textContent=t.name.toUpperCase();
- const hf=$('tHeroFlag');if(hf)hf.textContent=TRACK_FLAGS[t.name]||'🏁';
- const hm=$('tHeroMeta');if(hm)hm.textContent=`${t.loc} · ${t.desc}`;
- const hq=$('tHeroQual');if(hq)hq.textContent=`LAP RECORD ${t.lapRecord} — ${t.recordHolder}`;
+ const hf=$('tHeroFlag');if(hf)hf.textContent=TRACK_FLAGS[t.name]||'ðŸ';
+ const hm=$('tHeroMeta');if(hm)hm.textContent=`${t.loc} Â· ${t.desc}`;
+ const hq=$('tHeroQual');if(hq)hq.textContent=`LAP RECORD ${t.lapRecord} â€” ${t.recordHolder}`;
 }
 function buildMenu(){
  const dd=$('tTrack');const list=$('tTrackList');const btn=$('tTrackBtn');
@@ -4641,7 +4641,7 @@ function buildMenu(){
   const t=TRACKS[i];
   drawTrackPreview(btnPv,t);
   btnName.textContent=t.name;
-  btnMeta.textContent=`${t.loc} — ${t.desc}`;
+  btnMeta.textContent=`${t.loc} â€” ${t.desc}`;
   updateHero(i);
  }
  function selectTrack(i,rebuild){
@@ -4656,7 +4656,7 @@ function buildMenu(){
   const cv=document.createElement('canvas');cv.width=140;cv.height=70;
   drawTrackPreview(cv,t);
   const info=document.createElement('div');
-  info.innerHTML=`<div class="cn">${TRACK_FLAGS[t.name]||''} ${t.name}</div><div class="cm">${t.loc} — ${t.desc}</div>`;
+  info.innerHTML=`<div class="cn">${TRACK_FLAGS[t.name]||''} ${t.name}</div><div class="cm">${t.loc} â€” ${t.desc}</div>`;
   card.append(cv,info);
   card.onclick=()=>{[...list.children].forEach(x=>x.classList.remove('sel'));card.classList.add('sel');
    selectTrack(i,true);closeList();};
@@ -4681,14 +4681,14 @@ function buildMenu(){
  seg('tDiff',['RELAXED','NORMAL','PRO'],1,i=>state.diffMul=[0.88,0.97,1.05][i]);
  
  const qModes=['AUTO','ULTRA','HIGH','MED','LOW'];
- seg('tQuality',qModes.map(m=>m==='AUTO'?'⚡AUTO':m),0,i=>{
+ seg('tQuality',qModes.map(m=>m==='AUTO'?'âš¡AUTO':m),0,i=>{
    state.quality=qModes[i];
    if(qualityMgr){qualityMgr.current='AUTO';qualityMgr.autoLevel=null;qualityMgr.apply(state.quality);postfx.apply(effQuality());}
    // Rebuild immediately so prop density / terrain resolution changes are
    // visible right away on the title screen, not just next race.
    if(state.mode==='title')buildWorld(state.trackIdx);
  });
- seg('pQuality',qModes.map(m=>m==='AUTO'?'⚡AUTO':m),0,i=>{
+ seg('pQuality',qModes.map(m=>m==='AUTO'?'âš¡AUTO':m),0,i=>{
    state.quality=qModes[i];
    if(qualityMgr){qualityMgr.current='AUTO';qualityMgr.autoLevel=null;qualityMgr.apply(state.quality);postfx.apply(effQuality());}
  });
@@ -4722,7 +4722,7 @@ function tick(){
  requestAnimationFrame(tick);
  const t=nowT();
  let dt=Math.min(t-last,0.05);last=t;
- // Dramatic slow-motion after the player's big hit — time dilates briefly,
+ // Dramatic slow-motion after the player's big hit â€” time dilates briefly,
  // then snaps back, while the camera tightens into the action.
  let tScale=1;
  if(slowMo>0){
@@ -4733,8 +4733,8 @@ function tick(){
  // Feed the auto-quality FPS monitor (no-op unless the UI mode is AUTO).
  if(qualityMgr&&qualityMgr.current==='AUTO'&&state.mode!=='boot') qualityMgr.sample(1/Math.max(dt,0.0001));
  // An uncaught error anywhere in the per-mode update logic used to abort the
- // rest of tick() for every subsequent frame — including the render call
- // below — which would freeze the canvas on its last good frame with no
+ // rest of tick() for every subsequent frame â€” including the render call
+ // below â€” which would freeze the canvas on its last good frame with no
  // visible sign anything was wrong (e.g. attract-mode racing silently
  // dying). Catching here means a bug degrades to a console error instead of
  // a dead screen.
@@ -4760,7 +4760,7 @@ function tick(){
   console.error('[tick] update error:',err);
  }
 
- // Windshield rain — real refraction of the rendered scene, eased off at
+ // Windshield rain â€” real refraction of the rendered scene, eased off at
  // speed (wind clears the glass) and boosted by thunderstorm flashes.
  try{
   const rainShaderOn=(QUALITY_PRESETS[effQuality()]||{}).rainShader!==false;
@@ -4803,7 +4803,7 @@ qualityMgr = new QualityManager(renderer, sunLight, rainPass);
 qualityMgr.apply('AUTO');
 postfx.apply(effQuality());
 // Probe the display's real refresh rate (120Hz/144Hz/60Hz) so the autotuner
-// targets the panel's max instead of assuming 60fps — on a 120Hz M5 Max the
+// targets the panel's max instead of assuming 60fps â€” on a 120Hz M5 Max the
 // game now actually pushes for 120fps rather than settling at 60.
 qualityMgr.init();
 
@@ -4828,7 +4828,7 @@ tiltCtrl.updateUI();
 tick();
 
 // Browsers won't let audio play before a user gesture, so the title theme
-// can't just start at boot — pick it up on whatever the player touches
+// can't just start at boot â€” pick it up on whatever the player touches
 // first (a settings button, a key) while still on the title screen.
 function unlockAudioForTitle(){
  if(!AudioSys.started)AudioSys.start();
