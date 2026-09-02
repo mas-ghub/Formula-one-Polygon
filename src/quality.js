@@ -146,16 +146,20 @@ export class QualityManager {
     // dynamic resolution scale, clamped to sane bounds. This is what lets the
     // tuner trade a little resolution to keep a 120Hz panel at 120fps.
     const dpr = window.devicePixelRatio || 1;
-    const eff = clamp(dpr * cfg.pixelRatio * this.resScale, 0.5, 3);
+    const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent || '') || navigator.maxTouchPoints > 1;
+    // Mobile Safari has a much smaller renderbuffer budget than desktop GL.
+    // A hard 2x ceiling keeps the canvas plus bloom/rain targets inside it;
+    // desktop hardware can still supersample up to 3x.
+    const eff = clamp(dpr * cfg.pixelRatio * this.resScale, 0.5, isMobile ? 2 : 3);
     this.renderer.setPixelRatio(eff);
 
     // Shadow maps — ULTRA uses soft (PCFSoft) shadows at 4K resolution;
     // HIGH/MED get plain PCF; LOW turns shadows off entirely.
     if (cfg.shadows) {
       this.renderer.shadowMap.enabled = true;
-      this.renderer.shadowMap.type = cfg.shadowType === 'soft'
-        ? THREE.PCFSoftShadowMap
-        : THREE.PCFShadowMap;
+      // PCFSoftShadowMap was removed/deprecated by current three.js. PCF is
+      // supported across WebGL implementations and avoids the warning.
+      this.renderer.shadowMap.type = THREE.PCFShadowMap;
       this.sunLight.castShadow = true;
       this.sunLight.shadow.mapSize.set(cfg.shadowSize, cfg.shadowSize);
       if (this.sunLight.shadow.map) {

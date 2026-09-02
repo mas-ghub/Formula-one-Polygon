@@ -60,9 +60,15 @@ export class PostFX {
   setSize(w, h, pr) {
     this._w = w; this._h = h; this._pr = pr;
     if (this.ok) {
-      const pw = Math.max(2, Math.round(w * pr)), ph = Math.max(2, Math.round(h * pr));
-      this.composer.setSize(pw, ph);
-      this.bloom.setSize(pw, ph);
+      // EffectComposer already applies its pixelRatio internally. Passing
+      // physical pixels here multiplied Retina dimensions a second time (an
+      // iPad could attempt enormous half-float/MSAA targets and create an
+      // incomplete framebuffer). Keep the composer ratio in sync with the
+      // renderer, then pass CSS pixels exactly once.
+      this.composer.setPixelRatio(Math.max(0.5, pr || 1));
+      this.composer.setSize(Math.max(2, w), Math.max(2, h));
+      // Composer sizes each pass; calling bloom.setSize with physical pixels
+      // again would duplicate that work and allocation.
     }
   }
   /** quality = resolved tier label. Returns whether the chain is live. */
@@ -80,8 +86,13 @@ export class PostFX {
       // Keep the graded output honest: the renderer itself must not tone map
       // or colour-space-convert what the chain draws to the canvas.
       this.renderer.toneMapping = THREE.NoToneMapping;
+      // The main canvas already has antialiasing. Multisampling this half-float
+      // post target as well is a large, unnecessary allocation and exceeds
+      // WebKit's renderbuffer budget on Retina iPads.
       const rt = new THREE.WebGLRenderTarget(2, 2, {
-        type: THREE.HalfFloatType, samples: this.wanted === 'ULTRA' ? 4 : 0
+        type: THREE.HalfFloatType,
+        samples: 0,
+        depthBuffer: true
       });
       this.composer = new EffectComposer(this.renderer, rt);
       this.composer.renderToScreen = false;

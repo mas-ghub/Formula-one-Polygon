@@ -392,7 +392,7 @@ let lastEncouragedName='';
 
 /* ============ renderer / scene ============ */
 const renderer=new THREE.WebGLRenderer({canvas:$('gl'),antialias:true,powerPreference:'high-performance'});
-renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFShadowMap;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.outputColorSpace=THREE.SRGBColorSpace;
 renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
 const scene=new THREE.Scene();
@@ -3187,6 +3187,10 @@ function updCarVisual(c,dt){
   }
  }
  c.mesh.body.rotation.z=damp(c.mesh.body.rotation.z,clamp(vR*0.011,-0.1,0.1),8,dt);
+ // `acc` used to be local to updCar(), but the body/driver animation runs in
+ // this separate function.  Measure it here from the previous visual frame so
+ // one undefined identifier cannot abort every game tick.
+ const acc=dt>0&&Number.isFinite(c._pv)?(c.vF-c._pv)/dt:0;
  c.mesh.body.rotation.x=damp(c.mesh.body.rotation.x,clamp(-acc*0.0035,-0.05,0.06),6,dt);
  c._pv=c.vF;
 
