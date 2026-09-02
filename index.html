@@ -133,6 +133,10 @@ canvas{display:block;}
 .row2 .sec{flex:1;}
 #tName{width:100%;padding:10px;background:rgba(255,255,255,.04);border:1px solid var(--line);color:var(--txt);font-family:inherit;font-size:13px;font-weight:600;letter-spacing:.06em;outline:none;}
 #tName:focus{border-color:var(--red);}
+#driverProfile{display:flex;align-items:center;gap:10px;margin-top:8px;}
+#driverPhotoPreview{width:54px;height:54px;border-radius:50%;object-fit:cover;background:#17191e;border:2px solid var(--red);}
+#driverPhotoBtn{flex:1;padding:9px;font-size:11px;letter-spacing:.08em;cursor:pointer;}
+#driverPhotoInput{display:none;}
 .tgl{width:100%;padding:10px;border:1px solid var(--line);background:rgba(255,255,255,.03);color:var(--dim);font-family:inherit;font-weight:700;letter-spacing:.18em;cursor:pointer;font-size:11px;transition:all .15s;touch-action:manipulation;}
 .tgl.on{color:var(--green);border-color:#3d6b3c;background:rgba(125,217,123,.08);}
 #tStart{width:100%;margin-top:8px;padding:16px;background:var(--red);color:#fff;border:none;font-family:inherit;font-style:italic;font-weight:700;font-size:20px;letter-spacing:.14em;cursor:pointer;transform:skewX(-6deg);transition:filter .15s,transform .15s;touch-action:manipulation;pointer-events:auto;}
@@ -623,6 +627,11 @@ document.addEventListener('DOMContentLoaded', function() {
       <div class="sec">
         <label>DRIVER NAME</label>
         <input id="tName" maxlength="14" spellcheck="false" value="YOU">
+        <div id="driverProfile">
+          <img id="driverPhotoPreview" alt="Your driver photo">
+          <button id="driverPhotoBtn" type="button">📷 TAKE / CHOOSE DRIVER PHOTO</button>
+          <input id="driverPhotoInput" type="file" accept="image/*" capture="user">
+        </div>
       </div>
       <div class="sec">
         <label>COMMENTARY</label>

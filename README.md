@@ -64,7 +64,7 @@ shader adapted from Martijn Steinrucken's ["Heartfelt"](https://www.shadertoy.co
 drops, not just an overlay.
 - Rain amount scales with the weather preset *and* the player's speed —
   drops build up when slow, and clear off the glass at speed (wind), fading
-  to ~22% of full intensity flat-out.
+  to ~52% of full intensity flat-out so the effect remains visible at speed.
 - **Thunderstorms**: during rain, `updLightning()` schedules random lightning
   strikes — a screen flash plus a genuine brief boost to the scene's sun/hemi
   lighting — paired with a `AudioSys.thunder()` crack-and-rumble sound that's
@@ -121,6 +121,44 @@ on the title screen.
   aggregated from the whole grid's rpm (not just your own car) so the grid
   sounds properly loud before lights out, plus a beep on each starting light
   and a distinct tone at lights-out.
+
+## Current gameplay additions (September 2026)
+
+- **Elevation-aware terrain:** the landscape is a real heightfield supporting
+  the circuit instead of a flat plane beneath an elevated road. Track, props,
+  scenery and collision sampling share the same height authority.
+- **Continuous FIA kerbs:** red/white rumble strips sit in the outer metre of
+  the tarmac, follow road elevation, produce strong suspension/camera rumble
+  and low mechanical audio, and become substantially more slippery when wet.
+- **Improved car presentation:** cleaner rounded tyres/rims without duplicated
+  protruding suspension geometry, correctly placed brake discs, animated
+  driver/head movement and a road-safe helmet camera with speed-responsive FOV.
+- **Damage:** light impacts reduce power for five seconds and display an
+  animated recovery spanner. Severe impacts cause terminal damage, shed visible
+  bodywork debris and end the player's race. Contact and bottoming sparks are
+  short-lived white-hot metal flecks rather than large orange clouds.
+- **Local driver identity:** the player can enter a name and take or choose a
+  portrait. The image is cropped/compressed to 256×256 and stored only in the
+  browser under `polygon_gp_driver_profile_v1`; it is shown as the player's
+  timing-tower headshot and remains available to an installed PWA offline.
+- **Tablet stability and controls:** iOS motion permission has explicit
+  pending/live/error handling and retry UI. Retina render-target dimensions,
+  post-processing MSAA and mobile pixel ratio are constrained to avoid WebGL
+  framebuffer exhaustion.
+- **Rain:** the Heartfelt Shadertoy-derived refraction is used without the old
+  canvas blobs overlaid on top, preserving sharp beads, trails and wet-glass
+  distortion at racing speed.
+- **Trackside presentation:** sponsor hoardings sit safely beyond the barrier,
+  run parallel to the road with their printed face aimed at passing drivers,
+  and use high-anisotropy, gently lifted materials for readability in rain and
+  at dusk. Recognisable modelled birds have bodies, heads, beaks and tails plus
+  shoulder-pivoted wings that alternate energetic flap sequences with glides.
+- **Commentary mood:** race commentary starts from a happy, enthusiastic
+  baseline and adds regular positive atmosphere calls between action events;
+  speed, close racing, weather and incidents raise the delivery further.
+
+Online multiplayer is intentionally not implemented yet; that remains future
+work and will require a shared backend such as Firestore.
 
 ## Roadmap
 

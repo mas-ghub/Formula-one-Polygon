@@ -1,4 +1,4 @@
-﻿import * as THREE from 'three';
+import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { TRACKS } from './tracks.js';
 import { loadRealCircuits } from './circuitData.js';
@@ -29,7 +29,11 @@ function fmtG(t){if(t==null)return'â€”';return'+'+t.toFixed(3);}
 // rendering decisions (ground resolution, prop density, rain shader, etc.).
 function effQuality(){ return (qualityMgr&&qualityMgr.resolvedLevel)?qualityMgr.resolvedLevel():state.quality; }
 
-const state={mode:'boot',trackIdx:0,wx:'sun',tod:'day',laps:3,grid:20,diffMul:0.97,name:'YOU',camMode:0,muted:false,paused:false,zoom: 52,quality:'AUTO'};
+const state={mode:'boot',trackIdx:0,wx:'sun',tod:'day',laps:3,grid:20,diffMul:0.97,name:'YOU',driverPhoto:'',camMode:0,muted:false,paused:false,zoom: 52,quality:'AUTO'};
+const PROFILE_KEY='polygon_gp_driver_profile_v1';
+function loadDriverProfile(){try{const p=JSON.parse(localStorage.getItem(PROFILE_KEY)||'{}');state.name=p.name||'YOU';state.driverPhoto=p.photo||'';}catch(e){}}
+function saveDriverProfile(){try{localStorage.setItem(PROFILE_KEY,JSON.stringify({name:state.name,photo:state.driverPhoto}));}catch(e){console.warn('Driver profile could not be stored',e);}}
+loadDriverProfile();
 // Time-of-day mood, independent of weather â€” mainly to give control over how
 // dark a rainy day reads, without needing a whole night skybox/lighting rig.
 /* Each time of day carries the direction the light comes from as well as its
@@ -213,6 +217,9 @@ function generateFallbackDrivers() {
 }
 
 function getDriverHeadshot(d) {
+  // Player portraits are compressed data URLs stored with the local PWA
+  // profile, so they remain available offline and never leave the device.
+  if (d.headshot && d.headshot.startsWith('data:image/')) return d.headshot;
   if (d.headshot && d.headshot.startsWith('http')) {
     return d.headshot;
   }
@@ -382,6 +389,13 @@ const ATT_LINES=[
 'Just listen to these engines â€” screaming all the way to fifteen thousand.',
 'Look at those skies above {loc}. A proper test of nerve.',
 'Twenty cars, one apex. This is Polygon GP.'];
+const RACE_HYPE_LINES=[
+'What a joy to be here — listen to this crowd and these magnificent cars!',
+'This is why we love Grand Prix racing — speed, commitment and pure theatre!',
+'Absolutely glorious racing today! Every lap is alive with possibility!',
+'The atmosphere is electric — what a privilege to call this race!',
+'Look at the speed out there! This is a wonderful motor race!',
+'Brilliant commitment from the whole field — I am loving every second of this!'];
 const ENCOURAGE_LINES=[
 'Good luck out there, {name}. Take a breath, trust your lines, and enjoy every lap.',
 'Alright {name}, the team believes in you. Smooth is fast â€” go get it.',
@@ -872,37 +886,35 @@ export function makeDriverMesh(colA, helmetCol){
 
 let axleGeo=null, brakeGeo=null;
 export function getAxleGeo(){if(axleGeo&&brakeGeo)return axleGeo;
- // One wheel = a tyre + a bright alloy barrel + a set of radial SPOKES lying in
- // the wheel's Y-Z plane, so the whole thing visibly rotates with `wheelRot`
- // (a plain cylinder gives no visual reference for the spin).
+ // Build one clean wheel at the origin and duplicate it at the two axle ends.
+ // Previously suspension pieces for both sides were merged into this single
+ // wheel and then the whole assembly was duplicated again. Those extra rods
+ // rotated through the tyre and appeared as sharp vertices sticking out.
  const parts=[];
- parts.push(part(new THREE.CylinderGeometry(0.37,0.37,0.34,12),'#17181a',0,0,0,0,0,Math.PI/2));
- parts.push(part(new THREE.CylinderGeometry(0.23,0.23,0.35,10),'#cfd3d8',0,0,0,0,0,Math.PI/2));
- // Hub + a gold centre nut, then 5 spokes radiating across the rim face.
- parts.push(part(new THREE.CylinderGeometry(0.075,0.075,0.37,8),'#aeb3ba',0,0,0,0,0,Math.PI/2));
- parts.push(part(new THREE.CylinderGeometry(0.032,0.032,0.39,8),'#ffd23f',0,0,0,0,0,Math.PI/2));
- for(let s=0;s<5;s++){
-  const a=s*Math.PI*2/5 + 0.35;
-  parts.push(part(new THREE.BoxGeometry(0.045,0.40,0.14),'#e3e7ec',0,Math.cos(a)*0.18,Math.sin(a)*0.18,a,0,0));
+ // Rounded slick tyre, recessed alloy rim and hub. More radial segments remove
+ // the conspicuously faceted twelve-sided outline without making the grid
+ // expensive (all cars share this geometry).
+ parts.push(part(new THREE.CylinderGeometry(0.37,0.37,0.34,24,1,false),'#151619',0,0,0,0,0,Math.PI/2));
+ parts.push(part(new THREE.CylinderGeometry(0.225,0.225,0.352,20,1,false),'#34383e',0,0,0,0,0,Math.PI/2));
+ parts.push(part(new THREE.CylinderGeometry(0.072,0.072,0.365,16),'#aeb3ba',0,0,0,0,0,Math.PI/2));
+ parts.push(part(new THREE.CylinderGeometry(0.030,0.030,0.378,12),'#ffd23f',0,0,0,0,0,Math.PI/2));
+ // Slim spokes stop well inside the 0.225 m rim, so no corner can pierce the
+ // rubber even while the wheels spin and steer.
+ for(let s=0;s<10;s++){
+  const a=s*Math.PI/5;
+  parts.push(part(new THREE.BoxGeometry(0.105,0.26,0.026),'#d5dae0',0,Math.cos(a)*0.125,Math.sin(a)*0.125,a,0,0));
  }
-  // The uprights, pushrod and wishbones are suspension hardware: they turn
- // with the steered wheel rather than spinning with it, so they are merged
- // into a separate geometry that the front axle uses and the rear ignores.
- for(const sx of[1,-1]){
-  parts.push(part(new THREE.BoxGeometry(0.09,0.30,0.20),'#202226',sx*0.79,0.30,0));            // upright
-  parts.push(part(new THREE.CylinderGeometry(0.032,0.032,0.42,6),'#9aa0a8',sx*0.66,0.40,0.10,0,0,Math.PI/2)); // pushrod
-  parts.push(part(new THREE.CylinderGeometry(0.026,0.026,0.34,6),'#787f88',sx*0.64,0.22,-0.12,0,0,Math.PI/2)); // lower wishbone
-  parts.push(part(new THREE.BoxGeometry(0.05,0.16,0.26),'#14161a',sx*0.60,0.37,0));            // brake duct
- }
- const discs=[];
- for(const sx of[1,-1]){
-  const d=new THREE.CylinderGeometry(0.255,0.255,0.05,14);
-  d.rotateZ(Math.PI/2);d.translate(sx*0.735,0,0);tint(d,'#3a2018');discs.push(ensureUV(d));
- }
- const w=mergeGeometries(parts,false);
- const w1=w.clone();w1.translate(-0.82,0,0);const w2=w.clone();w2.translate(0.82,0,0);
- axleGeo=mergeGeometries([w1,w2],false);
- const d1=discs[0].clone();d1.translate(-0.82,0,0);const d2=discs[1].clone();d2.translate(0.82,0,0);
+ const wheel=mergeGeometries(parts,false);
+ const left=wheel.clone();left.translate(-0.82,0,0);
+ const right=wheel.clone();right.translate(0.82,0,0);
+ axleGeo=mergeGeometries([left,right],false);
+
+ // Brake discs are centred once and then placed directly behind each rim.
+ // The old code applied two lateral translations, leaving duplicate discs at
+ // the axle centre and beyond the outside edge of the tyres.
+ const disc=part(new THREE.CylinderGeometry(0.205,0.205,0.045,20), '#3a2018',0,0,0,0,0,Math.PI/2);
+ const d1=disc.clone();d1.translate(-0.82,0,0);
+ const d2=disc.clone();d2.translate(0.82,0,0);
  brakeGeo=mergeGeometries([d1,d2],false);
  return axleGeo;}
 const drsGeo=new THREE.BoxGeometry(1.42,0.03,0.26);
@@ -1000,6 +1012,20 @@ const smoke=makePointsSys(700,THREE.NormalBlending);smoke.pts.renderOrder=3;
 // Big spark budget â€” sparks are the universal language of an F1 game, so the
 // point cloud needs real headroom for a wall of them on a big shunt.
 const sparks=makePointsSys(600,THREE.AdditiveBlending);
+const debris=[];
+function shedCarParts(c){
+ const fx=Math.sin(c.hdg),fz=Math.cos(c.hdg);
+ for(let i=0;i<9;i++){
+  const mat=new THREE.MeshStandardMaterial({color:i%3===0?c.d.colB:(i%2?c.d.colA:0x17181b),roughness:0.55,metalness:0.45});
+  const m=new THREE.Mesh(new THREE.BoxGeometry(rand(.12,.48),rand(.025,.12),rand(.18,.65)),mat);
+  m.position.set(c.x+rand(-.7,.7),c.y+rand(.25,.9),c.z+rand(-1.5,1.5));scene.add(m);
+  debris.push({m,vx:c.vx+rand(-9,9)-fx*4,vy:rand(3,10),vz:c.vz+rand(-9,9)-fz*4,rx:rand(-9,9),rz:rand(-9,9),life:8});
+ }
+}
+function updDebris(dt){for(let i=debris.length-1;i>=0;i--){const d=debris[i];d.life-=dt;d.vy-=18*dt;
+ d.m.position.x+=d.vx*dt;d.m.position.y+=d.vy*dt;d.m.position.z+=d.vz*dt;d.m.rotation.x+=d.rx*dt;d.m.rotation.z+=d.rz*dt;
+ const floor=T?getTrackHAtCoords(d.m.position.x,d.m.position.z):0;if(d.m.position.y<floor+.04){d.m.position.y=floor+.04;d.vy=Math.abs(d.vy)*.18;d.vx*=.82;d.vz*=.82;}
+ if(d.life<=0){scene.remove(d.m);d.m.geometry.dispose();d.m.material.dispose();debris.splice(i,1);}}}
 function puff(S,x,y,z,vx,vy,vz,size,life,r,g,b,grav=0){
  const i=S.i;S.i=(S.i+1)%S.n;
  S.px[i]=x;S.py[i]=y;S.pz[i]=z;S.vx[i]=vx;S.vy[i]=vy;S.vz[i]=vz;
@@ -1021,16 +1047,14 @@ function updPoints(S,dt,grow){
  }
  P.needsUpdate=true;A.needsUpdate=true;Sz.needsUpdate=true;
 }
-function sparkBurst(x,y,z,amt){const n=Math.round(amt*26);
- // Bright yellow-hot core, a stream of orange embers, and a few white-hot
- // flecks â€” a proper fireworks of the sparks you expect when metal grinds
- // metal or the car bottoms out, rather than a thin warm drizzle.
+function sparkBurst(x,y,z,amt){const n=Math.round(amt*18);
+ // Small white-hot metal points with fast ballistic motion and short lives.
+ // The former large orange particles read as a soft fire cloud and bloomed
+ // excessively; these stay crisp, with only a few dimmer cooling embers.
  for(let i=0;i<n;i++)
-  puff(sparks,x,y,z,rand(-9,9),rand(0.5,9),rand(-9,9),rand(0.6,1.6),rand(.15,.45),1,0.95,0.25,-26);
- for(let i=0;i<Math.ceil(n*0.6);i++)
-  puff(sparks,x,y,z,rand(-7,7),rand(2,11),rand(-7,7),rand(1.1,2.6),rand(.35,.75),1,0.5,0.08,-30);
- for(let i=0;i<Math.ceil(n*0.25);i++)
-  puff(sparks,x,y,z,rand(-5,5),rand(1,9),rand(-5,5),rand(0.4,1.1),rand(.12,.3),1,1,0.6,-26);}
+  puff(sparks,x,y,z,rand(-13,13),rand(2,13),rand(-13,13),rand(0.22,0.62),rand(.10,.28),1.0,0.92,0.48,-31);
+ for(let i=0;i<Math.ceil(n*0.28);i++)
+  puff(sparks,x,y,z,rand(-9,9),rand(1,9),rand(-9,9),rand(0.18,0.42),rand(.22,.48),1.0,0.48,0.06,-28);}
 function confetti(x,y,z){for(let i=0;i<130;i++){const c=new THREE.Color().setHSL(Math.random(),0.85,0.6);
  smk(x+rand(-3,3),y+rand(2,7),z+rand(-3,3),rand(-4,4),rand(1,5),rand(-4,4),rand(1,2),rand(1.4,2.6),c.r,c.g,c.b,-3);}}
 
@@ -1105,6 +1129,11 @@ let lensDrops=[];
 function sizeDrops(){dropCv.width=innerWidth;dropCv.height=innerHeight;}
 function updLens(dt){
  dropCx.clearRect(0,0,dropCv.width,dropCv.height);
+ // HIGH/MED/ULTRA use the Heartfelt/Shadertoy refraction pass. Do not draw the
+ // old 2D gradient ellipses over it: those soft blobs obscured the shader's
+ // sharp beads, trails and glass distortion and were what made the new rain
+ // look less realistic than the original effect.
+ if((QUALITY_PRESETS[effQuality()]||{}).rainShader!==false){lensDrops.length=0;return;}
  const amt=Math.max(cur.rain-0.12,0);
  if(amt<=0||state.mode==='title'){lensDrops.length=0;return;}
  if(Math.random()<amt*dt*38&&lensDrops.length<90)
@@ -1160,18 +1189,25 @@ function updClouds(dt){
 /* ============ birds ============ */
 const birds=[];
 function makeBirds(){
- const mat=new THREE.MeshBasicMaterial({color:0x22242a,side:THREE.DoubleSide});
- const bodyG=new THREE.BoxGeometry(0.16,0.14,0.72);
- const wr=new THREE.PlaneGeometry(1.05,0.34);wr.translate(0.52,0,0);wr.rotateX(-Math.PI/2);
- const wl=wr.clone();wl.scale(-1,1,1);
- for(let i=0;i<5;i++){
-  const g=new THREE.Group();
-  g.add(new THREE.Mesh(bodyG,mat));
-  const rw=new THREE.Mesh(wr,mat),lw=new THREE.Mesh(wl,mat);
-  g.add(rw,lw);
-  scene.add(g);
-  birds.push({g,rw,lw,cx:rand(-200,200),cz:rand(-200,200),rad:rand(30,85),h:rand(20,45),
-   ang:rand(0,6),spd:rand(0.12,0.32)*(Math.random()<0.5?-1:1),fs:rand(7,11),ph:rand(0,9),tgt:rand(8,26)});
+ const feather=new THREE.MeshStandardMaterial({color:0x252a31,roughness:0.92,side:THREE.DoubleSide});
+ const lightFeather=new THREE.MeshStandardMaterial({color:0xb8c0c8,roughness:0.9,side:THREE.DoubleSide});
+ const beakMat=new THREE.MeshStandardMaterial({color:0xe2a72e,roughness:0.8});
+ // A tapered triangular wing whose root is at x=0, allowing a convincing
+ // shoulder-pivot flap instead of rotating a flat rectangle around its centre.
+ const wingGeo=(side)=>{const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute([
+  0,0,-.18, side*1.35,0,-.05, side*.78,0,.48,
+  0,0,-.18, side*.78,0,.48, 0,0,.28],3));g.computeVertexNormals();return g;};
+ for(let i=0;i<7;i++){
+  const g=new THREE.Group();g.scale.setScalar(rand(1.0,1.45));
+  const body=new THREE.Mesh(new THREE.SphereGeometry(.22,8,6),feather);body.scale.set(.62,.58,1.75);g.add(body);
+  const head=new THREE.Mesh(new THREE.SphereGeometry(.16,8,6),lightFeather);head.position.set(0,.06,.36);g.add(head);
+  const beak=new THREE.Mesh(new THREE.ConeGeometry(.07,.24,5),beakMat);beak.rotation.x=Math.PI/2;beak.position.set(0,.04,.56);g.add(beak);
+  const tail=new THREE.Mesh(new THREE.ConeGeometry(.20,.55,4),feather);tail.rotation.x=-Math.PI/2;tail.position.z=-.55;g.add(tail);
+  const rw=new THREE.Group(),lw=new THREE.Group();
+  rw.add(new THREE.Mesh(wingGeo(1),feather));lw.add(new THREE.Mesh(wingGeo(-1),feather));
+  rw.position.y=lw.position.y=.05;g.add(rw,lw);scene.add(g);
+  birds.push({g,rw,lw,cx:rand(-200,200),cz:rand(-200,200),rad:rand(26,72),h:rand(15,34),
+   ang:rand(0,6),spd:rand(0.14,0.34)*(Math.random()<0.5?-1:1),fs:rand(5.5,8.5),ph:rand(0,9),tgt:rand(8,26)});
  }
 }
 function updBirds(dt){
@@ -1187,9 +1223,12 @@ function updBirds(dt){
   b.g.position.set(b.cx+Math.cos(b.ang)*b.rad,b.h+Math.sin(timeSec*0.6+b.ph)*1.2,b.cz+Math.sin(b.ang)*b.rad);
   const s=Math.sign(b.spd);
   b.g.rotation.y=Math.atan2(-Math.sin(b.ang)*s,Math.cos(b.ang)*s);
-  const amp=(Math.sin(timeSec*0.33+b.ph*2.7)>-0.3)?0.85:0.08;
+  // Three energetic flaps followed by a short glide. Wing groups pivot at the
+  // shoulder, with a little fore/aft sweep, so the silhouette is unmistakable.
+  const cycle=(timeSec*.42+b.ph)%1,amp=cycle<.68?1.0:.12;
   const f=Math.sin(timeSec*b.fs+b.ph)*amp;
-  b.rw.rotation.z=-f;b.lw.rotation.z=f;
+  b.rw.rotation.z=-f*1.05;b.lw.rotation.z=f*1.05;
+  b.rw.rotation.y=-.12+f*.10;b.lw.rotation.y=.12-f*.10;
  }
 }
 
@@ -1272,7 +1311,7 @@ function updLightning(dt){
 
 /* ============ track build ============ */
 let T=null,world=null,timeSec=0;
-const _sv=V3(0,0,0),_sn=V3(0,0,0),_st=V3(0,0,0);
+const _sv=V3(0,0,0),_sn=V3(0,0,0),_st=V3(0,0,0),_camHead=V3(0,0,0);
 function sampleF(f){const N=T.N;f=((f%N)+N)%N;const i=Math.floor(f),fr=f-i,j=(i+1)%N;
  const a=T.samples[i],b=T.samples[j];
  _sv.copy(a.p).lerp(b.p,fr);_sn.copy(a.n).lerp(b.n,fr).normalize();_st.copy(a.t).lerp(b.t,fr).normalize();return i;}
@@ -1857,37 +1896,36 @@ function buildWorld(idx){
   const rMesh=new THREE.Mesh(rGeo,rMat);rMesh.receiveShadow=true;world.add(rMesh);
  }
 
- // 3. Smooth FIA Curbs along Apexes
+ // 3. Continuous FIA kerbs. They occupy the outer metre OF the road rather
+ // than hovering beyond its edge over the lowered terrain. Their base follows
+ // every road sample exactly; only the alternating rumble ribs rise above it.
  {
   const pos=[],uv=[],index=[];let vi=0;
+  const curbInner=halfW-1.0,curbOuter=halfW-0.04;
   for(let i=0;i<N;i++){
-   if(Math.abs(samples[i].curv)<0.010)continue;
    const s=samples[i],s2=samples[(i+1)%N];
+   // Alternating 1.2 m ribs: enough geometry to read visually and matched by
+   // the suspension/audio pulse in updCarVisual().
+   const ribA=(Math.floor(s.cum/1.2)%2)?0.075:0.018;
+   const ribB=(Math.floor(s2.cum/1.2)%2)?0.075:0.018;
    for(const sg of[1,-1]){
-    // Raised, ribbed FIA kerb â€” the outer edge steps up and down in a sawtooth
-    // along the kerb's length (one rib ~1.2m) so it reads as bumpy, not flat.
-    const ribA=(Math.floor(s.cum/1.2)%2)?0.18:0.0;
-    const ribB=(Math.floor(s2.cum/1.2)%2)?0.18:0.0;
-    pos.push(s.p.x+s.n.x*halfW*sg,s.p.y+0.06,s.p.z+s.n.z*halfW*sg,
-     s.p.x+s.n.x*(halfW+1.4)*sg,s.p.y+0.10+ribA*0.7,s.p.z+s.n.z*(halfW+1.4)*sg,
-     s2.p.x+s2.n.x*halfW*sg,s2.p.y+0.06,s2.p.z+s2.n.z*halfW*sg,
-     s2.p.x+s2.n.x*(halfW+1.4)*sg,s2.p.y+0.10+ribB*0.7,s2.p.z+s2.n.z*(halfW+1.4)*sg);
+    pos.push(s.p.x+s.n.x*curbInner*sg,s.p.y+0.058,s.p.z+s.n.z*curbInner*sg,
+     s.p.x+s.n.x*curbOuter*sg,s.p.y+0.058+ribA,s.p.z+s.n.z*curbOuter*sg,
+     s2.p.x+s2.n.x*curbInner*sg,s2.p.y+0.058,s2.p.z+s2.n.z*curbInner*sg,
+     s2.p.x+s2.n.x*curbOuter*sg,s2.p.y+0.058+ribB,s2.p.z+s2.n.z*curbOuter*sg);
     const v0=s.cum/2.4,v1=s2.cum/2.4;
     uv.push(0,v0,1,v0,0,v1,1,v1);
-    if(sg>0){
-      index.push(vi,vi+2,vi+1,vi+1,vi+2,vi+3);
-    }else{
-      index.push(vi,vi+1,vi+2,vi+1,vi+3,vi+2);
-    }
-    vi+=4;}}
-  if(pos.length>0){
-   const g=new THREE.BufferGeometry();
-   g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(pos),3));
-   g.setAttribute('uv',new THREE.BufferAttribute(new Float32Array(uv),2));
-   g.setIndex(index);g.computeVertexNormals();
-   const cm=new THREE.Mesh(g,new THREE.MeshStandardMaterial({map:curbT,roughness:0.7}));
-   cm.receiveShadow=true;world.add(cm);
+    if(sg>0)index.push(vi,vi+2,vi+1,vi+1,vi+2,vi+3);
+    else index.push(vi,vi+1,vi+2,vi+1,vi+3,vi+2);
+    vi+=4;
+   }
   }
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(pos),3));
+  g.setAttribute('uv',new THREE.BufferAttribute(new Float32Array(uv),2));
+  g.setIndex(index);g.computeVertexNormals();
+  const cm=new THREE.Mesh(g,new THREE.MeshStandardMaterial({map:curbT,roughness:0.82}));
+  cm.receiveShadow=true;world.add(cm);T.curbMesh=cm;
  }
 
  // 4. Continuous Smooth Curved 3D Barrier Ribbons (TechPro Red/White / Armco Barrier)
@@ -2038,21 +2076,28 @@ function buildWorld(idx){
    if(Math.abs(samples[i].curv)>0.007)continue;
    side=-side;sampleF(i);
    const tex=adsT.clone();tex.offset.x=(adIdx++%NA)/NA;tex.needsUpdate=true;
-   const am=new THREE.MeshStandardMaterial({map:tex,roughness:0.8});
+   tex.anisotropy=Math.min(16,renderer.capabilities.getMaxAnisotropy());
+   tex.colorSpace=THREE.SRGBColorSpace;
+   // Bright, two-sided print with a slight self-lit lift: readable at dusk and
+   // in rain without turning into a bloomy light source.
+   const am=new THREE.MeshStandardMaterial({map:tex,roughness:0.62,side:THREE.DoubleSide,emissive:0xffffff,emissiveMap:tex,emissiveIntensity:0.12});
    const yaw=Math.atan2(_st.x,_st.z);
-   const bx=_sv.x+_sn.x*(T.latLimit+3.2)*side, bz=_sv.z+_sn.z*(T.latLimit+3.2)*side;
-   // Hoarding datum = ground under it (see the marshal posts): the board is
-   // lifted clear of the grass by its legs rather than hung at tarmac height.
+   // Just beyond the safety barrier, never on the driving surface, and close
+   // enough that its face fills useful screen space as the player passes.
+   const boardLat=T.latLimit+1.7;
+   const bx=_sv.x+_sn.x*boardLat*side, bz=_sv.z+_sn.z*boardLat*side;
    const by=Math.max(terrainHeightAt(bx,bz),_sv.y-0.4);
-   const w=new THREE.Mesh(new THREE.BoxGeometry(11,2.6,0.35),am);
-   w.position.set(bx,by+1.45,bz);w.rotation.y=yaw;w.castShadow=true;world.add(w);
-   // Wooden legs â€” one either end, angled slightly out, from the ground up to
-   // the board's underside (real hoarding legs rather than a floating panel).
-   const lx=Math.cos(yaw),lz=-Math.sin(yaw); // board's local width direction
+   const w=new THREE.Mesh(new THREE.BoxGeometry(12.5,3.1,0.28),am);
+   // Width runs parallel to the racing line, making the printed face point at
+   // the road. The old yaw aligned the face down-track and showed drivers the
+   // thin edge of each board.
+   w.position.set(bx,by+2.35,bz);w.rotation.y=yaw+Math.PI/2;w.castShadow=true;world.add(w);
+   // Wooden legs at either end along the track direction.
+   const lx=_st.x,lz=_st.z;
    for(const s of[1,-1]){
-    const legH=1.6;
+    const legH=1.7;
     const leg=new THREE.Mesh(new THREE.CylinderGeometry(0.11,0.13,legH,6),woodLegMat);
-    leg.position.set(bx+lx*4.9*s,by+legH*0.45,bz+lz*4.9*s);
+    leg.position.set(bx+lx*5.6*s,by+legH*0.45,bz+lz*5.6*s);
     leg.rotation.z=s*0.05;leg.castShadow=true;world.add(leg);
    }
   }
@@ -2609,7 +2654,7 @@ function setupGrid(gridSize){
    agg: pers.agg, defend: pers.defend, risk: pers.risk
   }, false));
  });
- player=makeCar({name:state.name,team:'POLYGON GP',skill:0.9,num:99,colA:'#f5f5f2',colB:'#e10600',helmet:'#e10600',code:state.name.substring(0,3).toUpperCase(),agg:0.95,defend:0.95,risk:0.6},true);
+ player=makeCar({name:state.name,team:'POLYGON GP',skill:0.9,num:99,colA:'#f5f5f2',colB:'#e10600',helmet:'#e10600',headshot:state.driverPhoto||null,code:state.name.substring(0,3).toUpperCase(),agg:0.95,defend:0.95,risk:0.6},true);
  cars.push(player);
  gridPlace();
 }
@@ -2617,7 +2662,7 @@ function gridPlace(){
  cars.forEach((c,i)=>{
   c.f=T.N-14-i*3.6;c._pf=c.f;c.lat=(i%2?3:-3)*0.95;
   c.lap=0;c.best=null;c.finished=false;c.finishTime=null;c.wheelspin=0;c.drsOpen=false;
-  c.lapStart=0;c.stuck=0;c.hitT=0;c.recT=0;c.crash=0;c.crashMax=0;c.steer=0;c.pDiff=0;c.slipstream=false;
+  c.lapStart=0;c.stuck=0;c.hitT=0;c.recT=0;c.crash=0;c.crashMax=0;c.wrecked=false;c.steer=0;c.pDiff=0;c.slipstream=false;
   placeCar(c);
   c.key=c.lap*T.N+c.f;
   c.mesh.g.updateMatrixWorld();
@@ -2671,7 +2716,9 @@ function projectCar(c,full){
  c.lat=dx*s.n.x+dz*s.n.z;
  const al=Math.abs(c.lat);
  c.offT=al>T.halfW+1.4;
- c.onCurb=al>T.halfW&&al<=T.halfW+1.4;
+ // The painted kerb is the outer metre of tarmac (matching the rendered strip),
+ // not an invisible band floating in the run-off.
+ c.onCurb=al>T.halfW-1.0&&al<=T.halfW+0.08;
 }
 
 /* ============ physics ============ */
@@ -2841,10 +2888,23 @@ let slowMo=0,slowMoDur=0.8;
    into another car) flips a car into a limping repair phase: it can still be
    steered (otherwise you'd just spin out), but it's slower and a spanner +
    countdown ring floats above it until the energy comes back in. */
+function wreckCar(c){
+ if(c.wrecked)return;c.wrecked=true;c.throttle=0;c.brake=1;c.drsOpen=false;
+ shedCarParts(c);sparkBurst(c.x,c.y+.35,c.z,4.5);
+ if(c.isPlayer){
+  state.mode='gameover';slowMo=1.2;slowMoDur=1.2;cam.shake=Math.max(cam.shake,.75);
+  showMsg('CRASHED OUT','TERMINAL DAMAGE','red',4);Speech.say('Heavy impact! The car is out of the race.',true,{rate:1.08,pitch:.96});
+  setTimeout(()=>{if(state.mode==='gameover')showResults();},2600);
+ }
+}
 function triggerDamage(c,sev){
+  if(c.wrecked)return;
+  // Severe impacts are terminal; lighter contact produces a fixed, readable
+  // five-second power-loss period with the animated spanner already attached
+  // to every car.
+  if(sev>=6.5){wreckCar(c);return;}
   if(c.crash>0.2)return;
-  c.crashMax=clamp(2.4+sev*0.55,2.4,5);
-  c.crash=c.crashMax;
+  c.crashMax=5;c.crash=5;
   // Player-only cinematic & commentary while actually racing.
   if(c.isPlayer&&(state.mode==='race'||state.mode==='finished')){
    slowMo=0.8;slowMoDur=0.8;
@@ -2869,6 +2929,7 @@ function wallHit(c,sgn,imp){
 function updCar(c,dt){
  const groundY = getRoadHAtCoords(c.x, c.z);
  if (c.y === undefined) { c.y = groundY; c.vy = 0; c.airborne = false; c.pitch = 0; c.bounceOff = 0; c.bounceVel = 0; }
+ if(c.wrecked){c.vx*=Math.exp(-3.2*dt);c.vz*=Math.exp(-3.2*dt);c.vF*=Math.exp(-3.2*dt);c.x+=c.vx*dt;c.z+=c.vz*dt;c.y=groundY;return;}
 
  const stepAhead = 1.0;
  const groundYAhead = getRoadHAtCoords(c.x + Math.sin(c.hdg)*stepAhead, c.z + Math.cos(c.hdg)*stepAhead);
@@ -2891,7 +2952,9 @@ function updCar(c,dt){
    c.y = groundY;
    c.airborne = false;
    if (c.vy < -3.5) {
-    sparkBurst(c.x, c.y + 0.1, c.z, 2.5);
+    const landingImpact=Math.abs(c.vy);
+    sparkBurst(c.x, c.y + 0.1, c.z,1.2+landingImpact*0.16);
+    if(landingImpact>7)triggerDamage(c,landingImpact*0.55);
     c.bounceVel -= Math.min(Math.abs(c.vy) * 0.045, 0.55);
     if (c.isPlayer) {
      cam.shake = Math.max(cam.shake, 0.42);
@@ -2935,8 +2998,10 @@ function updCar(c,dt){
  // car in hard (see the run-off patches built for corners). Kerbs, on the
  // other hand, get progressively more treacherous the wetter it gets.
  c.onGravel=!c.airborne&&c.offT&&!!T.gravelMask&&!!T.gravelMask[c.ti];
- const onCurbSlip=(c.onCurb&&cur.wet>0.3)?(1-cur.wet*0.4):1; // wet kerbs are slippery
- const surface=c.onGravel?0.22:(c.offT?0.45:(c.onCurb?0.8:1));
+ // Painted kerbs retain reasonable grip when dry but become properly slick in
+ // rain: at full wetness they provide roughly a third of normal-road grip.
+ const onCurbSlip=(c.onCurb&&cur.wet>0.2)?(1-cur.wet*0.58):1;
+ const surface=c.onGravel?0.22:(c.offT?0.45:(c.onCurb?0.78:1));
  const grip=(c.airborne?0.04:(cur.grip*surface))*onCurbSlip;
  // The player's car is a competitive-but-not-dominant package: faster than
  // the midfield and backmarkers, but a couple of km/h down on the very
@@ -3209,10 +3274,12 @@ function updCarVisual(c,dt){
   const gLon=clamp(-acc*0.055,-1,1);
   const sp01=clamp(Math.abs(c.vF)/PH.top,0,1);
   const[,bsl]=bumpAt(c);
-  const vib=(0.0016+sp01*0.0075)*(c.onCurb?3.1:1);
-  const road=Math.sin(timeSec*47+c.phase*5)*vib+bsl*0.035;
-  // kerb strikes are impulses: the shell hops, then the suspension eats it
-  if(c.onCurb&&!c._curb){c._hv=(c._hv||0)-0.055;}
+  const curbPulse=c.onCurb?Math.sin((T.samples[c.ti].cum+c.f%1*T.segLen)*Math.PI/0.6):0;
+  const vib=(0.0016+sp01*0.0075)*(c.onCurb?7.5:1);
+  const road=Math.sin(timeSec*47+c.phase*5)*vib+bsl*0.035+Math.abs(curbPulse)*0.022*sp01;
+  // Kerb entry is a real suspension strike, followed by strong repeated rib
+  // pulses rather than the former barely-visible vibration.
+  if(c.onCurb&&!c._curb){c._hv=(c._hv||0)-0.10;}
   c._curb=c.onCurb;
   const[hop,hov]=spring(c._hOP||0,c._hv||0,0,190,13,dt);
   c._hOP=hop;c._hv=hov;
@@ -3238,7 +3305,13 @@ function updCarVisual(c,dt){
   }
  }
 
- if(c.onCurb)p.position.y+=Math.abs(Math.sin(timeSec*38+c.phase))*0.03;
+ if(c.onCurb){
+  // Visible chassis chatter over each rib. Player cameras receive a strong but
+  // bounded shake so clipping a kerb is unmistakable without becoming blind.
+  const kerbHit=Math.abs(Math.sin(timeSec*(30+Math.abs(c.vF)*0.32)+c.phase));
+  p.position.y+=kerbHit*(0.045+clamp(Math.abs(c.vF)/PH.top,0,1)*0.055);
+  if(c.isPlayer)cam.shake=Math.max(cam.shake,0.10+kerbHit*0.10);
+ }
  const sp=Math.abs(c.vF);
  // Low-speed wheelspin â€” a standing-start launch, or the tight spin the AI
  // does to turn around after going off â€” used to fall through both smoke
@@ -3472,8 +3545,13 @@ const AudioSys={started:false,
   this.skg.gain.setTargetAtTime(run?p.skidAmt*0.16:0,t,0.04);
   this.skf.frequency.setTargetAtTime(600+p.skidAmt*500,t,0.05);
   const w=clamp(Math.abs(p.vF)/80,0,1);
-  this.wfg.gain.setTargetAtTime(run?w*w*0.12:0,t,0.1);
-  this.wff.frequency.setTargetAtTime(300+w*2600,t,0.1);
+  // Kerbs feed a loud, low mechanical rumble through the existing road-noise
+  // bus. Gain follows speed and pulses over the painted ribs, so it sounds like
+  // tyres hammering corrugations rather than a constant hiss.
+  const curbPulse=p.onCurb?(0.55+0.45*Math.abs(Math.sin(timeSec*(28+w*34)))):0;
+  const roadGain=w*w*0.12+(p.onCurb?curbPulse*(0.16+w*0.24):0);
+  this.wfg.gain.setTargetAtTime(run?roadGain:0,t,p.onCurb?0.018:0.1);
+  this.wff.frequency.setTargetAtTime(p.onCurb?180+w*720:300+w*2600,t,0.025);
   this.rag.gain.setTargetAtTime(cur.rain*0.11,t,0.2);
   if(p.near&&run){const g=clamp(1-p.near.dist/55,0,1)*0.05;
    this.rg.gain.setTargetAtTime(g,t,0.1);
@@ -3734,25 +3812,43 @@ function updCamera(dt){
      reads as "real" without making you ill. */
   const yaw=p.hdg,fx=Math.sin(yaw),fz=Math.cos(yaw);
   const hg=p.mesh.helmetGroup;
-  const lean=hg?hg.rotation.z*0.72:0, nod=hg?hg.rotation.x*0.72:0, look=hg?hg.rotation.y*0.55:0;
+  const lean=hg?hg.rotation.z*0.62:0, nod=hg?hg.rotation.x*0.50:0, look=hg?hg.rotation.y*0.42:0;
   const sp01=clamp(sp/PH.top,0,1);
-  const buzz=(0.0009+sp01*0.0055)*(p.onCurb?3.2:1);
-  const bx=Math.sin(timeSec*51.3+p.phase)*buzz, by=Math.cos(timeSec*63.7+p.phase*2)*buzz*0.8;
-  const hx=pp.x+fx*0.04, hz=pp.z+fz*0.04;
-  cam.pos.x=damp(cam.pos.x===undefined?hx:cam.pos.x,hx,18,dt);cam.pos.z=damp(cam.pos.z===undefined?hz:cam.pos.z,hz,18,dt);
-  cam.pos.y=damp(cam.pos.y,(hg?hg.position.y-0.73+0.99:pp.y+0.99),16,dt);
-  camera.position.set(cam.pos.x+bx,cam.pos.y+by,cam.pos.z);
-  // where the driver is looking: down the road, turned into the corner, with
-  // the pitch of the head and the road's own slope behind it
-  const ahead=34+sp*0.55;
+  // Read the helmet's WORLD position. The old code used hg.position.y, which
+  // is only its local cockpit coordinate (~0.73 m); on an elevated or dipped
+  // circuit that put the camera below the actual road.
+  const headWorld=hg?hg.getWorldPosition(_camHead):_camHead.copy(pp).add(V3(0,1.0,0));
+  const roadHere=getRoadHAtCoords(pp.x,pp.z)+0.78;
+  const targetY=Math.max(headWorld.y+0.035,roadHere);
+  // A small vibration conveys speed, but stays below a centimetre so the view
+  // remains useful through braking zones and fast direction changes.
+  const buzz=(0.0007+sp01*0.0060)*(p.onCurb?2.4:1);
+  const bx=Math.sin(timeSec*51.3+p.phase)*buzz;
+  const by=Math.cos(timeSec*63.7+p.phase*2)*buzz*0.7;
+  const hx=headWorld.x+fx*0.055,hz=headWorld.z+fz*0.055;
+  cam.pos.x=damp(cam.pos.x===undefined?hx:cam.pos.x,hx,22,dt);
+  cam.pos.z=damp(cam.pos.z===undefined?hz:cam.pos.z,hz,22,dt);
+  cam.pos.y=damp(cam.pos.y===undefined?targetY:cam.pos.y,targetY,22,dt);
+  // Final floor clamp is deliberately after damping: smoothing must never lag
+  // the camera down through the tarmac at the foot of a steep climb.
+  camera.position.set(cam.pos.x+bx,Math.max(cam.pos.y+by,roadHere),cam.pos.z);
+
+  // Look along the road rather than at a fixed world-height point. This keeps
+  // crests visible and braking markers readable while head movement still
+  // turns naturally into the corner.
+  const ahead=30+sp*0.48;
   const fyaw=yaw+look;
-  cam.lookX=damp(cam.lookX||0,pp.x+Math.sin(fyaw)*ahead,14,dt);
-  cam.lookZ=damp(cam.lookZ||0,pp.z+Math.cos(fyaw)*ahead,14,dt);
-  cam.lookY=damp(cam.lookY||0,pp.y+0.86+nod*ahead*0.45,12,dt);
+  const lx=pp.x+Math.sin(fyaw)*ahead,lz=pp.z+Math.cos(fyaw)*ahead;
+  const roadAhead=getRoadHAtCoords(lx,lz);
+  cam.lookX=damp(cam.lookX===undefined?lx:cam.lookX,lx,16,dt);
+  cam.lookZ=damp(cam.lookZ===undefined?lz:cam.lookZ,lz,16,dt);
+  cam.lookY=damp(cam.lookY===undefined?roadAhead+1.0:cam.lookY,roadAhead+1.0+nod*ahead*0.22,14,dt);
   camera.up.set(Math.sin(lean),Math.cos(lean),0);
   camera.lookAt(cam.lookX,cam.lookY,cam.lookZ);
-  camera.rotateZ(lean*0.35);
-  tf=clamp(70+sp*0.16,70,86);
+  camera.rotateZ(lean*0.24);
+  // Wider FOV and gentle speed ramp create excitement without the severe
+  // close-in zoom that made the mode hard to drive.
+  tf=clamp(74+sp*0.22,74,92);
  }else if(state.camMode===1){
   // "T-cam": mounted near the airbox/halo, behind the front axle, like the
   // real onboard camera â€” not out ahead of the front wheels. Putting the
@@ -3783,7 +3879,9 @@ function updCamera(dt){
   tf=50;
  }
  // Cinematic: pull in closer/tighter to the crash while slow-mo runs.
- if(slowMo>0)tf=Math.min(tf,46);
+ // Keep helmet view wide and driveable during impacts; the external cameras
+ // may punch in for the cinematic slow-motion shot.
+ if(slowMo>0&&state.camMode!==2)tf=Math.min(tf,46);
  if(cam.shake>0){cam.shake=Math.max(0,cam.shake-dt*1.6);
   camera.position.x+=rand(-1,1)*cam.shake*0.35;camera.position.y+=rand(-1,1)*cam.shake*0.3;}
  camera.fov=damp(camera.fov,tf,8,dt);camera.updateProjectionMatrix();
@@ -3931,6 +4029,7 @@ function applyTowerVisibility(){
 }
 function beginRace(){
  state.name=$('tName').value.trim()||'YOU';
+ saveDriverProfile();
  Speech.enabled=$('tSpeech').classList.contains('on');
  TitleTheme.stop();
  $('title').classList.add('hidden');$('results').classList.add('hidden');$('pause').classList.add('hidden');
@@ -3941,7 +4040,7 @@ function beginRace(){
  $('hCam').textContent=CAM_NAMES[state.camMode];
  snapWeather(state.wx);
  setupGrid(state.grid);
- raceT=0;cdT=0;cdGo=0;cdLastOn=0;resultsShown=false;wwT=0;
+ raceT=0;cdT=0;cdGo=0;cdLastOn=0;resultsShown=false;wwT=0;hypeLineT=-10;
  gbActive=0;gbCar=null;crossSign.clear();gbCool.clear();
  if(towerRows){towerRows.clear();}
  const timingTowerEl=$('timingTower');if(timingTowerEl)timingTowerEl.innerHTML='';
@@ -4054,7 +4153,7 @@ function showResults(){
  if(resultsShown)return;resultsShown=true;
  const sorted=[...cars].sort((a,b)=>b.key-a.key);
  const leader=sorted[0];
- $('rTitle').textContent=player.pos===1?'VICTORY':'CHEQUERED FLAG';
+ $('rTitle').textContent=player.wrecked?'CRASHED OUT':(player.pos===1?'VICTORY':'CHEQUERED FLAG');
  $('rSub').textContent=TRACKS[state.trackIdx].name.toUpperCase()+' Â· '+WX[state.wx].label+' Â· '+state.laps+' LAPS';
  let html='';
  sorted.forEach((c,i)=>{
@@ -4102,13 +4201,21 @@ function updRace(dt){
  // Commentator excitement meter: fast, on the limit, side-by-side or in
  // the rain â†’ the voice gets faster, higher and more emotional.
  {
-  const exT=clamp(0.25
-   +(Math.abs(player.vF)/PH.top)*0.35
+  // The commentator is delighted to be at the circuit even in a quiet phase;
+  // speed, weather and action lift him from an already enthusiastic baseline.
+  const exT=clamp(0.58
+   +(Math.abs(player.vF)/PH.top)*0.30
    +(cur.rain>0.5?0.15:0)
    +(player.offT?0.08:0)
    +(player.drift?0.1:0)
-   +(player.drsOpen?0.08:0),0.25,1);
+   +(player.drsOpen?0.08:0),0.45,1);
   exCur=damp(exCur,exT,0.9,dt);
+ }
+ // Positive live colour at regular intervals, not only when somebody crashes
+ // or overtakes. Vary the interval so it feels broadcast rather than looped.
+ if(state.mode==='race'&&raceT-hypeLineT>(18+((Math.sin(hypeLineT*1.7)+1)*5))){
+  hypeLineT=raceT;
+  Speech.say(pick(RACE_HYPE_LINES),false,{rate:1.10+exCur*.16,pitch:1.04+exCur*.08});
  }
  for(const c of cars){
   if(c.isPlayer){if(!c.finished&&!demoOn)playerControl();else aiThink(c,dt);}
@@ -4308,7 +4415,7 @@ let attractT=6;
 // driven by the AI under the director's cameras. Any input returns to menu.
 let demoOn=false,demoArmed=0,lastInput=nowT();
 // Commentator "excitement" meter â€” drives rate/pitch of emotional lines.
-let exCur=0.25,tickAcc=0,closeT=0,rainLineT=0;
+let exCur=0.62,tickAcc=0,closeT=0,rainLineT=0,hypeLineT=-12;
 function exOpts(){return{rate:clamp(1.0+exCur*0.32,1.0,1.38),pitch:clamp(1.02+exCur*0.12,1.02,1.15)};}
 function startDemo(){
  demoOn=true;demoArmed=0;
@@ -4699,8 +4806,28 @@ function buildMenu(){
 
  $('tSpeech').onclick=()=>{const b=$('tSpeech');b.classList.toggle('on');
   b.textContent=b.classList.contains('on')?'VOICE ON':'VOICE OFF';};
+ // Restore the locally persisted PWA driver identity and allow either the
+ // front camera (`capture=user`) or photo library. Images are resized before
+ // storage so a portrait cannot exhaust Safari's localStorage quota.
+ $('tName').value=state.name;
+ const photoPreview=$('driverPhotoPreview'),photoInput=$('driverPhotoInput'),photoBtn=$('driverPhotoBtn');
+ const refreshPhoto=()=>{if(photoPreview)photoPreview.src=state.driverPhoto||getDriverHeadshot({color:'#e10600'});};
+ refreshPhoto();
+ if(photoBtn&&photoInput)photoBtn.onclick=()=>photoInput.click();
+ if(photoInput)photoInput.onchange=()=>{
+  const file=photoInput.files&&photoInput.files[0];if(!file)return;
+  const img=new Image();img.onload=()=>{
+   const cv=document.createElement('canvas');cv.width=cv.height=256;
+   const cx=cv.getContext('2d'),s=Math.min(img.width,img.height),sx=(img.width-s)/2,sy=(img.height-s)/2;
+   cx.drawImage(img,sx,sy,s,s,0,0,256,256);
+   state.driverPhoto=cv.toDataURL('image/jpeg',0.78);state.name=$('tName').value.trim()||state.name;
+   saveDriverProfile();refreshPhoto();URL.revokeObjectURL(img.src);
+  };
+  img.src=URL.createObjectURL(file);
+ };
  $('tName').onchange=()=>{
   const nm=$('tName').value.trim();
+  state.name=nm||'YOU';saveDriverProfile();
   if(!nm||nm===lastEncouragedName)return;
   lastEncouragedName=nm;
   Speech.enabled=$('tSpeech').classList.contains('on');
@@ -4750,7 +4877,8 @@ function tick(){
    else if(state.mode==='title')updTitle(dtGlobal);
    if(state.mode!=='title')updAmbient(dtGlobal);
    updPoints(smoke,dtGlobal,2.2);
-   updPoints(sparks,dtGlobal,0.4);
+   updPoints(sparks,dtGlobal,0.12);
+   updDebris(dtGlobal);
    updWeatherFX(dtGlobal);
    updLens(dtGlobal);
    updClouds(dtGlobal);
@@ -4769,8 +4897,11 @@ function tick(){
  try{
   const rainShaderOn=(QUALITY_PRESETS[effQuality()]||{}).rainShader!==false;
   const speedKmh=player?Math.abs(player.vF)*3.6:0;
-  const speedFactor=clamp(speedKmh/280,0,1);
-  const effRain=cur.rain*lerp(1.0,0.22,speedFactor);
+  const speedFactor=clamp(speedKmh/300,0,1);
+  // Airflow clears some standing water but never erases the beads completely;
+  // at racing speed the original 0.22 multiplier made the Shadertoy layers
+  // almost disappear precisely when the sense of speed should be strongest.
+  const effRain=cur.rain*lerp(1.0,0.52,speedFactor);
   if(rainPass && rainShaderOn && state.mode!=='title' && (effRain>0.01||lightningFlash>0.01)){
    // The windshield pass does its own full-screen composite, so the grade
    // chain stands down for those frames rather than fighting it for the

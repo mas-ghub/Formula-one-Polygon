@@ -125,19 +125,28 @@ void main() {
   float layer2 = S(.0, .5, rainAmount);
 
   vec2 c = Drops(uv, t, staticDrops, layer1, layer2);
-  vec2 e = vec2(.001, 0.);
+  // Screen-space derivative of the Heartfelt drop field: this is the glass
+  // normal that bends the actual rendered circuit behind every bead.
+  vec2 e = vec2(1.5/max(uResolution.x,uResolution.y), 0.);
   float cx = Drops(uv+e, t, staticDrops, layer1, layer2).x;
   float cy = Drops(uv+e.yx, t, staticDrops, layer1, layer2).x;
-  vec2 n = vec2(cx-c.x, cy-c.x);
+  vec2 n = vec2(cx-c.x, cy-c.x)/max(e.x,0.00001);
+  n=clamp(n*0.00034,vec2(-0.035),vec2(0.035));
 
-  // Sharp everywhere except right inside an actual droplet, where a little
-  // defocus sells the "looking through glass" effect. The original demo did
-  // the opposite (blurry background, sharp drops) for a foggy-windshield
-  // mood, but that washed the whole track out into a flat grey — readability
-  // matters more here than atmosphere.
-  float focus = mix(0.0, 4.0, S(.1, .2, c.x));
+  // Faithful Shadertoy-style optical hierarchy: a faintly defocused wet pane,
+  // a sharp refracted scene inside beads, and softer running trails. Keeping
+  // the background blur modest preserves braking markers for gameplay.
+  float wetGlass=(0.00035+rainAmount*0.00075)*(1.0-c.x*0.78);
+  wetGlass+=c.y*0.0008;
+  vec3 col = blurScene(clamp(UV+n,0.0,1.0),wetGlass);
 
-  vec3 col = blurScene(clamp(UV + n*0.15, 0.0, 1.0), focus*0.0016);
+  // Fresnel rim and bright pin highlight make droplets read as water rather
+  // than transparent distortion. Trails get a cooler, subtler sheen.
+  float edge=S(0.02,0.22,c.x)*(1.0-S(0.55,0.95,c.x));
+  float glint=pow(clamp(1.0-length(n)*18.0,0.0,1.0),18.0)*c.x;
+  col+=vec3(0.52,0.68,0.82)*edge*0.22;
+  col+=vec3(0.95,0.98,1.0)*glint*0.42;
+  col=mix(col,col*vec3(0.82,0.91,1.03),clamp(c.y*0.32,0.0,0.32));
 
   // Discrete lightning strike, driven by the game's thunder scheduler
   col += uLightning*vec3(1.0, 1.0, 1.05)*1.5;
