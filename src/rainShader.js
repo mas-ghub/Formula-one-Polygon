@@ -144,8 +144,8 @@ void main() {
   // than transparent distortion. Trails get a cooler, subtler sheen.
   float edge=S(0.02,0.22,c.x)*(1.0-S(0.55,0.95,c.x));
   float glint=pow(clamp(1.0-length(n)*18.0,0.0,1.0),18.0)*c.x;
-  col+=vec3(0.52,0.68,0.82)*edge*0.22;
-  col+=vec3(0.95,0.98,1.0)*glint*0.42;
+  col+=vec3(0.52,0.68,0.82)*edge*0.09;
+  col+=vec3(0.95,0.98,1.0)*glint*0.30;
   col=mix(col,col*vec3(0.82,0.91,1.03),clamp(c.y*0.32,0.0,0.32));
 
   // Discrete lightning strike, driven by the game's thunder scheduler
@@ -158,8 +158,8 @@ void main() {
   // instead of a lit car sitting on a lit road). Gamma brightens shadows more
   // than highlights while preserving relative detail, and the additive term
   // gives a visible lift even to true blacks.
-  col = pow(max(col, 0.0), vec3(1.0 - 0.45*rainAmount));
-  col += vec3(0.05, 0.06, 0.07)*rainAmount;
+  col = pow(max(col, 0.0), vec3(1.0 - 0.18*rainAmount));
+  col += vec3(0.012, 0.015, 0.018)*rainAmount;
 
   gl_FragColor = vec4(col, 1.0);
 }

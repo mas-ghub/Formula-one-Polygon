@@ -1097,7 +1097,7 @@ const rainGeo=new THREE.BufferGeometry();
 rainGeo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(RAIN_N*6),3).setUsage(THREE.DynamicDrawUsage));
 // Darker, glassier streaks — the old near-white 0x9db4c8 at 0.45 opacity read
 // as a curtain of white noise; real rain is mostly transparent.
-const rainMat = new THREE.LineBasicMaterial({color:0x6e879c,transparent:true,opacity:0.26});
+const rainMat = new THREE.LineBasicMaterial({color:0x53687c,transparent:true,opacity:0.16});
 const rainMesh=new THREE.LineSegments(rainGeo,rainMat);
 rainMesh.frustumCulled=false;scene.add(rainMesh);
 const rainP=new Float32Array(RAIN_N*3);
@@ -1320,7 +1320,7 @@ function applyWeatherVisuals(){
  sunLight.intensity=sunBase;
  hemi.color.copy(cur.hS);hemi.groundColor.copy(cur.hG);hemi.intensity=cur.hI*tod.hMul;
  renderer.toneMappingExposure=cur.exp*tod.expMul;
- rainMesh.material.opacity=0.055+cur.rain*0.185;
+ rainMesh.material.opacity=0.03+cur.rain*0.115;
  if(cloudMat){const g=cur.rain;cloudMat.color.setRGB(1-g*0.45,1-g*0.43,1-g*0.40);}
  if(T){const wet=cur.wet;
   // A wet road is not merely a damp one: it goes darker, glassier and it
@@ -4145,9 +4145,9 @@ function updCamera(dt){
   camera.rotateZ((swooping?Math.sin(swoopT*Math.PI)*0.14:0)+Math.sin(timeSec*0.35)*0.03);
   camera.fov=damp(camera.fov,swooping?54:50,4,dt);camera.updateProjectionMatrix();return;}
  const p=player,pp=p.mesh.g.position;
- // The player's own head/arms must not be rendered in front of a camera that
- // is notionally mounted on that head. Keep the chassis/nose for immersion.
- if(p.mesh.driverGroup)p.mesh.driverGroup.visible=state.camMode!==2;
+ // The driver stays rendered in every camera — the helmet cam in particular
+ // NEEDS the helmet in shot (that's the whole point of the view).
+ if(p.mesh.driverGroup)p.mesh.driverGroup.visible=true;
  const sp=Math.abs(p.vF);
  let tf=62;
  if(state.camMode===0){
@@ -4160,12 +4160,12 @@ function updCamera(dt){
   camera.lookAt(pp.x+fx*6,pp.y+1.2,pp.z+fz*6);
   tf=clamp(60+sp*0.24,60,80);
  }else if(state.camMode===2){
-  /* Helmet cam — the camera rides ON the driver's head, so it inherits every
-     bit of motion the head spring produces: it rolls under lateral load, snaps
-     forward under braking, rings after a kerb strike and buzzes with speed.
-     The head is followed at less than 1:1 and low-passed, because a faithful
-     head-mounted camera is unwatchable at 300 km/h — this is the version that
-     reads as "real" without making you ill. */
+  /* Helmet cam — a small onboard camera perched just behind and above the
+     driver's helmet, like the modern F1 "driver's eye"/head-cam composite:
+     the crown of the helmet fills the bottom of the frame and you look OVER
+     it at the road. It still inherits the head spring's motion (rolls under
+     lateral load, snaps forward under braking, buzzes with speed), followed
+     at less than 1:1 so it reads as real without making you ill. */
   const yaw=p.hdg,fx=Math.sin(yaw),fz=Math.cos(yaw);
   const hg=p.mesh.helmetGroup;
   const lean=hg?hg.rotation.z*0.62:0, nod=hg?hg.rotation.x*0.50:0, look=hg?hg.rotation.y*0.42:0;
@@ -4174,19 +4174,18 @@ function updCamera(dt){
   // is only its local cockpit coordinate (~0.73 m); on an elevated or dipped
   // circuit that put the camera below the actual road.
   const headWorld=hg?hg.getWorldPosition(_camHead):_camHead.copy(pp).add(V3(0,1.0,0));
-  // Put the lens at the visor/T-cam edge rather than inside the helmet shell.
-  // It remains low and immersive, but the halo, visor and nose no longer fill
-  // the lower half of the road view.
+  // Mount the lens BEHIND and ABOVE the helmet crown (not inside it, not out
+  // at the visor): the helmet is visible at the bottom of the frame and the
+  // road is visible over the top of it. 0.5 m back keeps the shell outside
+  // the camera's 0.3 m near plane so it renders instead of being clipped.
   const roadHere=getRoadHAtCoords(pp.x,pp.z)+1.12;
-  const targetY=Math.max(headWorld.y+0.30,roadHere);
+  const targetY=Math.max(headWorld.y+0.52,roadHere);
   // A small vibration conveys speed, but stays below a centimetre so the view
   // remains useful through braking zones and fast direction changes.
   const buzz=(0.0007+sp01*0.0060)*(p.onCurb?2.4:1);
   const bx=Math.sin(timeSec*51.3+p.phase)*buzz;
   const by=Math.cos(timeSec*63.7+p.phase*2)*buzz*0.7;
-  // Lens sits just ahead of the halo's forward pillar, like a low T-cam. The
-  // cockpit remains at the bottom edge for immersion but cannot cover apexes.
-  const hx=headWorld.x+fx*0.96,hz=headWorld.z+fz*0.96;
+  const hx=headWorld.x-fx*0.50,hz=headWorld.z-fz*0.50;
   cam.pos.x=damp(cam.pos.x===undefined?hx:cam.pos.x,hx,22,dt);
   cam.pos.z=damp(cam.pos.z===undefined?hz:cam.pos.z,hz,22,dt);
   cam.pos.y=damp(cam.pos.y===undefined?targetY:cam.pos.y,targetY,22,dt);
@@ -5232,9 +5231,11 @@ function buildMenu(){
 
 /* ============ main loop ============ */
 let last=nowT();
+/* Water actually sitting on the camera glass right now (0..cur.rain) — fed by
+   the weather, stripped off by airflow at speed, re-beading when you slow. */
+let glassBead=0;
 function tick(){
- requestAnimationFrame(tick);
- const t=nowT();
+ requestAnimationFrame(tick); const t=nowT();
  let dt=Math.min(t-last,0.05);last=t;
  // Dramatic slow-motion after the player's big hit — time dilates briefly,
  // then snaps back, while the camera tightens into the action.
@@ -5276,16 +5277,19 @@ function tick(){
   console.error('[tick] update error:',err);
  }
 
- // Windshield rain — real refraction of the rendered scene, eased off at
- // speed (wind clears the glass) and boosted by thunderstorm flashes.
+ // Windshield rain — real refraction of the rendered scene. The water on the
+ // glass is a first-class simulation state: airflow strips the beads almost
+ // completely at racing speed, and when you slow for a corner the rain takes
+ // a moment to re-bead and dribble down again — like a real visor.
  try{
   const rainShaderOn=(QUALITY_PRESETS[effQuality()]||{}).rainShader!==false;
   const speedKmh=player?Math.abs(player.vF)*3.6:0;
   const speedFactor=clamp(speedKmh/300,0,1);
-  // Airflow clears some standing water but never erases the beads completely;
-  // at racing speed the original 0.22 multiplier made the Shadertoy layers
-  // almost disappear precisely when the sense of speed should be strongest.
-  const effRain=cur.rain*lerp(1.0,0.52,speedFactor);
+  const beadTarget=cur.rain*lerp(1.0,0.08,Math.pow(speedFactor,0.8));
+  // Asymmetric response: the wind blasts water off quickly (rate 3), but
+  // fresh drops need a moment to build back up when you slow (rate 0.9).
+  glassBead=damp(glassBead,beadTarget,beadTarget<glassBead?3.0:0.9,dt);
+  const effRain=glassBead;
   if(rainPass && rainShaderOn && state.mode!=='title' && (effRain>0.01||lightningFlash>0.01)){
    // The windshield pass does its own full-screen composite, so the grade
    // chain stands down for those frames rather than fighting it for the
