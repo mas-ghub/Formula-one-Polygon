@@ -648,7 +648,9 @@ function drawAdBird(cx,x,y,s,color){
 // other way around).
 for(let i=0;i<NA;i++){const[t,bg,fg]=ADS[i];wg.fillStyle=bg;wg.fillRect(i*128,0,128,128);
  wg.fillStyle=fg;wg.font='italic 700 22px sans-serif';wg.textAlign='center';wg.textBaseline='middle';
- wg.save();wg.translate(i*128+64,70);wg.rotate(-0.05);wg.scale(-1,1);wg.fillText(t,0,0,112);wg.restore();
+ // Draw normally. The old negative X scale baked mirrored lettering into the
+ // texture; board orientation is handled in 3D instead.
+ wg.save();wg.translate(i*128+64,70);wg.rotate(-0.025);wg.fillText(t,0,0,116);wg.restore();
  drawAdBird(wg,i*128+22,26,1.2,fg);
  wg.fillStyle='rgba(0,0,0,.25)';wg.fillRect(i*128,118,128,10);}
 const adsT=ctex(wc,true);
@@ -1192,6 +1194,47 @@ function updClouds(dt){
 
 /* ============ birds ============ */
 const birds=[];
+let flybyPlane=null,planeTimer=rand(45,105);
+function makeFlybyPlane(){
+ const g=new THREE.Group();
+ const bodyMat=new THREE.MeshStandardMaterial({color:0xe8edf2,roughness:.32,metalness:.55});
+ const accentMat=new THREE.MeshStandardMaterial({color:0xd71920,roughness:.38,metalness:.45,side:THREE.DoubleSide});
+ const fus=new THREE.Mesh(new THREE.CylinderGeometry(.34,.15,5.2,12),bodyMat);fus.rotation.x=Math.PI/2;g.add(fus);
+ const nose=new THREE.Mesh(new THREE.ConeGeometry(.34,1.25,12),bodyMat);nose.rotation.x=Math.PI/2;nose.position.z=3.18;g.add(nose);
+ // Swept delta wings and tailplanes make this read as a fast display jet, not
+ // a small airliner made from rectangular boxes.
+ const delta=new THREE.BufferGeometry();delta.setAttribute('position',new THREE.Float32BufferAttribute([0,0,1.35,-4.0,0,-1.15,0,0,-.55, 0,0,1.35,0,0,-.55,4.0,0,-1.15],3));delta.computeVertexNormals();
+ g.add(new THREE.Mesh(delta,accentMat));
+ const tail=new THREE.Mesh(new THREE.BoxGeometry(2.35,.07,.55),accentMat);tail.position.z=-2.30;g.add(tail);
+ for(const sx of[-1,1]){const fin=new THREE.Mesh(new THREE.BoxGeometry(.08,1.05,.75),accentMat);fin.position.set(sx*.28,.50,-2.20);fin.rotation.z=sx*.12;g.add(fin);}
+ g.userData.bodyMat=bodyMat;g.userData.accentMat=accentMat;g.visible=false;scene.add(g);return g;
+}
+function updFlybyPlane(dt){
+ if(!flybyPlane)flybyPlane=makeFlybyPlane();
+ if(!flybyPlane.visible){planeTimer-=dt;if(planeTimer>0)return;
+  const px=player?player.x:0,pz=player?player.z:0,a=(player?player.hdg:rand(0,Math.PI*2))+rand(-.16,.16);
+  const side=rand(-95,95),fx=Math.sin(a),fz=Math.cos(a),rx=Math.cos(a),rz=-Math.sin(a);
+  // Appear as a close, obvious overhead pass in front of the player, then fly
+  // away along the viewing direction until perspective makes the jet tiny.
+  flybyPlane.position.set(px+fx*75+rx*side,(player?player.y:0)+rand(62,92),pz+fz*75+rz*side);
+  const speed=rand(135,175);flybyPlane.userData.vx=fx*speed;flybyPlane.userData.vz=fz*speed;flybyPlane.userData.smokeAcc=0;
+  const schemes=[[0xd71920,0xffffff,0x2456d8],[0xff6a00,0xffffff,0x22a447],[0x8b2be2,0xffffff,0x00c8e8]];
+  const scheme=pick(schemes);flybyPlane.userData.smoke=scheme.map(c=>new THREE.Color(c));
+  flybyPlane.userData.bodyMat.color.set(pick([0xf2f4f7,0x202936,0xf0c419,0x39a7d8]));flybyPlane.userData.accentMat.color.set(scheme[0]);
+  flybyPlane.rotation.y=a;flybyPlane.visible=true;
+  if(AudioSys.started)AudioSys.jetFlyby();
+ }
+ flybyPlane.position.x+=flybyPlane.userData.vx*dt;flybyPlane.position.z+=flybyPlane.userData.vz*dt;
+ // Red-Arrows-style three-colour smoke from three outlets. It hangs and
+ // expands after the jet has gone, forming a long, readable vapour ribbon.
+ flybyPlane.userData.smokeAcc+=dt;
+ if(flybyPlane.userData.smokeAcc>.025){flybyPlane.userData.smokeAcc=0;
+  const a=flybyPlane.rotation.y,rx=Math.cos(a),rz=-Math.sin(a),fx=Math.sin(a),fz=Math.cos(a);
+  for(let i=0;i<3;i++){const off=(i-1)*.24,col=flybyPlane.userData.smoke[i];
+   smk(flybyPlane.position.x-fx*2.7+rx*off,flybyPlane.position.y,flybyPlane.position.z-fz*2.7+rz*off,-fx*2,rand(-.05,.18),-fz*2,rand(1.1,1.6),rand(4.5,7),col.r,col.g,col.b,.02);}
+ }
+ const px=player?player.x:0,pz=player?player.z:0;if(Math.hypot(flybyPlane.position.x-px,flybyPlane.position.z-pz)>1050){flybyPlane.visible=false;planeTimer=rand(65,145);}
+}
 function makeBirds(){
  const feather=new THREE.MeshStandardMaterial({color:0x252a31,roughness:0.92,side:THREE.DoubleSide});
  const lightFeather=new THREE.MeshStandardMaterial({color:0xb8c0c8,roughness:0.9,side:THREE.DoubleSide});
@@ -1210,23 +1253,30 @@ function makeBirds(){
   const rw=new THREE.Group(),lw=new THREE.Group();
   rw.add(new THREE.Mesh(wingGeo(1),feather));lw.add(new THREE.Mesh(wingGeo(-1),feather));
   rw.position.y=lw.position.y=.05;g.add(rw,lw);scene.add(g);
-  birds.push({g,rw,lw,cx:rand(-200,200),cz:rand(-200,200),rad:rand(26,72),h:rand(15,34),
-   ang:rand(0,6),spd:rand(0.14,0.34)*(Math.random()<0.5?-1:1),fs:rand(5.5,8.5),ph:rand(0,9),tgt:rand(8,26)});
+  const a=rand(0,Math.PI*2),speed=rand(10,18);
+  birds.push({g,rw,lw,x:rand(-260,260),z:rand(-260,260),h:rand(16,38),
+   vx:Math.sin(a)*speed,vz:Math.cos(a)*speed,fs:rand(5.5,8.5),ph:rand(0,9)});
  }
 }
 function updBirds(dt){
  const hide=cur.rain>0.55;
  for(const b of birds){
   b.g.visible=!hide;if(hide)continue;
-  b.tgt-=dt;
-  if(b.tgt<=0){b.tgt=rand(16,34);
-   const px=player?player.x:0,pz=player?player.z:0;
-   b.cx=px+rand(-180,180);b.cz=pz+rand(-180,180);
-   b.rad=rand(26,85);b.h=rand(15,46);b.spd=rand(0.12,0.32)*(Math.random()<0.5?-1:1);}
-  b.ang+=b.spd*dt;
-  b.g.position.set(b.cx+Math.cos(b.ang)*b.rad,b.h+Math.sin(timeSec*0.6+b.ph)*1.2,b.cz+Math.sin(b.ang)*b.rad);
-  const s=Math.sign(b.spd);
-  b.g.rotation.y=Math.atan2(-Math.sin(b.ang)*s,Math.cos(b.ang)*s);
+  // Continuous fly-by trajectories. Birds are never teleported on a timer:
+  // they cross the circuit, recede naturally until tiny, and are recycled only
+  // when hundreds of metres away (well outside fog/view) to begin another pass.
+  b.x+=b.vx*dt;b.z+=b.vz*dt;
+  const px=player?player.x:0,pz=player?player.z:0,dx=b.x-px,dz=b.z-pz;
+  if(dx*dx+dz*dz>650*650){
+   const camA=player?player.hdg:0;
+   const ahead=rand(380,520),side=rand(-320,320);
+   b.x=px+Math.sin(camA)*ahead+Math.cos(camA)*side;
+   b.z=pz+Math.cos(camA)*ahead-Math.sin(camA)*side;
+   const tx=px+rand(-80,80),tz=pz+rand(-80,80),d=Math.hypot(tx-b.x,tz-b.z)||1,speed=rand(10,19);
+   b.vx=(tx-b.x)/d*speed;b.vz=(tz-b.z)/d*speed;b.h=rand(18,42);
+  }
+  b.g.position.set(b.x,b.h+Math.sin(timeSec*.7+b.ph)*1.1,b.z);
+  b.g.rotation.y=Math.atan2(b.vx,b.vz);
   // Three energetic flaps followed by a short glide. Wing groups pivot at the
   // shoulder, with a little fore/aft sweep, so the silhouette is unmistakable.
   const cycle=(timeSec*.42+b.ph)%1,amp=cycle<.68?1.0:.12;
@@ -2093,11 +2143,14 @@ function buildWorld(idx){
    const boardLat=T.latLimit+1.7;
    const bx=_sv.x+_sn.x*boardLat*side, bz=_sv.z+_sn.z*boardLat*side;
    const by=Math.max(terrainHeightAt(bx,bz),_sv.y-0.4);
-   const w=new THREE.Mesh(new THREE.BoxGeometry(12.5,3.1,0.28),am);
-   // Width runs parallel to the racing line, making the printed face point at
-   // the road. The old yaw aligned the face down-track and showed drivers the
-   // thin edge of each board.
-   w.position.set(bx,by+2.35,bz);w.rotation.y=yaw+Math.PI/2;w.castShadow=true;world.add(w);
+   // A dark structural slab plus one dedicated printed plane facing the road.
+   // Mapping a texture around a BoxGeometry mirrored one side, so boards on
+   // alternate sides of the circuit read backwards. A front-facing plane keeps
+   // every advert sharp and correctly oriented.
+   const slab=new THREE.Mesh(new THREE.BoxGeometry(12.5,3.1,0.24),new THREE.MeshStandardMaterial({color:0x15171b,roughness:.7}));
+   slab.position.set(bx,by+2.35,bz);slab.rotation.y=yaw+Math.PI/2;slab.castShadow=true;world.add(slab);
+   const w=new THREE.Mesh(new THREE.PlaneGeometry(12.2,2.8),am);
+   w.position.set(bx,by+2.35,bz);w.lookAt(_sv.x,by+2.35,_sv.z);w.translateZ(.14);w.renderOrder=2;world.add(w);
    // Wooden legs at either end along the track direction.
    const lx=_st.x,lz=_st.z;
    for(const s of[1,-1]){
@@ -2816,6 +2869,13 @@ function aiThink(c,dt){
  /* steer toward a look-ahead point on the racing line (with avoidance) —
     hold the line tightly; only leave it to attack, avoid or defend */
  const dAgg=c.d.agg||0.5,dDef=c.d.defend||0.5,dRk=c.d.risk||0.5;
+ // Human-scale errors: occasional missed apex, throttle hesitation or small
+ // lock-up. Pressure from a nearby car makes one more likely, but no driver
+ // deliberately targets another car.
+ c.mistakeT=Math.max(0,(c.mistakeT||0)-dt);
+ if(c.mistakeT<=0&&Math.random()<dt*(0.004+dRk*0.008)*(c.near?1.7:1)){
+  c.mistakeT=rand(.35,1.15);c.mistakeSteer=rand(-.28,.28);c.mistakeBrake=Math.random()<.45?rand(.12,.42):0;
+ }
  const la=6+clamp(vF*0.55,0,34);
  const lf=(c.f+la/T.segLen)%T.N;
  const li=Math.floor(lf);
@@ -2886,6 +2946,7 @@ function aiThink(c,dt){
  const dv=tv-vF;
  c.throttle=dv>0.5?1:dv<-1.5?0:0.45;
  c.brake=dv<-4?clamp(-dv*0.14,0,1):0;
+ if(c.mistakeT>0){c.steer=clamp(c.steer+c.mistakeSteer,-1,1);c.brake=Math.max(c.brake,c.mistakeBrake);c.throttle*=.62;}
 }
 /* Slow-motion cinematic trigger for the player's big hits — a brief time
    dilation plus a tightened lens so a shunt lands with real drama. */
@@ -3435,7 +3496,9 @@ const AudioSys={started:false,
   eg.connect(dist);dist.connect(flt);flt.connect(this.master);
   const mk=(type,g)=>{const o=ctx.createOscillator();o.type=type;const og=ctx.createGain();og.gain.value=g;
    o.connect(og);og.connect(eg);o.start();return o;};
-  this.o1=mk('sawtooth',0.5);this.o2=mk('sawtooth',0.28);this.o3=mk('square',0.34);this.o4=mk('sawtooth',0.14);
+  // Layered combustion tone: strong firing fundamental, smoother intake
+  // harmonic, subdued exhaust pulse and a fine high-frequency mechanical edge.
+  this.o1=mk('sawtooth',0.42);this.o2=mk('triangle',0.30);this.o3=mk('square',0.12);this.o4=mk('sawtooth',0.09);
   const en=ctx.createBufferSource();en.buffer=nb;en.loop=true;
   const ef=ctx.createBiquadFilter();ef.type='bandpass';ef.frequency.value=180;
   this.eng=ctx.createGain();this.eng.gain.value=0;
@@ -3460,7 +3523,7 @@ const AudioSys={started:false,
   // engines naturally peel away and fade as the cars leave the player.
   this.rivals=[];
   for(let i=0;i<4;i++){
-   const o=ctx.createOscillator();o.type=i%2?'sawtooth':'square';
+   const o=ctx.createOscillator();o.type=i%2?'sawtooth':'triangle';
    const f=ctx.createBiquadFilter();f.type='lowpass';f.frequency.value=2200;f.Q.value=.55;
    const g=ctx.createGain();g.gain.value=0;
    const pan=ctx.createStereoPanner?ctx.createStereoPanner():null;
@@ -3530,6 +3593,12 @@ const AudioSys={started:false,
   const ng=this.ctx.createGain();ng.gain.setValueAtTime(Math.min(0.6,0.2+strength*0.5),t);
   ng.gain.exponentialRampToValueAtTime(0.001,t+0.35);
   n.connect(f);f.connect(ng);ng.connect(this.master);n.start(t);n.stop(t+0.4);},
+ jetFlyby(){if(!this.started)return;const t=this.ctx.currentTime;
+  const n=this.ctx.createBufferSource();n.buffer=this.noiseBuf;n.loop=true;
+  const f=this.ctx.createBiquadFilter();f.type='bandpass';f.frequency.setValueAtTime(520,t);f.frequency.exponentialRampToValueAtTime(1450,t+3.1);f.frequency.exponentialRampToValueAtTime(380,t+7.2);f.Q.value=.65;
+  const g=this.ctx.createGain();g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.08,t+.8);g.gain.exponentialRampToValueAtTime(.42,t+3.1);g.gain.exponentialRampToValueAtTime(.0001,t+7.5);
+  const o=this.ctx.createOscillator();o.type='sawtooth';o.frequency.setValueAtTime(72,t);o.frequency.exponentialRampToValueAtTime(135,t+3.1);o.frequency.exponentialRampToValueAtTime(48,t+7.3);
+  const og=this.ctx.createGain();og.gain.value=.10;o.connect(og);og.connect(g);n.connect(f);f.connect(g);g.connect(this.master);n.start(t);o.start(t);n.stop(t+7.6);o.stop(t+7.6);},
  update(){if(!this.started||!player)return;
   const t=this.ctx.currentTime,p=player;
   const run=(state.mode==='race'||state.mode==='countdown'||state.mode==='finished')&&!state.paused;
@@ -3540,11 +3609,15 @@ const AudioSys={started:false,
   const gridTarget=state.mode==='countdown'?0.20+gridActivity*0.48:(run?0.025+gridActivity*0.075:0);
   this.gridg.gain.setTargetAtTime(gridTarget,t,0.08);
   this.gridf.frequency.setTargetAtTime(140+gridActivity*380,t,0.1);
-  const f=55+p.audioRpm*640;
-  this.o1.frequency.setTargetAtTime(f,t,0.02);
-  this.o2.frequency.setTargetAtTime(f*1.5,t,0.02);
-  this.o3.frequency.setTargetAtTime(f*0.5,t,0.02);
-  this.o4.frequency.setTargetAtTime(f*2.03,t,0.02);
+  // Approximate a modern V6 firing spectrum rather than sweeping one arcade
+  // oscillator. Gear/load add small independent movement between harmonics;
+  // the soft rev limiter flutters only at the very top of the range.
+  const limiter=p.audioRpm>.975?(0.985+Math.sin(timeSec*210)*.015):1;
+  const load=.92+p.throttle*.08, f=(82+p.audioRpm*760)*limiter;
+  this.o1.frequency.setTargetAtTime(f*load,t,0.018);
+  this.o2.frequency.setTargetAtTime(f*1.5,t,0.022);
+  this.o3.frequency.setTargetAtTime(f*.75,t,0.026);
+  this.o4.frequency.setTargetAtTime(f*2.48,t,0.018);
   // Inside the tunnel the engine is muffled (lower low-pass) and pushed through
   // a feedback delay for an enclosed, echoing rumble — the signature Monaco
   // tunnel sound.
@@ -3816,6 +3889,9 @@ function updCamera(dt){
   camera.rotateZ((swooping?Math.sin(swoopT*Math.PI)*0.14:0)+Math.sin(timeSec*0.35)*0.03);
   camera.fov=damp(camera.fov,swooping?54:50,4,dt);camera.updateProjectionMatrix();return;}
  const p=player,pp=p.mesh.g.position;
+ // The player's own head/arms must not be rendered in front of a camera that
+ // is notionally mounted on that head. Keep the chassis/nose for immersion.
+ if(p.mesh.driverGroup)p.mesh.driverGroup.visible=state.camMode!==2;
  const sp=Math.abs(p.vF);
  let tf=62;
  if(state.camMode===0){
@@ -3845,14 +3921,16 @@ function updCamera(dt){
   // Put the lens at the visor/T-cam edge rather than inside the helmet shell.
   // It remains low and immersive, but the halo, visor and nose no longer fill
   // the lower half of the road view.
-  const roadHere=getRoadHAtCoords(pp.x,pp.z)+0.92;
-  const targetY=Math.max(headWorld.y+0.17,roadHere);
+  const roadHere=getRoadHAtCoords(pp.x,pp.z)+1.12;
+  const targetY=Math.max(headWorld.y+0.30,roadHere);
   // A small vibration conveys speed, but stays below a centimetre so the view
   // remains useful through braking zones and fast direction changes.
   const buzz=(0.0007+sp01*0.0060)*(p.onCurb?2.4:1);
   const bx=Math.sin(timeSec*51.3+p.phase)*buzz;
   const by=Math.cos(timeSec*63.7+p.phase*2)*buzz*0.7;
-  const hx=headWorld.x+fx*0.48,hz=headWorld.z+fz*0.48;
+  // Lens sits just ahead of the halo's forward pillar, like a low T-cam. The
+  // cockpit remains at the bottom edge for immersion but cannot cover apexes.
+  const hx=headWorld.x+fx*0.96,hz=headWorld.z+fz*0.96;
   cam.pos.x=damp(cam.pos.x===undefined?hx:cam.pos.x,hx,22,dt);
   cam.pos.z=damp(cam.pos.z===undefined?hz:cam.pos.z,hz,22,dt);
   cam.pos.y=damp(cam.pos.y===undefined?targetY:cam.pos.y,targetY,22,dt);
@@ -4927,6 +5005,7 @@ function tick(){
    updLens(dtGlobal);
    updClouds(dtGlobal);
    updBirds(dtGlobal);
+   updFlybyPlane(dtGlobal);
    updLightning(dtGlobal);
   }
   updCamera(state.paused?0.0001:dtGlobal);

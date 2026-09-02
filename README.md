@@ -1,6 +1,6 @@
 # POLYGON GP — Low-Poly Grand Prix
 
-**Current visible version:** `v0.9.1 · BUILD 20260902.2`
+**Current visible version:** `v0.9.4 · BUILD 20260902.5`
 
 The version is displayed in the title-screen footer and included automatically
 in every in-game error report, making stale deployments and cached builds easy
@@ -140,6 +140,9 @@ on the title screen.
 - **Improved car presentation:** cleaner rounded tyres/rims without duplicated
   protruding suspension geometry, correctly placed brake discs, animated
   driver/head movement and a road-safe helmet camera with speed-responsive FOV.
+- **Humanised opponents:** driver aggression and defence affect overtaking and
+  inside-line blocking; pressure can provoke occasional persistent missed-apex,
+  throttle-hesitation or brake-lock mistakes without intentional ramming.
 - **Damage:** light impacts reduce power for five seconds and display an
   animated recovery spanner. Severe impacts cause terminal damage, shed visible
   bodywork debris and end the player's race. Contact and bottoming sparks are
@@ -172,17 +175,25 @@ on the title screen.
   canvas blobs overlaid on top, preserving sharp beads, trails and wet-glass
   distortion at racing speed.
 - **Trackside presentation:** sponsor hoardings sit safely beyond the barrier,
-  run parallel to the road with their printed face aimed at passing drivers,
-  and use high-anisotropy, gently lifted materials for readability in rain and
-  at dusk. Recognisable modelled birds have bodies, heads, beaks and tails plus
+  run parallel to the road and use a dedicated correctly oriented print plane
+  (not mirrored BoxGeometry UVs), with high-anisotropy filtering and a gentle
+  light lift for clean readability in rain and at dusk. Recognisable modelled birds have bodies, heads, beaks and tails plus
   shoulder-pivoted wings that alternate energetic flap sequences with glides.
+  Birds follow continuous cross-circuit fly-by paths and are recycled only when
+  more than 650 m away, so they recede to tiny silhouettes instead of vanishing.
+  Rare display-jet fly-bys begin as a close overhead sight ahead of the player,
+  accelerate away at 135–175 m/s until tiny beyond 1 km, and carry a loud
+  filtered turbine pass. Swept delta wings, twin fins and changing body/accent
+  colours distinguish each visit. Three outlets leave long-lived red/white/blue,
+  orange/white/green or purple/white/cyan display-smoke ribbons.
 - **Commentary mood:** race commentary starts from a happy, enthusiastic
   baseline and adds regular positive atmosphere calls between action events;
   speed, close racing, weather and incidents raise the delivery further.
-- **Engine sound field:** the player's engine and whole-grid bed have more
-  presence, while the four nearest rivals receive independent pitch, filter,
-  stereo pan and smooth distance attenuation. Packs build audibly as they
-  approach and each engine fades naturally as its car drives away.
+- **Engine sound field:** the player's engine uses a layered V6-style firing
+  spectrum (fundamental, intake harmonic, subdued exhaust pulse, mechanical
+  edge, load movement and rev-limiter flutter) instead of one arcade sweep.
+  The four nearest rivals receive independent pitch, filtering, stereo pan and
+  smooth distance attenuation, so packs build and fade naturally.
 - **Encoding-safe UI:** menu country markers use compact ISO-style codes, and
   source/UI text has been repaired from double-decoded UTF-8 so punctuation,
   accents, arrows and symbols render correctly instead of mojibake.
