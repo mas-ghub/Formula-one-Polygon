@@ -11,7 +11,15 @@ export class TiltController {
   constructor() {
     this.enabled = false;
     this.hasPermission = false;
-    this.calibrated = false;
+    // 'unknown' → nothing asked yet, 'granted' → the browser let us listen,
+    // 'live' → and the device is actually sending sensor events. The
+    // difference between those two is the whole reason tilt "turns on" and
+    // then does nothing on an iPad, so the UI reports them separately.
+    this.gyroState = 'unknown';
+    this.gyroError = '';
+    this._permResult = null;
+    this._sensorSeenAt = 0;
+    this._watchdog = 0;
 
     // Configurable parameters & persistence
     this.sensitivityIdx = 2; // HIGH (2.6x)
@@ -50,6 +58,9 @@ export class TiltController {
     this.lastRawPitch = 0;
     this.lastSteerDeg = 0;
     this.sensorSource = 'Sensor Ready';
+
+    // One-shot baseline capture latch (see processSensors)
+    this._seenAny = false;
 
     // Simulated drag overrides for desktop test lab
     this.simulatedSteer = 0;
@@ -147,30 +158,71 @@ export class TiltController {
     this.showToast(`STEERING INVERT: ${this.invertSteer ? 'ON' : 'OFF'}`);
   }
 
+  /**
+   * Ask the OS for motion/orientation access. Returns 'granted' | 'denied' |
+   * 'not-needed' | 'unsupported' and NEVER claims success when the call
+   * threw: the old code fell into catch and set hasPermission = true, so an
+   * iPad with Motion & Orientation Access switched off believed it was live,
+   * showed "GYROSCOPE ACTIVE", and the car never moved.
+   */
   async requestPermission() {
-    try {
-      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-        const res = await DeviceOrientationEvent.requestPermission();
-        this.hasPermission = (res === 'granted');
-      } else {
-        this.hasPermission = true;
-      }
-    } catch (err) {
-      console.warn('Orientation permission notice:', err);
-      this.hasPermission = true;
+    if (typeof window === 'undefined') { this._permResult = 'unsupported'; return 'unsupported'; }
+    const DOE = window.DeviceOrientationEvent, DME = window.DeviceMotionEvent;
+    const ask = DOE && typeof DOE.requestPermission === 'function' ? DOE
+      : (DME && typeof DME.requestPermission === 'function' ? DME : null);
+    if (!ask && !DOE && !DME) {
+      this._permResult = 'unsupported';
+      this.gyroError = 'This browser has no motion sensors at all.';
+      return 'unsupported';
     }
-    return this.hasPermission;
+    if (!ask) { this._permResult = 'not-needed'; this.hasPermission = true; return 'not-needed'; }
+    try {
+      const res = await ask.requestPermission();
+      this._permResult = res === 'granted' ? 'granted' : 'denied';
+      this.hasPermission = res === 'granted';
+      if (!this.hasPermission)
+        this.gyroError = 'The browser refused motion access (iOS: Settings ▸ Safari ▸ Advanced ▸ "Motion & Orientation Access").';
+      return this._permResult;
+    } catch (err) {
+      // A throw is a failure, not a pass. Usually a non-secure origin, a
+      // missing user gesture, Low Power Mode or Focus blocking the sensor.
+      console.warn('Orientation permission problem:', err);
+      this._permResult = 'denied';
+      this.hasPermission = false;
+      this.gyroError = 'The permission request failed (' + ((err && err.name) || 'error') +
+        '). Motion access needs the https:// address, an active tap, and no Low Power/Focus blocking.';
+      return 'denied';
+    }
   }
 
+  /**
+   * Start listening. Resolves true only when the sensor is actually feeding
+   * us data: permission alone is not enough (an iPad with the OS switch off,
+   * or any desktop without an IMU, grants and then sends nothing).
+   */
   async enable() {
-    await this.requestPermission();
+    const perm = await this.requestPermission();
+    if (perm === 'denied' || perm === 'unsupported') {
+      this.enabled = false;
+      this.gyroState = 'error';
+      this.updateUI();
+      return false;
+    }
 
     this.enabled = true;
+    this.gyroState = 'pending';
+    this.gyroError = '';
+    // Every start is a fresh zero: holding the device level for a moment recentres
+    // the steering, so an earlier session's angle can never bias this one.
     this.calibrated = false;
+    this._seenAny = false;
+    this.neutralSteer = 0;
+    this.neutralPitch = 0;
     this.smoothSteer = 0;
     this.smoothThrottle = 0;
     this.smoothBrake = 0;
     this.lastFilterTime = performance.now();
+    this._sensorSeenAt = 0;
 
     window.addEventListener('deviceorientation', this.onOrientation, true);
     if ('ondeviceorientationabsolute' in window) {
@@ -179,11 +231,45 @@ export class TiltController {
     window.addEventListener('devicemotion', this.onMotion, true);
 
     document.body.classList.add('tilt-mode');
+    // a (re)start always clears the retry prompt; it comes back if the sensor
+    // still refuses to talk
+    const prompt = document.getElementById('gyroPrompt');
+    if (prompt) prompt.classList.remove('show');
     this.updateUI();
-    return true;
+
+    if (this._sensorSeenAt) { this.gyroState = 'live'; this.updateUI(); return true; }
+    return await this.waitForSensor();
+  }
+
+  /**
+   * Watchdog: a working IMU fires within a few frames. If nothing arrives
+   * within ~1.4s, say so — and say why — instead of pretending to drive.
+   */
+  waitForSensor(timeoutMs = 1400) {
+    return new Promise((resolve) => {
+      clearTimeout(this._watchdog);
+      const t0 = performance.now();
+      const tick = () => {
+        if (!this.enabled) return resolve(false);
+        if (this._sensorSeenAt) { this.gyroState = 'live'; this.updateUI(); return resolve(true); }
+        if (performance.now() - t0 > timeoutMs) {
+          if (!this.gyroError)
+            this.gyroError = 'No motion data from the device. On iPad/iPhone turn on Settings ▸ Safari ▸ Advanced ▸ "Motion & Orientation Access", leave Low Power Mode off, and reload; on a desktop or emulator there is no IMU to read.';
+          this.disable();
+          this.gyroState = 'error';
+          this.updateUI();
+          return resolve(false);
+        }
+        this._watchdog = setTimeout(tick, 100);
+      };
+      this._watchdog = setTimeout(tick, 120);
+    });
   }
 
   disable() {
+    clearTimeout(this._watchdog);
+    this._watchdog = 0;
+    if (this.gyroState === 'live' || this.gyroState === 'pending') this.gyroState = this.gyroError ? 'error' : 'unknown';
     this.enabled = false;
     this.steer = 0;
     this.throttle = 0;
@@ -208,9 +294,8 @@ export class TiltController {
     if (this.enabled) {
       this.disable();
       return false;
-    } else {
-      return await this.enable();
     }
+    return await this.enable();
   }
 
   calibrate() {
@@ -279,11 +364,18 @@ export class TiltController {
     this.lastRawSteer = rawSteer;
     this.lastRawPitch = rawPitch;
 
-    // Auto-calibrate baseline on initial sensor event if not calibrated yet
-    if (!this.calibrated && (Math.abs(rawSteer) > 0.05 || Math.abs(rawPitch) > 0.05)) {
+    // Adopt the first reading after (re)start as the neutral pose. Note the
+    // seenAny latch: while the watchdog is still probing whether a sensor
+    // exists at all, the baseline must NOT be captured — otherwise the wake-up
+    // jerk of a phone already held at an angle would silently become
+    // "straight ahead", and every later correction would be ignored because
+    // the old code only re-centred once the tilt exceeded 0.05°.
+    if (!this.calibrated && this._seenAny) {
       this.neutralSteer = rawSteer;
       this.neutralPitch = rawPitch;
       this.calibrated = true;
+    } else if (!this.calibrated) {
+      this._seenAny = true;
     }
 
     this.computeOutputs(rawSteer, rawPitch);
@@ -379,6 +471,8 @@ export class TiltController {
     if (!this.enabled) return;
     if (e.beta === null && e.gamma === null) return;
 
+    this._sensorSeenAt = performance.now();
+    if (this.gyroState !== 'live') { this.gyroState = 'live'; this.updateUI(); }
     this.sensorSource = 'DeviceOrientation (Gyro)';
     this.currentBeta = e.beta || 0;
     this.currentGamma = e.gamma || 0;
@@ -392,6 +486,8 @@ export class TiltController {
     const acc = e.accelerationIncludingGravity;
     if (!acc || acc.x === null || acc.y === null) return;
 
+    this._sensorSeenAt = performance.now();
+    if (this.gyroState !== 'live') { this.gyroState = 'live'; this.updateUI(); }
     this.accX = acc.x || 0;
     this.accY = acc.y || 0;
     this.accZ = acc.z || 0;
@@ -405,13 +501,13 @@ export class TiltController {
     }
   }
 
-  showToast(msg) {
+  showToast(msg, ttl = 1400) {
     const t = document.getElementById('camToast');
     if (t) {
       t.textContent = msg;
       t.classList.add('show');
       clearTimeout(this._toastTimer);
-      this._toastTimer = setTimeout(() => t.classList.remove('show'), 1400);
+      this._toastTimer = setTimeout(() => t.classList.remove('show'), ttl);
     }
   }
 
@@ -423,25 +519,43 @@ export class TiltController {
       btnTilt.classList.toggle('sel', this.enabled);
     }
 
+    const axisName = this.steerAxis === 'auto' ? 'AUTO' : (this.steerAxis === 'beta' ? 'β' : (this.steerAxis === 'gamma' ? 'γ' : 'ACC'));
+    // Four visibly different states — off, asking, live, broken — because
+    // "on" and "working" are not the same thing and the old UI conflated them.
+    const label = !this.enabled
+      ? (this.gyroState === 'error' ? 'GYRO ERROR' : 'GYRO OFF')
+      : (this.gyroState === 'live' ? `GYRO [${axisName}]` : 'GYRO PENDING');
+    const tint = !this.enabled
+      ? (this.gyroState === 'error' ? '#ff5348' : '')
+      : (this.gyroState === 'live' ? '#00f0ff' : '#f2c14e');
+
     const hChip = document.getElementById('hTiltChip');
     if (hChip) {
-      const axisName = this.steerAxis === 'auto' ? 'AUTO' : (this.steerAxis === 'beta' ? 'β' : (this.steerAxis === 'gamma' ? 'γ' : 'ACC'));
-      hChip.textContent = this.enabled ? `GYRO [${axisName}]` : 'GYRO OFF';
-      hChip.classList.toggle('active', this.enabled);
-      if (this.enabled) {
-        hChip.style.borderColor = '#00f0ff';
-        hChip.style.color = '#00f0ff';
-      } else {
-        hChip.style.borderColor = '';
-        hChip.style.color = '';
-      }
+      hChip.textContent = label;
+      hChip.classList.toggle('active', this.gyroState === 'live');
+      hChip.style.borderColor = tint;
+      hChip.style.color = tint;
+      hChip.title = this.gyroState === 'error' && this.gyroError ? this.gyroError : '';
     }
 
     const pBtn = document.getElementById('pTiltToggle');
     if (pBtn) {
-      const axisName = this.steerAxis === 'auto' ? 'AUTO' : (this.steerAxis === 'beta' ? 'LANDSCAPE (β)' : (this.steerAxis === 'gamma' ? 'PORTRAIT (γ)' : 'ACCEL 3D'));
-      pBtn.textContent = this.enabled ? `GYRO TILT: ON [${axisName}]` : 'GYRO TILT: OFF';
-      pBtn.classList.toggle('on', this.enabled);
+      const longAxis = this.steerAxis === 'auto' ? 'AUTO' : (this.steerAxis === 'beta' ? 'LANDSCAPE (β)' : (this.steerAxis === 'gamma' ? 'PORTRAIT (γ)' : 'ACCEL 3D'));
+      pBtn.textContent = this.enabled
+        ? (this.gyroState === 'live' ? `GYRO TILT: LIVE [${longAxis}]` : 'GYRO TILT: WAITING FOR SENSOR…')
+        : (this.gyroState === 'error' ? 'GYRO TILT: NO SENSOR — TAP TO RETRY' : 'GYRO TILT: OFF');
+      pBtn.classList.toggle('on', this.gyroState === 'live');
+      pBtn.title = this.gyroError || '';
+    }
+
+    const labNotice = document.getElementById('gyroLabCalNotice');
+    if (labNotice) {
+      labNotice.textContent = this.gyroState === 'error'
+        ? (this.gyroError || 'No sensor data')
+        : (this.gyroState === 'live' ? 'Gyroscope is live · tilt to steer'
+          : (this.enabled ? 'Detecting motion sensor…' : 'Gyroscope off'));
+      labNotice.style.color = this.gyroState === 'error' ? '#ff5348' : '#22c55e';
+      labNotice.classList.add('show');
     }
 
     const gauge = document.getElementById('tiltGauge');

@@ -12,6 +12,7 @@ import { accentFor } from './teamLivery.js';
 const $=id=>document.getElementById(id);
 const clamp=(v,a,b)=>v<a?a:v>b?b:v;
 const lerp=(a,b,t)=>a+(b-a)*t;
+const smoothstep01=(t)=>{const x=t<0?0:t>1?1:t;return x*x*(3-2*x);};
 const rand=(a,b)=>a+Math.random()*(b-a);
 const damp=(a,b,l,dt)=>lerp(a,b,1-Math.exp(-l*dt));
 const pick=a=>a[Math.floor(Math.random()*a.length)];
@@ -258,9 +259,12 @@ function getTrackElevation(u, trackName) {
   return y;
 }
 
-// Scenery (trees/buildings) sit visually on the ground mesh, so they should
-// match ITS height — including the clearance dropped below the road so
-// nothing pokes through the tarmac.
+// Scenery (trees, buildings, boards, grandstands) sits ON the ground mesh,
+// so it must be planted with the terrain heightfield's own bilinear sample —
+// the same surface the eye sees — rather than the raw road height. That is the
+// only way a prop on a hillside, an embankment or inside a hairpin loop can
+// be guaranteed to touch down instead of floating over (or sinking under) the
+// slope the road climbs.
 function getTrackHAtCoords(x, z) {
   if (!T || !T.samples) return 0;
   if (T.terrainHeightAt) return T.terrainHeightAt(x, z);
@@ -1085,8 +1089,8 @@ function buildWorld(idx){
    raw[i].y = getTrackElevation(i / N, def.name);
   }
  }
- let trackMinY=Infinity;
- for(let i=0;i<N;i++)if(raw[i].y<trackMinY)trackMinY=raw[i].y;
+ let trackMinY=Infinity,trackMaxY=-Infinity;
+ for(let i=0;i<N;i++){if(raw[i].y<trackMinY)trackMinY=raw[i].y;if(raw[i].y>trackMaxY)trackMaxY=raw[i].y;}
  const samples=[];let len=0;
  for(let i=0;i<N;i++){
   const p=raw[i],pn=raw[(i+1)%N],pp=raw[(i-1+N)%N];
@@ -1125,8 +1129,76 @@ function buildWorld(idx){
  // IDW-blending several points into a mushy average — tracks the real road
  // height precisely (so a thin clearance is enough — no visible step at the
  // track edge) while still staying continuous through a hairpin.
+ //
+ // A proper terrain heightfield needs this query at tens of thousands of
+ // vertices, so segments are additionally bucketed into a uniform spatial
+ // hash: an interior lookup then only tests the handful of segments sharing
+ // the cells around the point instead of all 420. A point whose whole
+ // neighbourhood is empty is provably far from every segment, so it can
+ // short-circuit to the conservative far-field answer.
+ const HASH_PAD=140; // wider than the terrain grid's outer margin, so every heightfield vertex is queried inside the hash
+ let tbMinX=Infinity,tbMaxX=-Infinity,tbMinZ=Infinity,tbMaxZ=-Infinity;
+ let hashCell=0,hashW=0,hashH=0,hashMinX=0,hashMinZ=0,hashBuckets=null;
+ {
+  let minX=Infinity,maxX=-Infinity,minZ=Infinity,maxZ=-Infinity;
+  for(const s of samples){minX=Math.min(minX,s.p.x);maxX=Math.max(maxX,s.p.x);minZ=Math.min(minZ,s.p.z);maxZ=Math.max(maxZ,s.p.z);}
+  tbMinX=minX;tbMaxX=maxX;tbMinZ=minZ;tbMaxZ=maxZ;
+  const spanX=maxX-minX+HASH_PAD*2,spanZ=maxZ-minZ+HASH_PAD*2;
+  const target=Math.max(8,Math.round(Math.sqrt(N)/1.7)); // ~15 buckets on a side
+  hashCell=Math.max(spanX,spanZ)/target;
+  hashMinX=minX-HASH_PAD;hashMinZ=minZ-HASH_PAD;
+  hashW=Math.max(1,Math.ceil(spanX/hashCell));hashH=Math.max(1,Math.ceil(spanZ/hashCell));
+  hashBuckets=new Array(hashW*hashH);
+  for(let i=0;i<N;i++){
+   const a=samples[i].p,b=samples[(i+1)%N].p;
+   const i0=clamp(Math.floor((Math.min(a.x,b.x)-8-hashMinX)/hashCell),0,hashW-1);
+   const i1=clamp(Math.floor((Math.max(a.x,b.x)+8-hashMinX)/hashCell),0,hashW-1);
+   const j0=clamp(Math.floor((Math.min(a.z,b.z)-8-hashMinZ)/hashCell),0,hashH-1);
+   const j1=clamp(Math.floor((Math.max(a.z,b.z)+8-hashMinZ)/hashCell),0,hashH-1);
+   for(let j=j0;j<=j1;j++)for(let ii=i0;ii<=i1;ii++){
+    const ci=j*hashW+ii;(hashBuckets[ci]||(hashBuckets[ci]=[])).push(i);
+   }
+  }
+ }
  const nearestTrackY=(x,z)=>{
   let bestD2=1e18,bestY=trackMinY;
+  let tested=0;
+  if(hashBuckets){
+   const gi=Math.floor((x-hashMinX)/hashCell),gj=Math.floor((z-hashMinZ)/hashCell);
+   if(gi>=0&&gj>=0&&gi<hashW&&gj<hashH){
+    // Nothing in the 3×3 neighbourhood → provably farther from the track than
+    // the distance any segment could have produced, so skip the scan.
+    let any=false;
+    for(let j=gj-1;j<=gj+1&&!any;j++){
+     if(j<0||j>=hashH)continue;
+     const row=j*hashW;
+     for(let i=gi-1;i<=gi+1;i++){if(i<0||i>=hashW)continue;if(hashBuckets[row+i]){any=true;break;}}
+    }
+    if(!any)return{dist:hashCell*1.2,y:trackMinY,far:true};
+    for(let j=gj-1;j<=gj+1;j++){
+     if(j<0||j>=hashH)continue;
+     const row=j*hashW;
+     for(let i=gi-1;i<=gi+1;i++){
+      if(i<0||i>=hashW)continue;
+      const bkt=hashBuckets[row+i];
+      if(!bkt)continue;
+      for(let k=0;k<bkt.length;k++){
+       const si=bkt[k],a=samples[si].p,b=samples[(si+1)%N].p;
+       const abx=b.x-a.x,abz=b.z-a.z;
+       const abLen2=abx*abx+abz*abz||1e-6;
+       let t=((x-a.x)*abx+(z-a.z)*abz)/abLen2;
+       t=clamp(t,0,1);
+       const px=a.x+abx*t,pz=a.z+abz*t;
+       const dx=x-px,dz=z-pz,d2=dx*dx+dz*dz;
+       tested++;
+       if(d2<bestD2){bestD2=d2;bestY=lerp(a.y,b.y,t);}
+      }
+     }
+    }
+    if(tested)return{dist:Math.sqrt(bestD2),y:bestY,far:false};
+   }
+  }
+  // outside the hash bounds → exact full scan
   for(let i=0;i<N;i+=2){
    const a=samples[i].p,b=samples[(i+2)%N].p;
    const abx=b.x-a.x,abz=b.z-a.z;
@@ -1137,58 +1209,334 @@ function buildWorld(idx){
    const dx=x-px,dz=z-pz,d2=dx*dx+dz*dz;
    if(d2<bestD2){bestD2=d2;bestY=lerp(a.y,b.y,t);}
   }
-  return{dist:Math.sqrt(bestD2),y:bestY};
+  return{dist:Math.sqrt(bestD2),y:bestY,far:false};
  };
- // Scenery placement used to check distance-to-track with a coarse
- // nearest-VERTEX search (every 4th of up to 840 samples) — on a long real
- // circuit that's a 20-40m gap between checked points, so an object sitting
- // mid-straight could read as much farther from the track than it truly is
- // and slip past the clearance check onto the road. Reuse the precise
- // segment-projection distance instead.
  const minTrackDist=(x,z)=>nearestTrackY(x,z).dist;
  let cx=0,cz=0;for(const s of samples){cx+=s.p.x;cz+=s.p.z;}cx/=N;cz/=N;
  T.center={x:cx,z:cz};
  let rad=0;for(const s of samples)rad=Math.max(rad,Math.hypot(s.p.x-cx,s.p.z-cz));rad+=180;
-
- // Ground terrain — a heightfield that follows the track's own elevation near
- // the road, offset safely below the tarmac/runoff/kerb meshes so the grass
- // never pokes through the road surface, and settles gradually to a flat
- // baseline further out so hilly real circuits read as one continuous rolling
- // landscape (not a road on an isolated mound, and never a bridge).
- // Now that the road height is found by precise segment projection rather
- // than a broad blend, a small clearance is enough — no visible "wall"
- // between the track edge and the surrounding grass.
- const clearance=1.7;
- const nearR=T.latLimit+9,farR=nearR+430;
- const terrainHeightAt=(x,z)=>{
-  const{dist,y}=nearestTrackY(x,z);
-  const s=clamp((dist-nearR)/(farR-nearR),0,1);
-  const sm=s*s*(3-2*s);
-  return lerp(y-clearance,trackMinY-4,sm);
+ // ---------------------------------------------------------------------------
+ // GROUND / TERRAIN — elevation belongs to the LAND, not just to the tarmac.
+ // The old ground was one flat plane grid at ~50 m per cell, while a real
+ // OpenF1 circuit changes height every few metres (Spa climbs ~102 m, up to a
+ // 14% grade at Eau Rouge/Raidillon), so the road visibly lifted off the grass
+ // and looked like it was driving up a ramp of its own. The ground is now a
+ // genuine heightfield:
+ //   • sampled at a cell size tied to a vertex budget — 6-15 m next to the
+ //     road, so the terrain cannot lag the tarmac's slope by much;
+ //   • locked to the road bed inside the run-off, propped up where a node
+ //     falls between two stretches of the same road and capped so it can never
+ //     overtop the ribbon — which keeps a climb on solid ground without burying
+ //     a lower road that passes beside it;
+ //   • smoothed by a cone-limited fill, so the dips between sections that loop
+ //     back on each other become embankments instead of slits;
+ //   • wrapped by a coarse outer band that shares the grid's exact border
+ //     vertices (one continuous surface, no T-junction cracks), out to a flat
+ //     plane that holds the horizon;
+ //   • and given rolling hills of its own, so the countryside is not a dead
+ //     plane that the circuit climbs away from.
+ // Everything — props, cars, physics, this mesh — reads height through the
+ // same functions, so nothing can disagree with anything else. The surface
+ // stays a little under the road so it can never poke through the tarmac; that
+ // clearance widens across the run-off, where the walls stand, and narrows
+ // beyond it, which is where grandstands, boards and trees are anchored.
+ // ---------------------------------------------------------------------------
+ const baseY=trackMinY-4; // the landscape floor
+ const nearR=T.latLimit+14,farR=nearR+200;
+ const groundClearance=(lat)=>0.9+1.3*smoothstep01((lat-T.latLimit)/Math.max(1,wallDist-T.latLimit));
+ // Deterministic value noise, seeded per circuit, for the distant hills.
+ const seedHash=((idx*2654435761)>>>0)||9781;
+ const vnoise=(x,z)=>{
+  const xi=Math.floor(x),zi=Math.floor(z),fx=x-xi,fz=z-zi;
+  const u=fx*fx*(3-2*fx),v=fz*fz*(3-2*fz);
+  const h=(a,b)=>{let n=(Math.imul(a,374761393)+Math.imul(b,668265263)+seedHash)>>>0;
+   n=Math.imul(n^(n>>>13),1274126177)>>>0;return((n^(n>>>16))>>>0)/4294967295;};
+  const a=h(xi,zi),b=h(xi+1,zi),c=h(xi,zi+1),d=h(xi+1,zi+1);
+  return(a+(b-a)*u+(c-a)*v+(a-b-c+d)*u*v)*2-1;
  };
- // The real, un-lowered road/track surface height — this is what cars must
- // sit on. It must never include the ground mesh's clearance offset.
- const trueTrackHeightAt=(x,z)=>nearestTrackY(x,z).y;
- // World-space Y offsets between ground/runoff/road/curbs are only a few cm
- // apart, which floating-point depth-buffer precision can't reliably hold at
- // real-circuit distances — that's what caused the persistent ground/road
- // seam z-fighting. polygonOffset biases depth at the rasterizer instead, so
- // the draw order stays correct (ground behind runoff behind road behind
- // curbs/lines/decals) no matter how far the camera is.
- const groundMat=new THREE.MeshStandardMaterial({map:grassT,bumpMap:grassBumpT,bumpScale:0.4,color:def.grass,roughness:1,polygonOffset:true,polygonOffsetFactor:4,polygonOffsetUnits:4});
- groundMat.envMapIntensity=0.25;
+ const reliefAmp=clamp((trackMaxY-trackMinY)*0.18,2.5,16);
+ const reliefAt=(x,z)=>(vnoise(x*0.0022,z*0.0022)*0.65+vnoise(x*0.0061+11.3,z*0.0061-7.7)*0.28+vnoise(x*0.019-3.1,z*0.019+5.3)*0.07)*reliefAmp;
+ // --- support raise / corridor carve ----------------------------------------
+ // A heightfield only knows the road where it has nodes, so on a circuit that
+ // winds, climbs and doubles back a ribbon can straddle two cells whose heights
+ // were read from two different stretches — the tarmac then looks like it is
+ // driving off a ramp of its own. Two per-cell rules settle it in both
+ // directions, and they bracket the height rather than replace it:
+ //   • FLOOR — the land under a stretch of road is propped up to that road's
+ //     bed. This is what stops the tarmac floating on a hillside, and what
+ //     turns the empty space inside a loop into a supportable embankment.
+ //   • CEILING — a cell a road runs over stays at or below that road's
+ //     surface, because tarmac and run-off are a flat band and ground higher
+ //     than them would punch straight through the track. Where two ribbons
+ //     overlap in plan view (a hairpin passing a climb, a road under a
+ //     bridge), the CEILING is taken from the lower of them, so each keeps
+ //     its own cutting; the upper one simply stands above the ground there,
+ //     which is what that stretch of a real circuit does.
+ let raiseMap=null,capMap=null,supW=0,supH=0,supX0=0,supZ0=0,supDx=1,supDz=1;
+ const buildSupportMaps=(g)=>{
+  const w=g.w,h=g.h,nPts=w*h;
+  const raise=new Float32Array(nPts).fill(-1e9);
+  const cap=new Float32Array(nPts).fill(1e9);
+  const reach=wallDist+4,reach2=reach*reach+g.dx*g.dx,tol=g.dx*0.75;
+  // one ownership test per cell (which stretch the raw rule is reading),
+  // shared by every road sample that reaches it
+  const ownDist=new Float32Array(nPts).fill(-1),ownY=new Float32Array(nPts);
+  for(let i=0;i<N;i++){
+   const s=samples[i];
+   const gi0=clamp(Math.floor((s.p.x-reach-g.x0)/g.dx),0,w-1);
+   const gi1=clamp(Math.floor((s.p.x+reach-g.x0)/g.dx),0,w-1);
+   const gj0=clamp(Math.floor((s.p.z-reach-g.z0)/g.dz),0,h-1);
+   const gj1=clamp(Math.floor((s.p.z+reach-g.z0)/g.dz),0,h-1);
+   for(let j=gj0;j<=gj1;j++){
+    const nzp=g.z0+g.dz*j,dz=s.p.z-nzp;
+    for(let k2=gi0;k2<=gi1;k2++){
+     const id=j*w+k2,nxp=g.x0+g.dx*k2;
+     const dx=s.p.x-nxp,d2=dx*dx+dz*dz;
+     if(d2>reach2)continue;
+     let nd=ownDist[id];
+     if(nd<0){const r=nearestTrackY(nxp,nzp);nd=r.dist;ownY[id]=r.y;ownDist[id]=nd;}
+     // FLOOR: inside the owning stretch's corridor the cell is its bed
+     if(d2<=(nd+tol)*(nd+tol)){
+      const lvl=ownY[id]-groundClearance(nd);
+      if(lvl>raise[id])raise[id]=lvl;
+     }
+     // CEILING: any stretch running over the cell keeps the ground below it,
+     // and the lowest of them wins, so a ribbon that passes a climb on the
+     // side (or under it) keeps its own cutting. The embankment the fill
+     // builds then stops at the far edge of that corridor instead of
+     // swallowing the track.
+     if(d2<=wallDist*wallDist){
+      const cv=s.p.y-groundClearance(Math.sqrt(d2));
+      if(cv<cap[id])cap[id]=cv;
+     }
+    }
+   }
+  }
+  raiseMap=raise;capMap=cap;
+  supW=w;supH=h;supX0=g.x0;supZ0=g.z0;supDx=g.dx;supDz=g.dz;
+ };
+ // Both maps are read whole-cell, never interpolated: smoothing across the
+ // border of a corridor cell would drag the floor or the cut out into the
+ // hillside beside the track, which is the opposite of what they are for.
+ const mapAt=(m,x,z,sentinel)=>{
+  if(!m)return sentinel;
+  const fi=(x-supX0)/supDx,fj=(z-supZ0)/supDz;
+  if(fi<0||fj<0||fi>supW-1||fj>supH-1)return sentinel;
+  return m[Math.min(Math.floor(fj),supH-1)*supW+Math.min(Math.floor(fi),supW-1)];
+ };
+ // Exact terrain height at any world point (no cache) — what the meshes and
+ // the fill are built from. Raw terrain is the nearest stretch's bed, blended
+ // out to rolling hills; the two support maps then bracket it.
+ const rawTerrainAt=(x,z)=>{
+  const r=nearestTrackY(x,z);
+  const d=r.dist;
+  // Inside the run-off the land IS the road bed: locked to its height, never
+  // more than the small clearance below it, so the tarmac can neither float
+  // above the grass nor be buried by it on a climb.
+  let h=r.y-groundClearance(d);
+  if(d>nearR){
+   const s=clamp((d-nearR)/(farR-nearR),0,1),sm=s*s*(3-2*s);
+   h=lerp(h,baseY+reliefAt(x,z),sm);
+  }
+  return h;
+ };
+ // Bracket a raw terrain height by the two support rules. Kept in one place so
+ // the exact function, the fill and the far band can never disagree about a
+ // crossing.
+ const terrainHeightAt=(x,z)=>{
+  const h=rawTerrainAt(x,z);
+  const up=mapAt(raiseMap,x,z,-1e9);
+  const cap=mapAt(capMap,x,z,1e9);
+  return Math.max(Math.min(h,cap),up);
+ };
  const groundSize=Math.max(4600,rad*2.4);
  const q=effQuality();
- const segs=q==='LOW'?52:q==='MED'?74:q==='ULTRA'?140:92;
- const groundGeo=new THREE.PlaneGeometry(groundSize,groundSize,segs,segs).rotateX(-Math.PI/2);
- const gpos=groundGeo.attributes.position;
- for(let i=0;i<gpos.count;i++){
-  gpos.setY(i,terrainHeightAt(gpos.getX(i)+cx,gpos.getZ(i)+cz));
+ // --- height grid -----------------------------------------------------------
+ const sampleGrid=(g,x,z)=>{
+  let fx=(x-g.x0)/g.dx,fz=(z-g.z0)/g.dz;
+  if(fx<0)fx=0;else if(fx>g.w-1)fx=g.w-1;
+  if(fz<0)fz=0;else if(fz>g.h-1)fz=g.h-1;
+  const i=Math.min(Math.floor(fx),g.w-2),j=Math.min(Math.floor(fz),g.h-2);
+  const tx=fx-i,tz=fz-j;
+  const a=g.data[j*g.w+i],b=g.data[j*g.w+i+1],c=g.data[(j+1)*g.w+i],d=g.data[(j+1)*g.w+i+1];
+  return a+(b-a)*tx+(c-a)*tz+(a-b-c+d)*tx*tz;
+ };
+ const mkGrid=(cell,x0,z0,nx,nz)=>({x0,z0,dx:cell,dz:cell,w:nx,h:nz,data:new Float32Array(nx*nz)});
+ // Cone-limited fill (a two-way distance transform): the surface may not fall
+ // away from the road faster than a natural bank, which turns the dips between
+ // sections that loop back on each other into embankments and spreads every
+ // support raise into a slope instead of a step. Each sweep is bracketed by the
+ // two maps, so an embankment stops exactly at the corridor it runs into
+ // instead of being smoothed over the track — or into a hill a tunnel passes
+ // through.
+ const groundRelief=0.62;
+ const gridFill2=(g,fn,maxCell)=>{
+  const n=g.data.length;
+  const floorArr=new Float32Array(n),ceilArr=new Float32Array(n);
+  {let k=0;
+   for(let j=0;j<g.h;j++){const z=g.z0+g.dz*j;
+    for(let i=0;i<g.w;i++,k++){
+     const x=g.x0+g.dx*i,h=fn(x,z);
+     floorArr[k]=h;ceilArr[k]=h;
+     const up=mapAt(raiseMap,x,z,-1e9);if(up>floorArr[k])floorArr[k]=up;
+     const cap=mapAt(capMap,x,z,1e9);if(cap<ceilArr[k])ceilArr[k]=cap;
+     g.data[k]=Math.max(floorArr[k],Math.min(ceilArr[k],h));
+    }
+   }
+  }
+  const out=new Float32Array(n);
+  for(let pass=0;pass<2;pass++){
+   out.set(g.data);
+   for(let j=0;j<g.h;j++)for(let i=0;i<g.w;i++){
+    const k=j*g.w+i;let v=g.data[k];
+    if(i>0&&out[k-1]-maxCell>v)v=out[k-1]-maxCell;
+    if(j>0&&out[k-g.w]-maxCell>v)v=out[k-g.w]-maxCell;
+    out[k]=Math.max(floorArr[k],Math.min(ceilArr[k],v));
+   }
+   for(let j=g.h-1;j>=0;j--)for(let i=g.w-1;i>=0;i--){
+    const k=j*g.w+i;let v=out[k];
+    if(i<g.w-1&&out[k+1]-maxCell>v)v=out[k+1]-maxCell;
+    if(j<g.h-1&&out[k+g.w]-maxCell>v)v=out[k+g.w]-maxCell;
+    out[k]=Math.max(floorArr[k],Math.min(ceilArr[k],v));
+   }
+   g.data.set(out);
+  }
+ };
+ // Vertex budget, not a fixed resolution: a tight street circuit gets a fine
+ // mesh and a 7 km monster a coarser one, and neither blows the triangle
+ // budget on a tablet. Cell size still stays well under the distance over
+ // which the road itself changes height appreciably.
+ const hfBudget=q==='LOW'?9000:q==='MED'?15000:q==='ULTRA'?46000:26000;
+ const fineBuf=(farR-T.latLimit)+150;
+ const spanX=tbMaxX-tbMinX+fineBuf*2,spanZ=tbMaxZ-tbMinZ+fineBuf*2;
+ const fineCell=Math.max(6,Math.sqrt((spanX*spanZ)/hfBudget));
+ const fineNX=clamp(Math.round(spanX/fineCell)+1,4,460);
+ const fineNZ=clamp(Math.round(spanZ/fineCell)+1,4,460);
+ const fineG=mkGrid(fineCell,tbMinX-fineBuf,tbMinZ-fineBuf,fineNX,fineNZ);
+ buildSupportMaps(fineG);
+ gridFill2(fineG,terrainHeightAt,fineCell*groundRelief);
+ T.hf=fineG;
+ // Everything that stands on grass reads terrain through this: O(1), bilinear
+ // over the very grid being rendered, so a prop on a bank is on the bank.
+ T.terrainSample=(x,z)=>{
+  const g=fineG;
+  if(x>=g.x0&&z>=g.z0&&x<=g.x0+g.dx*(g.w-1)&&z<=g.z0+g.dz*(g.h-1))return sampleGrid(g,x,z);
+  return terrainHeightAt(x,z);
+ };
+ // --- meshes ----------------------------------------------------------------
+ const groundMat=new THREE.MeshStandardMaterial({map:grassT,bumpMap:grassBumpT,bumpScale:0.4,color:def.grass,roughness:1,polygonOffset:true,polygonOffsetFactor:4,polygonOffsetUnits:4});
+ groundMat.envMapIntensity=0.25;
+ // Textures tile at a constant real-world size (≈38 m per tile, the scale the
+ // old full-circuit plane produced) rather than stretching over the extent.
+ const GROUND_UV=38;
+ const groundUVs=(pos)=>{
+  const n=pos.length/3,uv=new Float32Array(n*2);
+  for(let k=0;k<n;k++){uv[k*2]=pos[k*3]/GROUND_UV;uv[k*2+1]=pos[k*3+2]/GROUND_UV;}
+  return uv;
+ };
+ // Grass must face the sky: a down-facing triangle is culled by this
+ // single-sided material and would open a hole onto the void underneath. The
+ // two ground layers wind their loops independently (and a coarse band can
+ // fold at a corner), so orientation is asserted triangle by triangle.
+ const orientUp=(pos,idx)=>{
+  for(let k=0;k<idx.length;k+=3){
+   const a=idx[k]*3,b=idx[k+1]*3,c=idx[k+2]*3;
+   const crY=(pos[b+2]-pos[a+2])*(pos[c]-pos[b])-(pos[b]-pos[a])*(pos[c+2]-pos[b+2]);
+   if(crY<0){const t=idx[k+1];idx[k+1]=idx[k+2];idx[k+2]=t;}
+  }
+ };
+ const makeGroundMesh=(pos,idx,mat)=>{
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(pos),3));
+  g.setAttribute('uv',new THREE.BufferAttribute(groundUVs(pos),2));
+  orientUp(pos,idx);
+  g.setIndex(idx);g.computeVertexNormals();
+  const m=new THREE.Mesh(g,mat);m.receiveShadow=true;world.add(m);return m;
+ };
+ const {pos:gPos,idx:gIdx}=(()=>{
+  const pos=[],idx=[],g=fineG;
+  for(let j=0;j<g.h;j++){const z=g.z0+g.dz*j,row=j*g.w;
+   for(let i=0;i<g.w;i++)pos.push(g.x0+g.dx*i,g.data[row+i],z);}
+  for(let j=0;j<g.h-1;j++)for(let i=0;i<g.w-1;i++){
+   const a=j*g.w+i,b=a+1,c=a+g.w,d=c+1;
+   idx.push(a,b,c,b,d,c);
+  }
+  return{pos,idx};
+ })();
+ makeGroundMesh(gPos,gIdx,groundMat);
+ // Border of that grid, walked in the same corner order, so the outer band can
+ // start from exactly the same vertices.
+ const border=[],borderY=[];
+ for(let i=0;i<fineG.w;i++){border.push([fineG.x0+fineG.dx*i,fineG.z0]);borderY.push(fineG.data[i]);}
+ for(let j=0;j<fineG.h;j++){border.push([fineG.x0+fineG.dx*(fineG.w-1),fineG.z0+fineG.dz*j]);borderY.push(fineG.data[j*fineG.w+fineG.w-1]);}
+ for(let i=0;i<fineG.w;i++){border.push([fineG.x0+fineG.dx*(fineG.w-1-i),fineG.z0+fineG.dz*(fineG.h-1)]);borderY.push(fineG.data[(fineG.h-1)*fineG.w+(fineG.w-1-i)]);}
+ for(let j=0;j<fineG.h;j++){border.push([fineG.x0,fineG.z0+fineG.dz*(fineG.h-1-j)]);borderY.push(fineG.data[(fineG.h-1-j)*fineG.w]);}
+ // One coarse band carries the surface out past the fog. The first ring has
+ // one vertex per grid edge, offset outward, so the shared border stays exactly
+ // coincident; further rings are uniform rectangles, out where the land is
+ // flat enough that a T-junction is millimetres rather than a gap onto the void.
+ {
+  const bx0=fineG.x0,bx1=fineG.x0+fineG.dx*(fineG.w-1);
+  const bz0=fineG.z0,bz1=fineG.z0+fineG.dz*(fineG.h-1);
+  const reachOut=Math.max(groundSize/2,Math.max(bx1-bx0,bz1-bz0)/2+600)-Math.max(bx1-cx,cz-bz0);
+  const ringLevels=q==='LOW'?4:q==='ULTRA'?7:6;
+  const ringPer=q==='LOW'?8:q==='ULTRA'?14:11;
+  const ringStep0=Math.max(110,reachOut/ringLevels*0.5);
+  const loops=[border];
+  for(let l=0;l<ringLevels;l++){
+   const step=ringStep0*Math.pow(1.55,l),L=loops[loops.length-1],out=[];
+   if(l===0){
+    for(let k=0;k<L.length;k++){
+     const a=L[k],b=L[(k+1)%L.length];
+     const nx=b[0]-a[0],nz=b[1]-a[1],nl=Math.hypot(nx,nz)||1;
+     out.push([a[0]+nz/nl*step,a[1]-nx/nl*step]);
+    }
+   }else{
+    const grow=ringStep0*((Math.pow(1.55,l+1)-1)/0.55);
+    const r={x0:bx0-grow,x1:bx1+grow,z0:bz0-grow,z1:bz1+grow};
+    for(let i=0;i<ringPer;i++){const t=i/ringPer;out.push([r.x0+(r.x1-r.x0)*t,r.z0]);}
+    for(let i=0;i<ringPer;i++){const t=i/ringPer;out.push([r.x1,r.z0+(r.z1-r.z0)*t]);}
+    for(let i=0;i<ringPer;i++){const t=i/ringPer;out.push([r.x1-(r.x1-r.x0)*t,r.z1]);}
+    for(let i=0;i<ringPer;i++){const t=i/ringPer;out.push([r.x0,r.z1-(r.z1-r.z0)*t]);}
+   }
+   loops.push(out);
+  }
+  const bandPos=[],bandIdx=[],starts=[],counts=[];
+  let base=0;
+  for(let l=0;l<loops.length;l++){
+   const L=loops[l];
+   starts.push(base);counts.push(L.length);
+   for(let k=0;k<L.length;k++)
+    bandPos.push(L[k][0],l===0?borderY[k]:terrainHeightAt(L[k][0],L[k][1]),L[k][1]);
+   base+=L.length;
+  }
+  for(let l=0;l<loops.length-1;l++){
+   const n0=counts[l],n1=counts[l+1],s0=starts[l],s1=starts[l+1];
+   const count=n0===n1?n0:n1;
+   for(let k=0;k<count;k++){
+    const t0=k/count,t1=(k+1)/count;
+    const a=s0+Math.floor(t0*n0),b=s0+Math.min(n0-1,Math.floor(t1*n0));
+    const c=s1+k,d=s1+((k+1)%n1);
+    if(a===b||c===d)continue;
+    bandIdx.push(a,c,b,b,c,d);
+   }
+  }
+  makeGroundMesh(bandPos,bandIdx,groundMat);
+  const farMat=new THREE.MeshStandardMaterial({color:new THREE.Color(def.grass).multiplyScalar(0.8),roughness:1,metalness:0});
+  farMat.envMapIntensity=0.2;
+  const farSize=Math.max(groundSize*3.2,9000);
+  const farPlane=new THREE.Mesh(new THREE.PlaneGeometry(farSize,farSize).rotateX(-Math.PI/2),farMat);
+  farPlane.position.set(cx,baseY-2.5,cz);
+  world.add(farPlane);
+  T.farPlane=farPlane;
  }
- groundGeo.computeVertexNormals();
- const ground=new THREE.Mesh(groundGeo,groundMat);
- ground.position.set(cx,0,cz);
- ground.receiveShadow=true;world.add(ground);T.groundMat=groundMat;T.terrainHeightAt=terrainHeightAt;T.trueTrackHeightAt=trueTrackHeightAt;
+ T.groundMat=groundMat;
+ // A single nearest-branch lookup shared by every system: the renderer, the
+ // physics, the props and any diagnostic all ask the same question and get
+ // the same answer, so they cannot drift apart at a crossing.
+ T.nearestTrackY=(x,z)=>nearestTrackY(x,z);
+ T.trueTrackHeightAt=(x,z)=>nearestTrackY(x,z).y; // what cars sit on (no clearance)
+ T.terrainHeightAt=(x,z)=>T.terrainSample(x,z);    // what grass, props and stands sit on
 
  // 1. Road Tarmac Ribbon
  {
@@ -1435,7 +1783,7 @@ function buildWorld(idx){
    const tv=new THREE.Vector3(samples[i].t.x,0,samples[i].t.z);
    const nv=new THREE.Vector3(samples[i].n.x,0,samples[i].n.z);
 
-   const standY=nearestTrackY(bx,bz).y;
+   const standY=terrainHeightAt(bx,bz);
    const baseW=28;
    const stand=new THREE.Mesh(new THREE.BoxGeometry(9.0,0.8,baseW),standMat);
    stand.position.set(bx,standY+0.4,bz);stand.rotation.y=yaw;stand.castShadow=true;world.add(stand);
@@ -1506,7 +1854,7 @@ function buildWorld(idx){
    if(minTrackDist(bx,bz)<T.latLimit+32)continue;
    const tv=new THREE.Vector3(samples[si].t.x,0,samples[si].t.z);
    const nv=new THREE.Vector3(samples[si].n.x,0,samples[si].n.z);
-   const standY=nearestTrackY(bx,bz).y;
+   const standY=terrainHeightAt(bx,bz);
    const baseW=36; // the main straight gets the biggest grandstand
    const stand=new THREE.Mesh(new THREE.BoxGeometry(9.0,0.8,baseW),standMat);
    stand.position.set(bx,standY+0.4,bz);stand.rotation.y=yaw;stand.castShadow=true;world.add(stand);
@@ -1584,7 +1932,7 @@ function buildWorld(idx){
    for(let c=0;c<clusters&&tk<300;c++){
     const off=(c-(clusters-1)/2)*2.5;
     const tx=bx+s.t.x*off,tz=bz+s.t.z*off;
-    const h=nearestTrackY(tx,tz).y;
+    const h=terrainHeightAt(tx,tz);
     for(let ty=0;ty<3&&tk<300;ty++){
      td.position.set(tx,h+0.25+ty*0.5,tz);
      td.rotation.set(0,yaw,0);td.scale.set(1,1,1);
@@ -1664,7 +2012,7 @@ function buildWorld(idx){
    lastB=i;if(++nB>3)break;
    const s=samples[i],sg=nB%2?1:-1;
    const bx=s.p.x+s.n.x*(T.latLimit+3.6)*sg,bz=s.p.z+s.n.z*(T.latLimit+3.6)*sg;
-   const by=nearestTrackY(bx,bz).y;
+   const by=terrainHeightAt(bx,bz);
    const b=new THREE.Mesh(new THREE.PlaneGeometry(5.4,2.6),drsMat);
    b.position.set(bx,by+1.6,bz);
    b.lookAt(bx-s.n.x*sg*6,by+1.6,bz-s.n.z*sg*6);
@@ -1696,7 +2044,7 @@ function buildWorld(idx){
    for(const [dist,txtTex,big] of [[26,t100,1.0],[14,t50,0.85]]){
     const j=(i-dist+N)%N,sj=samples[j];
     const bx=sj.p.x+sj.n.x*(T.latLimit+2.8)*sg,bz=sj.p.z+sj.n.z*(T.latLimit+2.8)*sg;
-    const by=nearestTrackY(bx,bz).y;
+    const by=terrainHeightAt(bx,bz);
     const p=new THREE.Mesh(new THREE.PlaneGeometry(2.8*big,2.1*big),new THREE.MeshStandardMaterial({map:txtTex,roughness:0.8,side:THREE.DoubleSide}));
     p.position.set(bx,by+1.15*big,bz);
     p.lookAt(bx-sj.n.x*sg*4,by+1.15*big,bz-sj.n.z*sg*4);
@@ -3178,13 +3526,24 @@ function beginRace(){
  // the tilt/gyro path to actually drive. Auto-engage it here — the START tap
  // is a valid user gesture for iOS gyro permission — and use auto-throttle so
  // the car is drivable with just tilt-steering and no on-screen gas button.
- if((matchMedia('(pointer:coarse)').matches||navigator.maxTouchPoints>0)&&!tiltCtrl.enabled){
+ if((matchMedia('(pointer:coarse)').matches||navigator.maxTouchPoints>0)&&tiltCtrl.gyroState!=='live'){
   // No on-screen steering/gas buttons anymore, so the device tilt is the
   // whole control surface: tilt to steer, tilt forward for gas, tilt back to
   // brake. 'touch' would need buttons; 'auto' leaves no way to brake.
   tiltCtrl.throttleMode='tilt';
   try{tiltCtrl.saveSettings();}catch(e){}
-  tiltCtrl.enable().then(()=>tiltCtrl.showToast('TILT STEERING ON · TILT = GAS / BRAKE')).catch(()=>{});
+  // This tap is the user gesture iOS wants, so ask here — but only celebrate
+  // if the sensor really came alive. When it does not, say so and leave a
+  // tappable retry on screen: the old code toasted "GYROSCOPE ACTIVE"
+  // unconditionally and the car sat still with no explanation.
+  tiltCtrl.enable().then((live)=>{
+   if(live){
+    hideGyroPrompt();
+    tiltCtrl.showToast('TILT STEERING ON · TILT = GAS / BRAKE',2600);
+   }else{
+    showGyroPrompt();
+   }
+  }).catch(()=>showGyroPrompt());
  }
  for(const c of cars)if(!c.isPlayer)c.reactT=rand(0.12,0.55);
  const yw=player.hdg;
@@ -3677,11 +4036,31 @@ if($('hZoomIn'))$('hZoomIn').onclick=()=>{state.zoom=Math.max(20,state.zoom-8);}
 if($('hZoomOut'))$('hZoomOut').onclick=()=>{state.zoom=Math.min(150,state.zoom+8);};
 
 // Tilt mode menu buttons & chips
+// --- gyroscope retry prompt -------------------------------------------------
+// Tilt is the only control surface on a phone, so a gyroscope that never
+// delivers data has to be announced — and fixed with a tap, because iOS only
+// hands out motion permission inside a user gesture. This stays up until a
+// sensor event actually arrives.
+const _gyroPrompt={show(t){
+ const el=$('gyroPrompt');if(!el)return;
+ const tx=$('gyroPromptText');if(tx)tx.textContent=t||'';
+ el.classList.add('show');
+},hide(){const el=$('gyroPrompt');if(el)el.classList.remove('show');}};
+function showGyroPrompt(){
+ _gyroPrompt.show(tiltCtrl.gyroError||'Waiting for the motion sensor…');
+}
+function hideGyroPrompt(){_gyroPrompt.hide();}
+if($('gyroPromptBtn'))$('gyroPromptBtn').onclick=async()=>{
+ const ok=await tiltCtrl.enable();
+ if(ok){hideGyroPrompt();tiltCtrl.showToast('GYROSCOPE LIVE · TILT TO STEER',2600);}
+ else _gyroPrompt.show((tiltCtrl.gyroError||'Still no sensor data.')+' Tap again to retry.');
+};
 if($('btnTiltMode')){
  $('btnTiltMode').onclick = async (e) => {
    e.preventDefault();
-   await tiltCtrl.enable();
-   tiltCtrl.showToast('GYROSCOPE ACTIVE');
+   const ok = await tiltCtrl.enable();
+   if (ok) { hideGyroPrompt(); tiltCtrl.showToast('GYROSCOPE LIVE · TILT TO STEER', 2600); }
+   else { showGyroPrompt(); tiltCtrl.showToast(tiltCtrl.gyroError || 'NO SENSOR DATA FROM THIS DEVICE', 5200); }
  };
 }
 if($('btnTouchMode')){
