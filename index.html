@@ -167,7 +167,8 @@ canvas{display:block;}
 #hTime,#hBest,#hGap,#hLap,#hLaps,#hPos,#hPosT,#hSpeed,#hGear,.tower-pos,.tower-gap{
  font-variant-numeric:tabular-nums;font-feature-settings:'tnum' 1,'lnum' 1;}
 #hud{position:fixed;inset:0;z-index:10;pointer-events:none;}
-#hTL{position:absolute;top:14px;left:14px;padding:10px 16px 10px 12px;min-width:160px;}
+#hTL{position:absolute;top:14px;left:14px;width:172px;min-width:172px;padding:10px 16px 10px 12px;}
+#hTL::before{content:'DRIVER / SESSION';display:block;padding:0 0 5px;margin:0 0 7px;border-bottom:1px solid rgba(255,255,255,.16);color:var(--red);font-size:9px;font-weight:800;letter-spacing:.18em;line-height:1;}
 #hPos{font-style:italic;font-weight:700;font-size:36px;line-height:1;}
 #hPosT{font-size:14px;color:var(--dim);font-weight:600;}
 #hTL .small{font-size:11px;letter-spacing:.16em;color:var(--dim);margin-top:2px;font-weight:600;}
@@ -325,16 +326,23 @@ body.tilt-mode .touch-tilt-right{display:flex;}
   position: absolute;
   /* Clear the complete top-left lap/timing panel; the old 104px start let its
      clipped lower corner cover the leader row on shorter layouts. */
-  top: 128px;
-  left: 16px;
-  width: 155px;
+  top: 158px;
+  left: 14px;
+  width: 172px;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 0;
+  padding: 4px;
+  box-sizing: border-box;
   z-index: 18;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   pointer-events: none;
   transition: opacity 0.3s ease-out;
+  background: rgba(8, 10, 14, 0.78);
+  border: 1px solid rgba(255,255,255,0.16);
+  border-top: 2px solid rgba(71,199,252,0.72);
+  border-radius: 5px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.38);
   /* Sky-F1-style tower: a fixed-height, transparent, auto-scrolling feed so
      the camera (and the viewer) always keeps your position in view whether
      you're P1 or P20 — you can see the track through it. */
@@ -344,9 +352,29 @@ body.tilt-mode .touch-tilt-right{display:flex;}
   scrollbar-width: none;
 }
 #timingTower::-webkit-scrollbar{display:none;}
+#timingTower::before{
+  content:'LIVE GRID';
+  display:flex;
+  align-items:center;
+  position:sticky;
+  top:0;
+  z-index:2;
+  background:rgba(8,10,14,0.96);
+  height:18px;
+  flex:0 0 18px;
+  padding:0 7px;
+  margin:0 0 3px;
+  border-bottom:1px solid rgba(255,255,255,0.16);
+  color:#9ea6b1;
+  font-size:9px;
+  font-weight:800;
+  letter-spacing:.18em;
+  line-height:1;
+}
 @media (max-width: 768px) {
+  #hTL{left:8px;width:130px;min-width:130px;padding:8px 10px 8px 8px;}
   #timingTower {
-    top: 112px;
+    top: 129px;
     left: 8px;
     width: 130px;
     gap: 2px;
@@ -356,17 +384,19 @@ body.tilt-mode .touch-tilt-right{display:flex;}
 .tower-row {
   display: flex;
   align-items: center;
-  background: rgba(12, 14, 20, 0.42);
+  background: rgba(12, 14, 20, 0.36);
   backdrop-filter: blur(5px);
-  border-radius: 3px;
+  border-radius: 2px;
+  border-bottom: 1px solid rgba(255,255,255,0.09);
   overflow: hidden;
   height: 28px;
   min-height: 28px;
   flex: 0 0 28px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.25);
-  transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), background-color 0.2s;
+  box-shadow: none;
+  transition: background-color 0.2s;
   pointer-events: auto;
 }
+#timingTower .tower-row:last-child{border-bottom-color:transparent;}
 @media (max-width: 768px) {
   .tower-row {
     height: 24px;
@@ -382,7 +412,7 @@ body.tilt-mode .touch-tilt-right{display:flex;}
 /* Keep every row fully opaque at the scroll boundaries. The old gradient
    mask deliberately erased the top of P1, which looked like the tower header
    was sitting over the driver's face. */
-#timingTower{scroll-behavior:smooth;padding-block:2px;}
+#timingTower{scroll-behavior:smooth;padding:4px;}
 .tower-pos {
   width: 20px;
   text-align: center;
@@ -683,7 +713,7 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
   
   <div id="tFoot">
-    <span>FULLSCREEN &amp; AUDIO READY · <b id="appVersion">v0.9.9 · BUILD 20260907.2</b></span>
+    <span>FULLSCREEN &amp; AUDIO READY · <b id="appVersion">v0.9.9 · BUILD 20260907.5</b></span>
     <button id="tFootFs" class="btn-mini">⛶ FULLSCREEN</button>
   </div>
   
@@ -980,7 +1010,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <script>
 (function(){
-  const APP_VERSION='v0.9.9 · BUILD 20260907.2';
+  const APP_VERSION='v0.9.9 · BUILD 20260907.5';
   window.POLYGON_GP_VERSION=APP_VERSION;
   const panel=document.getElementById('runtimeErrorPanel');
   const output=document.getElementById('runtimeErrorText');

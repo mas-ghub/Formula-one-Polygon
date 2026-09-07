@@ -1078,32 +1078,38 @@ function updPoints(S,dt,grow){
  }
  P.needsUpdate=true;A.needsUpdate=true;Sz.needsUpdate=true;
 }
-function sparkBurst(x,y,z,amt){const n=Math.round(amt*18);
- // Small white-hot metal points with fast ballistic motion and short lives.
- // The former large orange particles read as a soft fire cloud and bloomed
- // excessively; these stay crisp, with only a few dimmer cooling embers.
- for(let i=0;i<n;i++)
-  puff(sparks,x,y,z,rand(-13,13),rand(2,13),rand(-13,13),rand(0.22,0.62),rand(.10,.28),1.0,0.92,0.48,-31);
- for(let i=0;i<Math.ceil(n*0.28);i++)
-  puff(sparks,x,y,z,rand(-9,9),rand(1,9),rand(-9,9),rand(0.18,0.42),rand(.22,.48),1.0,0.48,0.06,-28);}
+function sparkBurst(x,y,z,amt){
+ // Sparks are hot metal fragments, not orange blobs: lots of tiny points,
+ // short ballistic lives, a tight fan and a white-yellow core with an orange
+ // cooling tail. Additive blending keeps them bright without making them big.
+ const n=Math.round(amt*22);
+ for(let i=0;i<n;i++){
+  const hot=Math.random();
+  const r=hot<0.26?1.0:1.0,g=hot<0.26?0.98:hot<0.72?0.72:0.38,b=hot<0.26?0.68:hot<0.72?0.18:0.025;
+  puff(sparks,x,y,z,rand(-9,9),rand(0.8,7.5),rand(-9,9),rand(.07,.22),rand(.055,.16),r,g,b,-44);
+ }
+ for(let i=0;i<Math.ceil(n*.18);i++){
+  puff(sparks,x,y,z,rand(-6,6),rand(.3,4),rand(-6,6),rand(.05,.14),rand(.14,.24),1.0,0.34,0.025,-34);
+ }
+}
 // Underbody strikes are directional: the hot metal is dragged backwards and
-// out toward the sidepod, so a bump reads as a brief fan of sparks rather than
+// out toward the sidepod, so a bump reads as a fine fan of sparks rather than
 // an orange explosion floating above the car.
 function underbodySpark(x,y,z,hdg,side,amt){
  const fx=Math.sin(hdg),fz=Math.cos(hdg),rx=-fz,rz=fx;
- const n=Math.max(4,Math.round(amt*24));
+ const n=Math.max(4,Math.round(amt*18));
  for(let i=0;i<n;i++){
-  const spread=rand(1.0,4.8)*side,back=rand(5.5,13.5);
-  puff(sparks,x+rx*side*rand(0,.06),y+rand(-.025,.035),z+rz*side*rand(0,.06),
-   -fx*back+rx*spread,rand(0.8,6.5),-fz*back+rz*spread,
-   rand(.28,.78),rand(.12,.26),1.0,0.97,0.62,-34);
+  const spread=rand(.45,2.7)*side,back=rand(6.5,15.5),hot=Math.random();
+  const r=1.0,g=hot<0.38?0.98:hot<0.82?0.76:0.48,b=hot<0.38?0.72:hot<0.82?0.22:0.035;
+  puff(sparks,x+rx*side*rand(0,.045),y+rand(-.018,.018),z+rz*side*rand(0,.045),
+   -fx*back+rx*spread,rand(.15,3.0),-fz*back+rz*spread,
+   rand(.06,.20),rand(.07,.18),r,g,b,-48);
  }
- // A couple of short-lived cooling embers give the fan a warm tail without
- // turning it into fire or smoke.
- for(let i=0;i<Math.ceil(n*.18);i++){
-  const back=rand(3,9);
-  puff(sparks,x,y,z,-fx*back+rx*rand(0.5,3)*side,rand(.4,3.5),-fz*back+rz*rand(0.5,3)*side,
-   rand(.18,.45),rand(.22,.42),1.0,0.55,0.12,-28);
+ // A very small ember tail is warmer and dimmer, never a second cloud.
+ for(let i=0;i<Math.ceil(n*.12);i++){
+  const back=rand(3,8);
+  puff(sparks,x,y,z,-fx*back+rx*rand(.3,1.5)*side,rand(.1,1.6),-fz*back+rz*rand(.3,1.5)*side,
+   rand(.045,.12),rand(.12,.24),1.0,0.38,0.025,-36);
  }
 }
 function confetti(x,y,z){for(let i=0;i<130;i++){const c=new THREE.Color().setHSL(Math.random(),0.85,0.6);
@@ -3814,7 +3820,9 @@ function updCarVisual(c,dt){
   const ribStrike=c.onCurb&&Math.sin(timeSec*(30+Math.abs(c.vF)*0.32)+c.phase)>0.88;
   if(c._bumpSparkCd<=0&&(bumpSeverity*bumpSpeed>0.12||(ribStrike&&bumpSpeed>0.12))&&!c.airborne){
    c._bumpSparkCd=0.13;
-   const sparkY=Math.max(c.y||bumpHeight,bumpHeight)+0.13;
+   // Just above the road skin, under the sidepod: this keeps the source
+   // visibly attached to the car instead of making sparks appear at axle height.
+   const sparkY=Math.max(c.y||bumpHeight,bumpHeight)+0.065;
    const sparkAmt=clamp(0.28+bumpSeverity*bumpSpeed*1.15+(ribStrike?0.32:0),0.28,1.55);
    for(const side of[1,-1]){
     const sx=c.x+rx*0.78*side-fx*0.92,sz=c.z+rz*0.78*side-fz*0.92;
@@ -4396,10 +4404,18 @@ function updCamera(dt){
   if(director.swoop<=0&&Math.random()<dt*0.14)director.swoop=rand(2.4,3.4);
   const swooping=director.swoop>0;
   const swoopT=swooping?clamp(1-director.swoop/3.4,0,1):0;
-  const alt=70-(swooping?Math.sin(swoopT*Math.PI)*24:0);
+  // The old 70 m flyover was only safe over flat circuits. When the damped
+  // camera crossed a crest its previous y could lag the terrain, leaving the
+  // lens almost at hill height and looking over empty road. Keep a generous
+  // broadcast altitude even during the swoop, then apply a second local
+  // clearance below after the camera's lateral sway is known.
+  const alt=84-(swooping?Math.sin(swoopT*Math.PI)*18:0);
   let tx,ty,tz;
-  if(swooping&&tc){
-   tx=tc.mesh.g.position.x;ty=tc.mesh.g.position.y+3;tz=tc.mesh.g.position.z;
+  // The helicopter is still a race camera, not just a terrain flyover: keep
+  // the selected car as the look target so the title screen always contains
+  // the pack, even while the camera sweeps around a Monaco hairpin or a hill.
+  if(tc){
+   tx=tc.mesh.g.position.x;ty=tc.mesh.g.position.y+1.8;tz=tc.mesh.g.position.z;
   }else{
    sampleF((f+55)%N);tx=_sv.x;ty=_sv.y+4;tz=_sv.z;
   }
@@ -4420,10 +4436,20 @@ function updCamera(dt){
   cam.heliLook.y=damp(cam.heliLook.y,ty,4,dt);
   cam.heliLook.z=damp(cam.heliLook.z,tz,4,dt);
   const swayX=Math.sin(timeSec*0.11)*30,swayZ=Math.cos(timeSec*0.077)*22;
-  if(!cam.heliPos)cam.heliPos=V3(px+swayX,py+alt,pz+swayZ);
-  cam.heliPos.x=damp(cam.heliPos.x,px+swayX,3,dt);
-  cam.heliPos.y=damp(cam.heliPos.y,py+alt,3,dt);
-  cam.heliPos.z=damp(cam.heliPos.z,pz+swayZ,3,dt);
+  const hx=px+swayX,hz=pz+swayZ;
+  const localFloor=cameraSurfaceY(hx,hz);
+  const cpx=tc?(Number.isFinite(tc.x)?tc.x:tc.mesh.g.position.x):hx;
+  const cpz=tc?(Number.isFinite(tc.z)?tc.z:tc.mesh.g.position.z):hz;
+  const carFloor=tc?cameraSurfaceY(cpx,cpz):localFloor;
+  // Never allow damping to leave the helicopter inside a rising hillside.
+  // Keeping the target car below the aircraft also guarantees a useful pitch
+  // and makes the cars remain visible when the sweep crosses a crest.
+  const safeHeliY=Math.max(py+alt,localFloor+56,carFloor+48,tc?tc.mesh.g.position.y+48:0);
+  if(!cam.heliPos)cam.heliPos=V3(hx,safeHeliY,hz);
+  cam.heliPos.x=damp(cam.heliPos.x,hx,3,dt);
+  cam.heliPos.y=damp(cam.heliPos.y,safeHeliY,3,dt);
+  cam.heliPos.z=damp(cam.heliPos.z,hz,3,dt);
+  cam.heliPos.y=Math.max(cam.heliPos.y,localFloor+50,carFloor+42,tc?tc.mesh.g.position.y+42:0);
   camera.position.copy(cam.heliPos);
   clampCameraToSurface(1.0);
   camera.up.set(0,1,0);
@@ -4968,11 +4994,17 @@ function updRace(dt){
    for (const [key, row] of towerRows) {
     if (!seen.has(key)) { row.remove(); towerRows.delete(key); }
    }
-   // Sky-F1 broadcast style: the tower is a fixed, transparent feed that
-   // auto-scrolls so YOUR position is always kept in view — whether you're
-   // P1 at the top or P20 at the bottom. Centre on the player row.
+   // Keep YOUR row in view without calling scrollIntoView(): that browser API
+   // can scroll the page itself and leave the first tower row visually detached
+   // from its header. Scroll only this fixed tower, with hard top/bottom stops.
    const myRow = timingTowerEl.querySelector('.tower-row.me');
-   if (myRow) myRow.scrollIntoView({block:'center'});
+   if(myRow){
+    const maxScroll=Math.max(0,timingTowerEl.scrollHeight-timingTowerEl.clientHeight);
+    const wanted=myRow.offsetTop-timingTowerEl.clientHeight*0.42;
+    const nextScroll=clamp(wanted,0,maxScroll);
+    if(Math.abs(timingTowerEl.scrollTop-nextScroll)>2)
+     timingTowerEl.scrollTo({top:nextScroll,behavior:'smooth'});
+   }
   }
 
   if(player.pos<lastPos&&state.mode==='race'&&otCool<=0&&player.pos>0){
