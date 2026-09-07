@@ -1261,20 +1261,26 @@ function updLens(dt){
  if(amt<0.08){lensDrops.length=0;return;}
  // A small number of fine beads is intentionally drawn over the shader pass as
  // a visibility guarantee. They are cool translucent water, not white blobs.
+ // Seed the pane immediately when heavy rain starts; waiting for random
+ // spawns made the first seconds look dry even though the shader was active.
+ if(lensDrops.length===0){
+  for(let k=0;k<58;k++)lensDrops.push({x:Math.random()*dropCv.width,y:Math.random()*dropCv.height,
+   r:rand(1.1,4.8),life:rand(1.4,4.2),vy:rand(9,32),phase:rand(0,6.28)});
+ }
  if(Math.random()<amt*dt*52&&lensDrops.length<115){
   lensDrops.push({x:Math.random()*dropCv.width,y:Math.random()*dropCv.height,
-   r:rand(0.8,3.4),life:rand(1.2,3.8),vy:rand(10,34),phase:rand(0,6.28)});
+   r:rand(1.1,4.8),life:rand(1.4,4.2),vy:rand(9,32),phase:rand(0,6.28)});
  }
  const spd=player?Math.abs(player.vF):0;
  for(let i=lensDrops.length-1;i>=0;i--){
   const d=lensDrops[i];
   d.life-=dt*(1+spd*0.035);d.y+=d.vy*dt*(0.45+spd*0.018);
   if(d.life<=0||d.y>dropCv.height+12){lensDrops.splice(i,1);continue;}
-  const fade=Math.min(d.life,1)*0.24;
+  const fade=Math.min(d.life,1)*0.34;
   // A thin running trail precedes the bead; both are low-alpha blue-grey water.
   dropCx.globalAlpha=fade*0.52;
   dropCx.strokeStyle='rgb(179,210,225)';dropCx.lineWidth=Math.max(0.45,d.r*0.26);
-  dropCx.beginPath();dropCx.moveTo(d.x,d.y-d.r*(2.0+spd*0.012));dropCx.lineTo(d.x,d.y);dropCx.stroke();
+  dropCx.beginPath();dropCx.moveTo(d.x,d.y-d.r*(3.0+spd*0.018));dropCx.lineTo(d.x,d.y);dropCx.stroke();
   dropCx.globalAlpha=fade;
   const grad=dropCx.createRadialGradient(d.x-d.r*.25,d.y-d.r*.28,0,d.x,d.y,d.r*1.15);
   grad.addColorStop(0,'rgba(226,242,249,.38)');
