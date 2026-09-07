@@ -962,12 +962,13 @@ export function getAxleGeo(){if(axleGeo&&brakeGeo)return axleGeo;
 // The halo is a separate, bright F1-style assembly. In side profile it is
 // an open curved rail wrapping around the helmet; in the driver's view the two
 // rails frame the cockpit and the central front splitter is directly ahead.
-function makeHaloAssembly(){
+function makeHaloAssembly(accent='#3b4147'){
  const group=new THREE.Group();
- // MeshBasic keeps the titanium rails visible in every camera/light condition;
- // the reference halo is a light metal part, not a black shadowed hoop.
- const steel=new THREE.MeshBasicMaterial({color:0xd2d9dc,side:THREE.DoubleSide});
- const darkSteel=new THREE.MeshBasicMaterial({color:0x555d62,side:THREE.DoubleSide});
+ // F1 2026 cars use predominantly dark carbon halos; a restrained team
+ // accent is kept only on the front mounting shoe.
+ const steel=new THREE.MeshStandardMaterial({color:0x171a1f,roughness:0.38,metalness:0.22,side:THREE.DoubleSide});
+ const darkSteel=new THREE.MeshStandardMaterial({color:0x0d0f12,roughness:0.48,metalness:0.18,side:THREE.DoubleSide});
+ const accentMat=new THREE.MeshStandardMaterial({color:accent,roughness:0.42,metalness:0.24,side:THREE.DoubleSide});
  const tube=(points,radius,mat=steel)=>{
   const curve=new THREE.CatmullRomCurve3(points.map(v=>new THREE.Vector3(v[0],v[1],v[2])),false,'centripetal',0.34);
   const mesh=new THREE.Mesh(new THREE.TubeGeometry(curve,48,radius,8,false),mat);
@@ -985,7 +986,7 @@ function makeHaloAssembly(){
   const shoe=new THREE.Mesh(new THREE.BoxGeometry(0.24,0.07,0.30),darkSteel);
   shoe.position.set(sx*0.64,0.54,-0.30);group.add(shoe);
  }
- const frontShoe=new THREE.Mesh(new THREE.BoxGeometry(0.30,0.07,0.25),darkSteel);
+ const frontShoe=new THREE.Mesh(new THREE.BoxGeometry(0.30,0.07,0.25),accentMat);
  frontShoe.position.set(0,0.54,1.42);group.add(frontShoe);
  group.userData.isHaloAssembly=true;
  return group;
@@ -1023,7 +1024,7 @@ function makeDamageSprite(){
 function makeCarMesh(d){
  const g=new THREE.Group();
  const body=new THREE.Mesh(getBodyGeo(d.colA,d.colB),matBody);body.castShadow=true;
- const halo=makeHaloAssembly();
+ const halo=makeHaloAssembly(d.colB||d.colA||'#3b4147');
  const { driverGroup, helmetGroup } = makeDriverMesh(d.colA, d.helmet);
  getAxleGeo();
  const axleF=new THREE.Mesh(axleGeo,matWheel);axleF.rotation.order='YXZ';axleF.position.set(0,0.37,1.62);
@@ -1256,39 +1257,33 @@ let lensDrops=[];
 function sizeDrops(){dropCv.width=innerWidth;dropCv.height=innerHeight;}
 function updLens(dt){
  dropCx.clearRect(0,0,dropCv.width,dropCv.height);
- // HIGH/MED/ULTRA use the Heartfelt/Shadertoy refraction pass. Do not draw the
- // old 2D gradient ellipses over it: those soft blobs obscured the shader's
- // sharp beads, trails and glass distortion and were what made the new rain
- // look less realistic than the original effect.
- if((QUALITY_PRESETS[effQuality()]||{}).rainShader!==false){lensDrops.length=0;return;}
- const amt=Math.max(cur.rain-0.12,0);
- if(amt<=0||state.mode==='title'){lensDrops.length=0;return;}
- if(Math.random()<amt*dt*24&&lensDrops.length<70)
-  lensDrops.push({x:Math.random()*dropCv.width,y:Math.random()*dropCv.height,r:rand(0.8,3.6),life:rand(1.5,4),vy:rand(5,28)});
+ const amt=state.mode==='title'?0:clamp(cur.rain,0,1);
+ if(amt<0.08){lensDrops.length=0;return;}
+ // A small number of fine beads is intentionally drawn over the shader pass as
+ // a visibility guarantee. They are cool translucent water, not white blobs.
+ if(Math.random()<amt*dt*52&&lensDrops.length<115){
+  lensDrops.push({x:Math.random()*dropCv.width,y:Math.random()*dropCv.height,
+   r:rand(0.8,3.4),life:rand(1.2,3.8),vy:rand(10,34),phase:rand(0,6.28)});
+ }
  const spd=player?Math.abs(player.vF):0;
- 
- for(let i=lensDrops.length-1;i>=0;i--){const d=lensDrops[i];
-  d.life-=dt*(1+spd*0.05);d.y+=d.vy*dt*(0.4+spd*0.03);
-  if(d.life<=0||d.y>dropCv.height){lensDrops.splice(i,1);continue;}
-  dropCx.globalAlpha=Math.min(d.life,1)*0.10;
-  
-  // Refraction effect (using a radial gradient to simulate light bending)
-  const grad = dropCx.createRadialGradient(d.x - d.r*0.2, d.y - d.r*0.2, 0, d.x, d.y, d.r * (1 + spd*0.01));
-  // Emergency LOW-quality fallback only: a few faint cool beads, never
-  // opaque white ellipses. The Heartfelt pass handles the real glass effect
-  // on MED/HIGH/ULTRA.
-  grad.addColorStop(0, 'rgba(220, 237, 246, 0.22)');
-  grad.addColorStop(0.45, 'rgba(180, 210, 226, 0.07)');
-  grad.addColorStop(1, 'rgba(100, 130, 150, 0)');
-  
-  dropCx.fillStyle = grad;
-  dropCx.beginPath();
-  dropCx.ellipse(d.x, d.y, d.r*(1+spd*0.002), d.r*(1.45+spd*0.006), 0, 0, 7);
-  dropCx.fill();
+ for(let i=lensDrops.length-1;i>=0;i--){
+  const d=lensDrops[i];
+  d.life-=dt*(1+spd*0.035);d.y+=d.vy*dt*(0.45+spd*0.018);
+  if(d.life<=0||d.y>dropCv.height+12){lensDrops.splice(i,1);continue;}
+  const fade=Math.min(d.life,1)*0.24;
+  // A thin running trail precedes the bead; both are low-alpha blue-grey water.
+  dropCx.globalAlpha=fade*0.52;
+  dropCx.strokeStyle='rgb(179,210,225)';dropCx.lineWidth=Math.max(0.45,d.r*0.26);
+  dropCx.beginPath();dropCx.moveTo(d.x,d.y-d.r*(2.0+spd*0.012));dropCx.lineTo(d.x,d.y);dropCx.stroke();
+  dropCx.globalAlpha=fade;
+  const grad=dropCx.createRadialGradient(d.x-d.r*.25,d.y-d.r*.28,0,d.x,d.y,d.r*1.15);
+  grad.addColorStop(0,'rgba(226,242,249,.38)');
+  grad.addColorStop(.38,'rgba(178,214,229,.16)');
+  grad.addColorStop(1,'rgba(100,145,165,0)');
+  dropCx.fillStyle=grad;dropCx.beginPath();dropCx.ellipse(d.x,d.y,d.r,d.r*1.35,0,0,7);dropCx.fill();
  }
  dropCx.globalAlpha=1;
 }
-
 /* ============ clouds ============ */
 let cloudGrp=null,cloudMat=null;
 function makeClouds(){
