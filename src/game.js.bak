@@ -1574,56 +1574,7 @@ function buildWorld(idx){
   }
   return{dist:Math.sqrt(bestD2),y:bankedY(),far:false};
  };
- // --- Hairpin loop verification: after the hash is built, test a set of
- //     points near high-curvature sections (hairpins) and confirm that
- //     nearestTrackY returns a segment that actually belongs to the same
- //     loop portion of the circuit — not a different section that happens
- //     to be nearby in world space because the track doubled back on
- //     itself. If a discrepancy is found, fall back to a stricter full-scan
- //     for that region and log a warning.
- {
-  const hairpinTests = [
-   {label: 'Monaco hairpin apex', point: {x: 110, z: 0}, maxDist: 6},
-   {label: 'Monaco hairpin approach', point: {x: 130, z: -20}, maxDist: 8},
-   {label: 'Spa Eau Rouge base', point: {x: -210, z: 20}, maxDist: 10},
-   {label: 'Spa hairpin exit', point: {x: 250, z: 25}, maxDist: 10},
-   {label: 'Interlagos loop', point: {x: 60, z: -140}, maxDist: 8},
-  ];
-  const verifyNearestHairpin = (pt, label, maxAllowedDist) => {
-   const r = nearestTrackY(pt.x, pt.z);
-   // A hairpin loop can put two separate stretches of road very close in
-   // x/z but far apart along the track (f). Verify the closest segment by
-   // world distance is also close along the racing line — if it isn't, the
-   // world-space nearest point is likely the wrong loop segment.
-   if (r.far) return { ok: false, reason: 'provably far from all segments', label };
-   // Check that the closest segment index isn't wildly different from the
-   // point's expected loop region: a hairpin loops back, so a nearby point
-   // should share a nearby f index (modulo N, wrapped).
-   const fApprox = Math.round(r.dist); // rough proxy; actual f from sample isn't returned
-   // The real safeguard: compare against a stricter full-scan nearest point
-   // for the same coordinate, and ensure both agree within a tolerance.
-   return { ok: r.dist <= maxAllowedDist, dist: r.dist, label, y: r.y };
-  };
-  let hairpinIssues = 0;
-  if (window.console && console.info) {
-   console.info('[hairpin verify] nearestTrackY hash/cell verification:');
-  }
-  for (const test of hairpinTests) {
-   const result = verifyNearestHairpin(test.point, test.label, test.maxDist);
-   if (window.console && console.info) {
-    console.info(`  ${test.label}: dist=${result.dist.toFixed(2)} m, y=${result.y.toFixed(2)}, ok=${result.ok}`);
-   }
-   if (!result.ok && result.dist > test.maxDist) hairpinIssues++;
-  }
-  if (hairpinIssues > 0 && window.console && console.warn) {
-   console.warn(`[hairpin verify] ${hairpinIssues} hairpin points exceeded expected distance — ` +
-    `hash/cell lookup may be snapping to wrong loop segment. Full-scan fallback is active for these regions.`);
-  }
-  // If any hairpin region fails, set a flag so nearestTrackY can use a stricter
-  // (full-scan) mode for points in this circuit's hairpin zones rather than
-  // relying solely on the hash.
-  T.hairpinStrict = hairpinIssues > 0;
- }
+ const minTrackDist=(x,z)=>nearestTrackY(x,z).dist;
  let cx=0,cz=0;for(const s of samples){cx+=s.p.x;cz+=s.p.z;}cx/=N;cz/=N;
  T.center={x:cx,z:cz};
  let rad=0;for(const s of samples)rad=Math.max(rad,Math.hypot(s.p.x-cx,s.p.z-cz));rad+=180;
@@ -3280,32 +3231,51 @@ function updCar(c,dt){
  const groundYAhead = getRoadHAtCoords(c.x + Math.sin(c.hdg)*stepAhead, c.z + Math.cos(c.hdg)*stepAhead);
  const slope = Math.atan2(groundYAhead - groundY, stepAhead);
  
- // Smoother ground tracking: the car's height is pulled to the actual
- // surface height rather than just tracking the nearest sample point,
- // preventing floating over bumps and dips.
- const targetY = groundY - 0.04;
- if (c.airborne) {
-  c.y += c.vy * dt;
-  if (c.y <= targetY) {
-   c.y = targetY;
-   c.airborne = false;
-   c.vy = Math.max(0, -c.vy * 0.18);
+ if (c.y <= groundY + 0.01 && c.vy <= 0.01) {
+  c.y = groundY;
+  c.airborne = false;
+  const expectedVy = c.vF * Math.sin(slope);
+  // A modern F1 car's aero pushes it into the road with several times its
+  // own weight — it does NOT take off over ordinary crests. Only a truly
+  // violent drop-away at very high speed breaks contact now; everything
+  // else stays sucked to the tarmac (which also fixes cars visibly
+  // "flying" in the helicopter shots at Spa/Zandvoort-style crests).
+  if (expectedVy - c.vy < -6.5 && c.vF > 34) {
+   c.airborne = true;
+  } else {
+   c.vy = expectedVy;
   }
  } else {
-  // The car's suspension is tighter, with less bounce; ground contact is
-  // maintained precisely.
-  const springK = 140; const springB = 32;
-  c.y = damp(c.y, targetY, springK, dt);
-  // Vertical velocity is also damped heavily so the car settles quickly
-  // onto the track.
-  c.vy = damp(c.vy, 0, springB, dt);
+  c.airborne = true;
+  // Heavier-than-gravity fall: downforce keeps working on the airborne car,
+  // so it slams back down quickly instead of floating balloon-like.
+  c.vy -= 30.0 * dt;
+  c.y += c.vy * dt;
+  if (c.y < groundY) {
+   c.y = groundY;
+   c.airborne = false;
+   if (c.vy < -3.5) {
+    const landingImpact=Math.abs(c.vy);
+    sparkBurst(c.x, c.y + 0.1, c.z,1.2+landingImpact*0.16);
+    if(landingImpact>7)triggerDamage(c,landingImpact*0.55);
+    c.bounceVel -= Math.min(Math.abs(c.vy) * 0.045, 0.55);
+    if (c.isPlayer) {
+     cam.shake = Math.max(cam.shake, 0.42);
+     AudioSys.thump(0.85);
+     if (Math.random() < 0.5) {
+      Speech.say(pick(["What a jump!", "Massive airtime!", "Spectacular airborne action!"]),false,{rate:1.18,pitch:1.06});
+     }
+    }
+   }
+   c.vy = c.vF * Math.sin(slope);
+  }
  }
  const targetPitch = c.airborne ? clamp(c.vy * 0.035, -0.22, 0.22) : slope;
  c.pitch = damp(c.pitch, targetPitch, 12, dt);
  // Lightweight suspension spring — landings/impacts compress it, then it
  // rebounds and settles, on top of a faint speed-linked road-surface jitter.
- c.bounceVel += (-c.bounceOff * 280 - c.bounceVel * 28) * dt;
- c.bounceOff = clamp(c.bounceOff + c.bounceVel * dt, -0.03, 0.03);
+ c.bounceVel += (-c.bounceOff * 150 - c.bounceVel * 12) * dt;
+ c.bounceOff = clamp(c.bounceOff + c.bounceVel * dt, -0.09, 0.09);
 
  // Puddle splashes — a spray of water kicked up when a wet-weather puddle is crossed at speed.
  if(cur.wet>0.15 && T.puddles && T.puddles.length && Math.abs(c.vF)>8){

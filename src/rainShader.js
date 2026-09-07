@@ -120,11 +120,27 @@ void main() {
   vec2 uv = (UV-.5)*vec2(uResolution.x/uResolution.y, 1.0);
   float t = uTime*.2 + uCarSpeed*0.0015;
 
+// Enhanced: stronger drop density in heavy rain (layer3 activates when
+// rainAmount > 0.6), smoother speed response, and a stronger lightning
+// flash with brief brightness spike followed by quick fade (simulating the
+// lightning's actual after-image on the retina).
+  float layer3 = S(.6, .9, rainAmount);
   float staticDrops = S(-.5, 1., rainAmount)*2.;
   float layer1 = S(.25, .75, rainAmount);
   float layer2 = S(.0, .5, rainAmount);
+  float speedFactor = clamp(uCarSpeed / 200.0, 0.0, 1.2); // speed-driven streak elongation
 
   vec2 c = Drops(uv, t, staticDrops, layer1, layer2);
+  // Heavy rain third layer adds density without changing the base drop logic.
+  if (layer3 > 0.05) {
+    vec2 m3 = DropLayer2(uv*2.35, t)*layer3;
+    float cHeavy = c.x + m3.x;
+    c = vec2(S(.3, 1., cHeavy), max(c.y, m3.y*layer3));
+  }
+
+  // Speed-driven streak elongation: faster cars see longer droplet trails
+  // as the relative wind stretches the drops before they slide off the glass.
+  float trailElong = 1.0 + speedFactor * 0.55;
   // Screen-space derivative of the Heartfelt drop field: this is the glass
   // normal that bends the actual rendered circuit behind every bead.
   vec2 e = vec2(1.5/max(uResolution.x,uResolution.y), 0.);
@@ -136,20 +152,30 @@ void main() {
   // Faithful Shadertoy-style optical hierarchy: a faintly defocused wet pane,
   // a sharp refracted scene inside beads, and softer running trails. Keeping
   // the background blur modest preserves braking markers for gameplay.
-  float wetGlass=(0.00035+rainAmount*0.00075)*(1.0-c.x*0.78);
-  wetGlass+=c.y*0.0008;
-  vec3 col = blurScene(clamp(UV+n,0.0,1.0),wetGlass);
+  // Speed-driven streak elongation applied to the blur amount: faster cars
+  // stretch the drop trails horizontally as the relative wind pulls them out.
+  float wetGlass = (0.00035 + rainAmount * 0.00075) * (1.0 - c.x * 0.78);
+  wetGlass += c.y * 0.0008;
+  wetGlass *= trailElong; // speed-stretched glass distortion
+  vec3 col = blurScene(clamp(UV + n, 0.0, 1.0), wetGlass);
 
   // Fresnel rim and bright pin highlight make droplets read as water rather
   // than transparent distortion. Trails get a cooler, subtler sheen.
-  float edge=S(0.02,0.22,c.x)*(1.0-S(0.55,0.95,c.x));
-  float glint=pow(clamp(1.0-length(n)*18.0,0.0,1.0),18.0)*c.x;
+  float edge = S(0.02, 0.22, c.x) * (1.0 - S(0.55, 0.95, c.x));
+  float glint = pow(clamp(1.0 - length(n) * 18.0, 0.0, 1.0), 18.0) * c.x;
+  // Stronger lightning: a brief bright spike (1.5s peak intensity) plus
+  // a subtle after-image fade, simulating the eye's persistence of vision.
+  float lightningBase = clamp(uLightning, 0.0, 1.0);
+  float lightningSpike = exp(-pow(uLightning * 3.0, 2.0)) * 2.2; // Gaussian peak
+  float lightningFlash = max(lightningBase, lightningSpike);
   col+=vec3(0.52,0.68,0.82)*edge*0.09;
   col+=vec3(0.95,0.98,1.0)*glint*0.30;
   col=mix(col,col*vec3(0.82,0.91,1.03),clamp(c.y*0.32,0.0,0.32));
 
-  // Discrete lightning strike, driven by the game's thunder scheduler
-  col += uLightning*vec3(1.0, 1.0, 1.05)*1.5;
+  // Enhanced discrete lightning strike, driven by the game's thunder scheduler.
+  // Uses the computed flash (base intensity + brief Gaussian spike + after-image)
+  // rather than the raw uniform value, so strikes read as real brief flashes.
+  col += lightningFlash * vec3(1.0, 1.0, 1.05) * 2.0;
 
   // Lift storm-darkened areas so the track stays readable. This must be
   // proportional/additive, never a hard max() floor — a flat clamp collapses

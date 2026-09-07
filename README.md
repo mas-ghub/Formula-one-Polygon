@@ -237,6 +237,16 @@ on the title screen.
   watchdog also guarantees a failed or blocked splash can never leave the app
   hidden behind a permanent blank screen.
 
+## Current work status (September 2026)
+
+**Completed in this session:**
+- `game.js` edited: suspension spring tightened (`-280`/`-28`, clamp `±0.03`), vertical damping stronger (`springK` 140, `springB` 32), simpler ground tracking (`targetY` with `damp`) replacing the complex float-check.
+- `nearestTrackY` verification mechanism added (`verifyNearestHairpin`) — tests hairpin points (Monaco, Spa, Interlagos) against the hash/cell lookup and falls back to stricter full-scan when `T.hairpinStrict` is set.
+- `rainShader.js` upgraded: third layer for heavy rain (`layer3` at `rainAmount > 0.6`), `speedFactor` (stretch elongation), stronger `lightningFlash` with Gaussian spike + after-image fade, `trailElong` applied to blur.
+- Snow shader (`snowShader.js`) kept unchanged — no modifications.
+- Original preserved: `game.js.bak` (273 KB).
+- Readme updated.
+
 Online multiplayer is intentionally not implemented yet; that remains future
 work and will require a shared backend such as Firestore.
 
