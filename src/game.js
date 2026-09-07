@@ -403,6 +403,30 @@ vsc:['Virtual safety car deployed. Hold the delta and no overtaking.','VSC — s
 flag:['Yellow flags ahead — no overtaking through the incident zone.','Race control has yellow flags out. Lift and leave space.'],
 blue:['Blue flags — the leaders are approaching. Let them through safely.'],
 };
+// Lewis's game radio is intentionally a heightened fictional caricature:
+// every line is a request, ends with "man", and blames traffic, strategy,
+// tyres or race control rather than taking responsibility for the incident.
+const LEWIS_RADIO={
+ contact:['Can we get them to give me some room, man? I was completely boxed in, man.','Can we look at that one? He just turned in on me, man.','What are they doing there, man? I had nowhere to go, man.'],
+ angry:['Can we ask him to give that place back, man? It was clearly my corner, man.','I need race control to look at that, man. I was pushed wide, man.','Can someone explain why I am the one losing out here, man?'],
+ crash:['What are they doing, man? I was given no room, man. Can we get the stewards to look at it, man?','The car just went away from me, man. Can we check the other driver, man?','I had nowhere to go, man. Can we get a red flag or something, man?'],
+ wall:['Something is wrong with the car, man. The rear just stepped out on its own, man. Can we check it, man?','The tyres are gone, man. Can we do something with the balance, man?','I was fighting the car all the way there, man.'],
+ recovery:['Can we get more from the tyres now, man? The car is still not where it needs to be, man.','I need more from the front end, man. Can we change the approach, man?','The damage is clear but the car feels difficult, man. Can we look at the data, man?'],
+ penalty:['Can we review that penalty, man? I was forced off, man.','I do not understand that call, man. Can we speak to race control, man?'],
+ blue:['Can we get the leader past safely, man? The traffic is making this difficult, man.'],
+ animal:['Can someone get the animal off the line, man? I had no warning, man.','There was wildlife crossing, man. Can we tell the marshals, man?'],
+ vsc:['Can we check the delta, man? The traffic is not making this easy, man.','I am trying to manage the VSC, man. Can we give me a clearer target, man?']
+};
+function isLewis(c){return!!c&&/lewis\s+hamilton/i.test(c.d&&c.d.name||'');}
+function driverRadio(c,event='contact'){
+ if(!isLewis(c))return false;
+ const now=timeSec;
+ if(now-(c._radioT||-99)<2.8)return true;
+ c._radioT=now;
+ const lines=LEWIS_RADIO[event]||LEWIS_RADIO.contact;
+ Speech.say(pick(lines),true,{rate:1.02,pitch:1.01});
+ return true;
+}
 const ATT_LINES=[
 'Welcome to {track}, for the Polygon Grand Prix.',
 '{leader} leads the field around {track} this afternoon.',
@@ -1117,6 +1141,10 @@ function updPoints(S,dt,grow){
  P.needsUpdate=true;A.needsUpdate=true;Sz.needsUpdate=true;
 }
 function sparkBurst(x,y,z,amt){
+ // Never emit the source below the actual road surface. This matters after a
+ // nose-to-wheel shunt, when the collision point can be lower than the road
+ // sample used by the car one frame earlier.
+ const sparkY=T?Math.max(y,getRoadHAtCoords(x,z)+0.075):y;
  // Sparks are hot metal fragments, not orange blobs: lots of tiny points,
  // short ballistic lives, a tight fan and a white-yellow core with an orange
  // cooling tail. Additive blending keeps them bright without making them big.
@@ -1124,29 +1152,30 @@ function sparkBurst(x,y,z,amt){
  for(let i=0;i<n;i++){
   const hot=Math.random();
   const r=hot<0.26?1.0:1.0,g=hot<0.26?0.98:hot<0.72?0.72:0.38,b=hot<0.26?0.68:hot<0.72?0.18:0.025;
-  puff(sparks,x,y,z,rand(-9,9),rand(0.8,7.5),rand(-9,9),rand(.07,.22),rand(.055,.16),r,g,b,-44);
+  puff(sparks,x,sparkY,z,rand(-9,9),rand(0.8,7.5),rand(-9,9),rand(.07,.22),rand(.055,.16),r,g,b,-44);
  }
  for(let i=0;i<Math.ceil(n*.18);i++){
-  puff(sparks,x,y,z,rand(-6,6),rand(.3,4),rand(-6,6),rand(.05,.14),rand(.14,.24),1.0,0.34,0.025,-34);
+  puff(sparks,x,sparkY,z,rand(-6,6),rand(.3,4),rand(-6,6),rand(.05,.14),rand(.14,.24),1.0,0.34,0.025,-34);
  }
 }
 // Underbody strikes are directional: the hot metal is dragged backwards and
 // out toward the sidepod, so a bump reads as a fine fan of sparks rather than
 // an orange explosion floating above the car.
 function underbodySpark(x,y,z,hdg,side,amt){
+ const sparkY=T?Math.max(y,getRoadHAtCoords(x,z)+0.065):y;
  const fx=Math.sin(hdg),fz=Math.cos(hdg),rx=-fz,rz=fx;
  const n=Math.max(4,Math.round(amt*18));
  for(let i=0;i<n;i++){
   const spread=rand(.45,2.7)*side,back=rand(6.5,15.5),hot=Math.random();
   const r=1.0,g=hot<0.38?0.98:hot<0.82?0.76:0.48,b=hot<0.38?0.72:hot<0.82?0.22:0.035;
-  puff(sparks,x+rx*side*rand(0,.045),y+rand(-.018,.018),z+rz*side*rand(0,.045),
+  puff(sparks,x+rx*side*rand(0,.045),sparkY+rand(-.018,.018),z+rz*side*rand(0,.045),
    -fx*back+rx*spread,rand(.15,3.0),-fz*back+rz*spread,
    rand(.06,.20),rand(.07,.18),r,g,b,-48);
  }
  // A very small ember tail is warmer and dimmer, never a second cloud.
  for(let i=0;i<Math.ceil(n*.12);i++){
   const back=rand(3,8);
-  puff(sparks,x,y,z,-fx*back+rx*rand(.3,1.5)*side,rand(.1,1.6),-fz*back+rz*rand(.3,1.5)*side,
+  puff(sparks,x,sparkY,z,-fx*back+rx*rand(.3,1.5)*side,rand(.1,1.6),-fz*back+rz*rand(.3,1.5)*side,
    rand(.045,.12),rand(.12,.24),1.0,0.38,0.025,-36);
  }
 }
@@ -1162,7 +1191,7 @@ skidMesh.frustumCulled=false;skidMesh.renderOrder=1;
 scene.add(skidMesh);
 let skidI=0;const skidDummy=new THREE.Object3D();
 function addSkid(x,z,ang,len,isMud=false){
- skidDummy.position.set(x,0.14+(skidI%7)*0.006,z);
+ skidDummy.position.set(x,(T?getRoadHAtCoords(x,z):0)+0.07+(skidI%7)*0.006,z);
  skidDummy.rotation.set(0,ang,0);skidDummy.scale.set(1,1,len);skidDummy.updateMatrix();
  skidMesh.setMatrixAt(skidI%skidMax,skidDummy.matrix);
  if(isMud) skidMesh.setColorAt(skidI%skidMax, new THREE.Color(0x3e2b1d));
@@ -3326,6 +3355,7 @@ function buildWorld(idx){
 /* ============ cars — true heading-based physics, zero auto-steer ============ */
 let cars=[],player=null;
 const PH={top:79,eng:20,brk:26,drag:0.00115};
+const CAR_RIDE_HEIGHT=0.10; // leaves the tyre bottoms above the visible road skin
 const GEAR_COUNT=8;
 // Eight forward automatic ratios. The final upshift is reachable before the
 // 284 km/h top speed; the last 294 km/h value is only the redline ceiling.
@@ -3403,7 +3433,7 @@ function placeCar(c){
 // The tarmac skin is drawn 0.05 m above the centreline the cars are tracked
  // on, so the car rides with it: wheel bottoms land exactly on the visible
  // surface — no gap to read as "flying", and no sink into the paint.
- c.mesh.g.position.set(c.x,c.y+0.05,c.z);
+ c.mesh.g.position.set(c.x,c.y+CAR_RIDE_HEIGHT,c.z);
  c.mesh.g.rotation.y=c.hdg;
 }
 /* project world position onto the centreline (local search around cached index) */
@@ -3622,7 +3652,7 @@ function issuePenalty(c,code,seconds,reason,cooldown=5){
  c.penaltySec+=seconds;
  if(c.isPlayer){
   showMsg('PENALTY',seconds+'s · '+reason.toUpperCase(),'red',3.2);
-  Speech.say(pick(LINES.penalty).replace('{r}',reason),true,{rate:1.08,pitch:1.06});
+  if(!driverRadio(c,'penalty'))Speech.say(pick(LINES.penalty).replace('{r}',reason),true,{rate:1.08,pitch:1.06});
  }
 }
 function deployVSC(reason='INCIDENT',duration=9){
@@ -3685,10 +3715,11 @@ function wreckCar(c){
  if(c.isPlayer){
   beginCrashCamera(c);
   state.mode='gameover';slowMo=1.2;slowMoDur=1.2;cam.shake=Math.max(cam.shake,.75);
-  showMsg('CRASHED OUT','TERMINAL DAMAGE · DRIVER EJECTED','red',4);Speech.say('Heavy impact! The car is out of the race.',true,{rate:1.08,pitch:.96});
+  showMsg('CRASHED OUT','TERMINAL DAMAGE · DRIVER EJECTED','red',4);
+  if(!driverRadio(c,'crash'))Speech.say('Heavy impact! The car is out of the race.',true,{rate:1.08,pitch:.96});
   setTimeout(()=>{if(state.mode==='gameover')showResults();},4500);
  }else if(player&&Math.hypot(player.x-c.x,player.z-c.z)<95){
-  Speech.say(pick(LINES.crash),false,{rate:1.04,pitch:1.02});
+  if(!driverRadio(c,'crash'))Speech.say(pick(LINES.crash),false,{rate:1.04,pitch:1.02});
  }
  if(!c.isPlayer)deployVSC('WRECK',8);
 }
@@ -3704,7 +3735,7 @@ function triggerDamage(c,sev){
   if(c.isPlayer&&(state.mode==='race'||state.mode==='finished')){
    slowMo=0.8;slowMoDur=0.8;
    showMsg('MECHANICAL','SPANNER OUT · '+(Math.round(c.crash))+'s','purple',c.crashMax);
-   Speech.say(pick(['Nasty hit — nurse it home!','She is still running, bring it back slowly!']),true,{rate:0.98,pitch:1.02});
+   if(!driverRadio(c,'wall'))Speech.say(pick(['Nasty hit — nurse it home!','She is still running, bring it back slowly!']),true,{rate:0.98,pitch:1.02});
   }
 }
 function wallHit(c,sgn,imp){
@@ -3716,12 +3747,12 @@ function wallHit(c,sgn,imp){
   if(imp>5.5)triggerDamage(c,imp*0.5);
   if(!c.isPlayer&&imp>7&&player&&Math.hypot(player.x-c.x,player.z-c.z)<120&&timeSec-(wallHit.lastRadio||-99)>3.5){
    wallHit.lastRadio=timeSec;
-   Speech.say(pick(imp>12?LINES.terminal:LINES.crash),false,{rate:1.02,pitch:1.0});
+   if(!driverRadio(c,'wall'))Speech.say(pick(imp>12?LINES.terminal:LINES.crash),false,{rate:1.02,pitch:1.0});
   }
   if(c.isPlayer){
    cam.shake=Math.max(cam.shake,Math.min(0.7,imp*0.06));
    AudioSys.thump(Math.min(imp*0.09,0.9)+0.1);
-   if(imp>7)Speech.say(pick(LINES.hit),false,{rate:clamp(1.1+imp*0.015,1.1,1.35),pitch:1.08});
+   if(imp>7&&!driverRadio(c,'wall'))Speech.say(pick(LINES.hit),false,{rate:clamp(1.1+imp*0.015,1.1,1.35),pitch:1.08});
   }
  }
 }
@@ -3809,7 +3840,7 @@ function updCar(c,dt){
    if(c.isPlayer&&state.mode==='race'){showMsg('REPAIRED','FULL ENERGY','green',1.6);AudioSys.beep(680,0.14);}
    if(timeSec-(updCar.lastRecovery||-99)>3.5){
     updCar.lastRecovery=timeSec;
-    Speech.say(pick(LINES.recovery),false,{rate:1.0,pitch:1.04});
+    if(!driverRadio(c,'recovery'))Speech.say(pick(LINES.recovery),false,{rate:1.0,pitch:1.04});
    }
   }
  }
@@ -3953,7 +3984,8 @@ function carCollisions(){
        // commentary, not an automatic terminal crash.
        if(imp<9&&timeSec-(carCollisions.lastRadio||-99)>2.8){
         carCollisions.lastRadio=timeSec;
-        Speech.say(pick(LINES.contact),false,{rate:1.0,pitch:1.03});
+        const radioCar=isLewis(A)?A:isLewis(B)?B:null;
+        if(!driverRadio(radioCar,'contact'))Speech.say(pick(LINES.contact),false,{rate:1.0,pitch:1.03});
        }
        // Suspension jounce so a hit visibly rocks both cars.
        A.bounceVel=(A.bounceVel||0)-Math.min(imp*0.05,0.28);
@@ -3969,7 +4001,7 @@ function carCollisions(){
        if(nearPlayer){
         cam.shake=Math.max(cam.shake,Math.min(0.55,imp*0.05));
         AudioSys.thump(Math.min(imp*0.09,0.9)+0.1);
-        if(imp>9){exCur=Math.max(exCur,0.85);Speech.say(pick(LINES.crash),true,{rate:clamp(1.15+imp*0.012,1.15,1.4),pitch:1.12});}
+        if(imp>9){exCur=Math.max(exCur,0.85);const radioCar=isLewis(A)?A:isLewis(B)?B:null;if(!driverRadio(radioCar,'crash'))Speech.say(pick(LINES.crash),true,{rate:clamp(1.15+imp*0.012,1.15,1.4),pitch:1.12});}
         // If it was you clouting them, the other driver gets properly furious.
         if(A.isPlayer!==B.isPlayer){
          const other=A.isPlayer?B:A;
@@ -4030,7 +4062,20 @@ function updCarVisual(c,dt){
  // Is the car inside the covered tunnel section? Used for audio + lighting.
  c.inTunnel=!!T.tunnel&&c.ti>=T.tunnel.i0&&c.ti<=T.tunnel.i1;
  const jitter=Math.sin(timeSec*24+c.phase*7)*0.006*clamp(Math.abs(c.vF)/50,0,1);
- p.position.set(c.x, (c.y !== undefined ? c.y : 0.05) + (c.bounceOff||0) + jitter, c.z);
+ const roadFloor=getRoadHAtCoords(c.x,c.z);
+ const supportFx=Math.sin(c.hdg),supportFz=Math.cos(c.hdg);
+ // Check the actual front/rear hardpoints too. On a crest, using only the
+ // centreline height leaves the nose or an axle below the road for one frame;
+ // that is the disappearing geometry players see just before the spark fan.
+ const supportFloor=Math.max(roadFloor,
+  getRoadHAtCoords(c.x+supportFx*2.55,c.z+supportFz*2.55),
+  getRoadHAtCoords(c.x-supportFx*2.15,c.z-supportFz*2.15));
+ const physicsY=(c.y!==undefined?c.y:supportFloor)+CAR_RIDE_HEIGHT+(c.bounceOff||0)+jitter;
+ // Car-to-car resolution changes x/z after physics has sampled the road. Use
+ // the new contact location immediately, so the nose, axle and wheels never
+ // spend a frame below a crest or road skin while the sparks are flying.
+ const visualY=Math.max(physicsY,supportFloor+0.055);
+ p.position.set(c.x,visualY,c.z);
  p.rotation.set(0, c.hdg, 0);
  p.rotateX(-c.pitch || 0);
  // Surface camber roll — on a banked corner the whole car leans with the
@@ -4287,7 +4332,7 @@ const AudioSys={started:false,
   // the previous engine produced at low revs.
   this.o1=mk('sawtooth',0.34);this.o2=mk('triangle',0.25);this.o3=mk('sine',0.15);this.o4=mk('sawtooth',0.055);
   const en=ctx.createBufferSource();en.buffer=nb;en.loop=true;
-  const ef=ctx.createBiquadFilter();ef.type='bandpass';ef.frequency.value=180;
+  const ef=this.engF=ctx.createBiquadFilter();ef.type='bandpass';ef.frequency.value=180;
   this.eng=ctx.createGain();this.eng.gain.value=0;
   en.connect(ef);ef.connect(this.eng);this.eng.connect(this.master);en.start();
   // Separate intake roar and low firing pulses give the engine body under the
@@ -4494,11 +4539,12 @@ const AudioSys={started:false,
   // Approximate a modern V6 firing spectrum rather than sweeping one arcade
   // oscillator. Gear/load add small independent movement between harmonics;
   // the soft rev limiter flutters only at the very top of the range.
-  const limiter=p.audioRpm>.975?(0.985+Math.sin(timeSec*210)*.015):1;
-  // The fundamental rises through a real V6-like rev band; the intake and
-  // pulse layers below supply the physical body so this is not a single toy
-  // oscillator sweeping up and down.
-  const load=.90+p.throttle*.10, f=(74+p.audioRpm*920)*limiter;
+  const limiter=p.audioRpm>.975?(0.982+Math.sin(timeSec*210)*.018):1;
+  const limiterCut=p.audioRpm>.975?(0.72+0.28*(0.5+0.5*Math.sin(timeSec*92))):1;
+  // The fundamental is the firing-order bed, not a single arcade note: the
+  // V6 body sits lower, harmonics rise through the high-rev band, and the
+  // soft limiter repeatedly removes a little energy at the redline.
+  const load=.86+p.throttle*.14, f=(62+p.audioRpm*1040)*limiter;
   this.o1.frequency.setTargetAtTime(f*load,t,0.018);
   this.o2.frequency.setTargetAtTime(f*1.5,t,0.022);
   this.o3.frequency.setTargetAtTime(f*.75,t,0.026);
@@ -4507,11 +4553,12 @@ const AudioSys={started:false,
   // a feedback delay for an enclosed, echoing rumble — the signature Monaco
   // tunnel sound.
   const tun=player.inTunnel?1:0;
-  this.eflt.frequency.setTargetAtTime((430+p.throttle*3200+p.audioRpm*2200)*(1-tun*0.42),t,0.03);
+  this.eflt.frequency.setTargetAtTime((560+p.throttle*3500+p.audioRpm*2550)*(1-tun*0.42),t,0.03);
   this.tdFb.gain.setTargetAtTime(tun*0.45,t,0.07);
   this.tdGain.gain.setTargetAtTime(tun?0.55:0,t,0.07);
-  this.eg.gain.setTargetAtTime(run?0.18+p.throttle*0.24+p.audioRpm*0.10:0,t,0.05);
-  this.eng.gain.setTargetAtTime(run?0.025+p.throttle*0.09+p.audioRpm*0.035:0,t,0.05);
+  this.eg.gain.setTargetAtTime(run?(0.17+p.throttle*0.25+p.audioRpm*0.11)*limiterCut:0,t,0.05);
+  this.engF.frequency.setTargetAtTime(105+p.audioRpm*560+p.throttle*180,t,0.045);
+  this.eng.gain.setTargetAtTime(run?0.016+p.throttle*0.095+p.audioRpm*0.070:0,t,0.06);
   this.intakeF.frequency.setTargetAtTime(720+p.throttle*2100+p.audioRpm*1750,t,0.04);
   this.intakeG.gain.setTargetAtTime(run?0.003+p.throttle*0.105+p.audioRpm*0.030:0,t,0.06);
   this.exhaustF.frequency.setTargetAtTime(120+p.audioRpm*210+p.throttle*85,t,0.05);
@@ -4519,7 +4566,7 @@ const AudioSys={started:false,
   this.exhaustG.gain.setTargetAtTime(run?0.012+exhaustLoad*0.075:0,t,0.07);
   this.whineO.frequency.setTargetAtTime(320+p.audioRpm*1850+(p.gear||1)*58,t,0.035);
   this.whineG.gain.setTargetAtTime(run?0.004+p.throttle*0.010+p.audioRpm*0.018:0,t,0.06);
-  this.pulseF.frequency.setTargetAtTime(105+p.audioRpm*280,t,0.04);
+  this.pulseF.frequency.setTargetAtTime(105+p.audioRpm*420,t,0.04);
   this.pulseO.frequency.setTargetAtTime(f*.5,t,0.03);
   this.pulseG.gain.setTargetAtTime(run?0.018+p.audioRpm*0.045+p.throttle*0.018:0,t,0.05);
   this.wso.frequency.setTargetAtTime(f*5.2,t,0.02);
@@ -5079,7 +5126,7 @@ function givePlaceBack(o){
  showDriverBoard(o,'GIVE THE PLACE BACK!',3400,Math.min(anger,5));
  AudioSys.beep(680,0.16);
  setTimeout(()=>{if(state.mode==='race')AudioSys.beep(460,0.3);},180);
- Speech.say(pick(LINES.giveBack).replace('{d}',o.d.name.split(' ').pop().toUpperCase()),true,{rate:1.24+anger*0.02,pitch:1.1+anger*0.02});
+ if(!driverRadio(o,'angry'))Speech.say(pick(LINES.giveBack).replace('{d}',o.d.name.split(' ').pop().toUpperCase()),true,{rate:1.24+anger*0.02,pitch:1.1+anger*0.02});
  showMsg('TRACK LIMITS','OFF-TRACK OVERTAKE','red',2.4);
 }
 // A driver you've just clouted gets angry at you.
@@ -5090,7 +5137,7 @@ function rageFrom(o){
  if(state.mode!=='race'&&state.mode!=='finished')return;
  showDriverBoard(o,pick(['MIND MY WHEELS!','THAT WAS DIRTY!','HEY! MY RACE!']),2400,Math.min(anger+1,5));
  AudioSys.beep(620,0.13);
- Speech.say(pick(LINES.angry).replace('{d}',o.d.name.split(' ').pop().toUpperCase()),true,{rate:1.2,pitch:1.09});
+ if(!driverRadio(o,'angry'))Speech.say(pick(LINES.angry).replace('{d}',o.d.name.split(' ').pop().toUpperCase()),true,{rate:1.2,pitch:1.09});
 }
 function updHUD(dt){
  const p=player;if(!p)return;
@@ -5349,7 +5396,7 @@ function updateBlueFlags(dt){
  }
  if(threat&&dist<120){
   player.blueT=(player.blueT||0)+dt;
-  if(player.blueT<0.2)Speech.say(pick(LINES.blue),false,{rate:1.08,pitch:1.08});
+  if(player.blueT<0.2){if(!driverRadio(player,'blue'))Speech.say(pick(LINES.blue),false,{rate:1.08,pitch:1.08});}
   if(player.blueT>7)issuePenalty(player,'blueFlag',5,'ignoring blue flags',10);
  }else player.blueT=0;
 }
