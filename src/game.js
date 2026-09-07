@@ -770,6 +770,9 @@ function numTex(n){if(numCache.has(n))return numCache.get(n);
 const matBody=new THREE.MeshStandardMaterial({vertexColors:true,flatShading:true,roughness:0.25,metalness:0.35,envMapIntensity:1.1});
 const matWheel=new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.55,metalness:0.15,envMapIntensity: 0.8,bumpMap:tyreT,bumpScale:0.55});
 const woodLegMat=new THREE.MeshStandardMaterial({color:0x6b4a2f,roughness:0.9});
+// Shared scene meshes outside the car module also need a neutral UV attribute
+// before they are sent through BufferGeometryUtils/material paths.
+function ensureUV(geo){if(!geo.attributes.uv){const n=geo.attributes.position.count;geo.setAttribute('uv',new THREE.BufferAttribute(new Float32Array(n*2),2));}return geo;}
 // The halo is a separate, bright F1-style assembly. In side profile it is
 // an open curved rail wrapping around the helmet; in the driver's view the two
 // rails frame the cockpit and the central front splitter is directly ahead.
