@@ -44,7 +44,7 @@ const TOD={
  dusk:{sunMul:0.72,hMul:0.8,expMul:1.08,skyMul:0.78,el:0.13,az:1.9 ,haze:0.9 ,stars:0.15,cool:0.15},
  night:{sunMul:0.22,hMul:0.42,expMul:1.35,skyMul:0.3,el:0.28,az:3.6 ,haze:0.25,stars:1.0,cool:0.55}
 };
-const CAM_NAMES=['CHASE','HOOD','HELMET','TV','ORBIT','TOP'];
+const CAM_NAMES=['CHASE','HOOD','HALO','TV','ORBIT','TOP'];
 
 /* ============ drivers ============ */
 // 2026 season grid — real team colours (OpenF1 / F1 live-timing hexes).
@@ -410,7 +410,7 @@ renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFShadowMap;
 renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.outputColorSpace=THREE.SRGBColorSpace;
 renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
 const scene=new THREE.Scene();
-const camera=new THREE.PerspectiveCamera(62,1,0.3,6000);
+const camera=new THREE.PerspectiveCamera(62,1,0.08,6000);
 const SUNDIR=V3(0.42,0.55,0.25).normalize();
 // The live sun direction (SUNDIR is the default; the time of day re-aims it)
 // and how cool the shade side of the image should read.
@@ -561,6 +561,25 @@ for(let b=0;b<8;b++){
  gg.fillRect(b*96,0,96,768);
 }
 const grassT=ctex(gc,true);grassT.repeat.set(120,120);
+
+// Urban verges use paving/concrete rather than the generic grass texture. This
+// matters most at Monaco: the circuit is surrounded by buildings, walls and
+// harbour pavement, not a green field. The seams stay broad enough to read at
+// chase-camera distance without looking like a tiled checkerboard.
+const[stc,stg]=mkCanvas(512,512);
+stg.fillStyle='#8b8984';stg.fillRect(0,0,512,512);
+for(let i=0;i<850;i++){
+ const g=105+Math.random()*35|0;stg.fillStyle=`rgba(${g},${g},${g-2},${rand(.12,.34)})`;
+ stg.fillRect(Math.random()*512,Math.random()*512,rand(3,18),rand(2,10));
+}
+stg.strokeStyle='rgba(38,40,43,.34)';stg.lineWidth=2;
+for(let x=0;x<=512;x+=64){stg.beginPath();stg.moveTo(x,0);stg.lineTo(x,512);stg.stroke();}
+for(let y=0;y<=512;y+=64){stg.beginPath();stg.moveTo(0,y);stg.lineTo(512,y);stg.stroke();}
+for(let i=0;i<14;i++){
+ stg.strokeStyle='rgba(220,218,208,.20)';stg.lineWidth=1;
+ stg.beginPath();stg.arc(rand(20,492),rand(20,492),rand(8,22),0,Math.PI*2);stg.stroke();
+}
+const streetT=ctex(stc,true);streetT.repeat.set(28,28);
 
 // High-fidelity procedurally generated Bump/Normal textures for road roughness and terrain clumping
 const [acBump, agBump] = mkCanvas(128, 128);
@@ -1846,8 +1865,17 @@ function buildWorld(idx){
   return terrainHeightAt(x,z);
  };
  // --- meshes ----------------------------------------------------------------
- const groundMat=new THREE.MeshStandardMaterial({map:grassT,bumpMap:grassBumpT,bumpScale:0.4,color:def.grass,roughness:1,polygonOffset:true,polygonOffsetFactor:4,polygonOffsetUnits:4});
- groundMat.envMapIntensity=0.25;
+ const groundStyle=def.ground||(def.theme==='street'?'urban':'grass');
+ const urbanGround=groundStyle==='urban',desertGround=groundStyle==='desert';
+ const groundMat=new THREE.MeshStandardMaterial({
+  map:urbanGround?streetT:desertGround?gravelT:grassT,
+  bumpMap:urbanGround?asphaltBumpT:desertGround?null:grassBumpT,
+  bumpScale:urbanGround?0.16:desertGround?0.08:0.4,
+  color:urbanGround?0xb0ada5:desertGround?0xc4a36c:def.grass,
+  roughness:urbanGround?0.88:1,polygonOffset:true,polygonOffsetFactor:4,polygonOffsetUnits:4
+ });
+ groundMat.envMapIntensity=urbanGround?0.42:0.25;
+ T.groundStyle=groundStyle;
  // Textures tile at a constant real-world size (≈38 m per tile, the scale the
  // old full-circuit plane produced) rather than stretching over the extent.
  const GROUND_UV=38;
@@ -1944,7 +1972,8 @@ function buildWorld(idx){
    }
   }
   makeGroundMesh(bandPos,bandIdx,groundMat);
-  const farMat=new THREE.MeshStandardMaterial({color:new THREE.Color(def.grass).multiplyScalar(0.8),roughness:1,metalness:0});
+  const farColor=urbanGround?0x77746f:desertGround?0xb48d59:new THREE.Color(def.grass).multiplyScalar(0.8);
+  const farMat=new THREE.MeshStandardMaterial({color:farColor,roughness:1,metalness:0});
   farMat.envMapIntensity=0.2;
   const farSize=Math.max(groundSize*3.2,9000);
   const farPlane=new THREE.Mesh(new THREE.PlaneGeometry(farSize,farSize).rotateX(-Math.PI/2),farMat);
@@ -2611,7 +2640,7 @@ function buildWorld(idx){
  //     Two crossed planes per tuft, one draw call for the whole circuit, so
  //     even thousands of tufts cost next to nothing.
  {
-  const nTuft=Math.round((def.theme==='street'?320:def.theme==='forest'?1500:1250)*propDensity);
+  const nTuft=Math.round((groundStyle==='grass'?(def.theme==='forest'?1500:1250):0)*propDensity);
   if(nTuft>8){
    const bladeG=new THREE.PlaneGeometry(0.9,0.55,1,1);
    bladeG.translate(0,0.24,0);
@@ -2652,8 +2681,8 @@ function buildWorld(idx){
  // (conifer / round broadleaf / slender poplar) mixed by theme, instead of
  // one repeated cone, so the scenery doesn't look so uniform.
  {
-  const nT=Math.round((def.theme==='forest'?640:def.theme==='park'?320:90)*propDensity);
-  const weights=def.theme==='forest'?[0.55,0.3,0.15]:def.theme==='park'?[0.2,0.55,0.25]:[0.34,0.33,0.33];
+  const nT=Math.round((groundStyle==='grass'?(def.theme==='forest'?640:def.theme==='park'?320:90):0)*propDensity);
+  const weights=def.theme==='forest'?[0.55,0.3,0.15]:[0.2,0.55,0.25];
   const species=[
    {canopyGeo:new THREE.ConeGeometry(2.1,5.2,7),canopyY:2.5,canopyScaleY:1,trunkH:2.3,trunkR0:0.32,trunkR1:0.48,trunkColor:0x6b4a2f,hue:[0.26,0.36],sat:[0.4,0.62],light:[0.22,0.36]},
    {canopyGeo:new THREE.IcosahedronGeometry(2.3,1),canopyY:2.7,canopyScaleY:0.82,trunkH:2.0,trunkR0:0.3,trunkR1:0.42,trunkColor:0x5c4530,hue:[0.22,0.32],sat:[0.45,0.68],light:[0.28,0.44]},
@@ -2710,7 +2739,7 @@ function buildWorld(idx){
  // cap (and, on the tallest ones, an antenna) so the skyline reads as modern
  // architecture rather than bare rectangular blocks.
  {
-  const nB=Math.round((def.theme==='street'?46:def.theme==='park'?10:4)*propDensity);
+  const nB=Math.round((def.name==='Monaco'?72:def.theme==='street'?46:def.theme==='park'?10:4)*propDensity);
   const bm=new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1),
    new THREE.MeshStandardMaterial({map:winT,roughness:0.9}),nB);
   const roofMat=new THREE.MeshStandardMaterial({color:0x2a2e34,roughness:0.55,metalness:0.35});
@@ -2757,8 +2786,178 @@ function buildWorld(idx){
   antennas.count=antCount;world.add(antennas);
  }
 
+ // 11b. Landmark dressing — a few large, unmistakable silhouettes make the
+ // venue read as its real place instead of a generic loop with sponsor boards.
+ // Keep these low-poly and sparse so they survive LOW quality and do not become
+ // another scenery wall around the driving line.
+ {
+  const landmarkSign=(text,frac,side,bodyColor,roofColor)=>{
+   const si=Math.floor(((frac%1)+1)%1*N);sampleF(si);
+   const lat=T.latLimit+20,bx=_sv.x+_sn.x*lat*side,bz=_sv.z+_sn.z*lat*side;
+   if(minTrackDist(bx,bz)<T.latLimit+12)return;
+   const by=terrainHeightAt(bx,bz),yaw=Math.atan2(_st.x,_st.z);
+   const body=new THREE.Mesh(new THREE.BoxGeometry(15,8,5),new THREE.MeshStandardMaterial({color:bodyColor,roughness:0.78}));
+   body.position.set(bx,by+4,bz);body.rotation.y=yaw;body.castShadow=true;world.add(body);
+   const roof=new THREE.Mesh(new THREE.BoxGeometry(16,0.8,5.6),new THREE.MeshStandardMaterial({color:roofColor,roughness:0.5}));
+   roof.position.set(bx,by+8.4,bz);roof.rotation.y=yaw;roof.castShadow=true;world.add(roof);
+   const[cn,cx]=mkCanvas(512,96);cx.fillStyle='#15171b';cx.fillRect(0,0,512,96);cx.fillStyle='#f5eee0';cx.font='700 48px sans-serif';cx.textAlign='center';cx.textBaseline='middle';cx.fillText(text,256,50);
+   const signMat=new THREE.MeshStandardMaterial({map:ctex(cn,false),emissive:0x171717,emissiveIntensity:0.35,side:THREE.DoubleSide});
+   const sign=new THREE.Mesh(new THREE.PlaneGeometry(12,2.25),signMat);sign.position.set(bx,by+4.4,bz);sign.lookAt(_sv.x,by+4.4,_sv.z);sign.translateZ(2.56);world.add(sign);
+  };
+  if(def.name==='Monaco'){
+   landmarkSign('CASINO DE MONTE-CARLO',0.23,1,0xd2bd9a,0x8f2636);
+   landmarkSign('MONACO',0.70,-1,0xf0eee7,0x9b1d2c);
+   // A compact harbour beacon sits beyond Port Hercule, giving the waterfront
+   // a skyline cue that survives even when the water is hidden by rain.
+   sampleF(Math.floor(0.76*N));
+   const bx=_sv.x+_sn.x*(T.latLimit+24),bz=_sv.z+_sn.z*(T.latLimit+24),by=terrainHeightAt(bx,bz);
+   const tower=new THREE.Mesh(new THREE.CylinderGeometry(1.25,1.8,10,8),new THREE.MeshStandardMaterial({color:0xe6e0d1,roughness:0.72}));
+   tower.position.set(bx,by+5,bz);world.add(tower);
+   const beacon=new THREE.Mesh(new THREE.CylinderGeometry(1.8,1.8,0.55,8),new THREE.MeshStandardMaterial({color:0xe10600,emissive:0x7d0805,emissiveIntensity:0.5}));
+   beacon.position.set(bx,by+10.3,bz);world.add(beacon);
+  }else if(def.name==='Baku City Circuit'){
+   landmarkSign('OLD CITY',0.08,1,0x9a8068,0x5e4939);
+  }else if(def.name==='Marina Bay'){
+   landmarkSign('MARINA BAY',0.52,1,0x73818a,0x1d566d);
+  }else if(def.name==='Las Vegas Strip Circuit'){
+   landmarkSign('LAS VEGAS',0.08,1,0x20283a,0x9d1aff);
+  }else if(def.name==='Silverstone'){
+   landmarkSign('SILVERSTONE',0.06,1,0x68727c,0xe10600);
+  }else if(def.name==='Monza'){
+   landmarkSign('MONZA',0.06,1,0xddd6c8,0xe10600);
+  }
+ }
+
+ // 11c. Venue profiles — every circuit gets a recognisable local silhouette,
+ // not just a different grass tint. These are deliberately low-poly and sparse:
+ // they frame the lap at a distance while the real racing surface stays clear.
+ {
+  const venue=def.venue||def.name;
+  const venueSpot=(frac,side=1,lat=T.latLimit+34)=>{
+   sampleF(Math.floor((((frac%1)+1)%1)*N));
+   const x=_sv.x+_sn.x*lat*side,z=_sv.z+_sn.z*lat*side;
+   return{x,z,y:terrainHeightAt(x,z),yaw:Math.atan2(_st.x,_st.z),tx:_st.x,tz:_st.z,cx:_sv.x,cz:_sv.z};
+  };
+  const venueSign=(text,frac,side,bodyColor,roofColor)=>{
+   const s=venueSpot(frac,side,T.latLimit+20);
+   if(minTrackDist(s.x,s.z)<T.latLimit+12)return;
+   const body=new THREE.Mesh(new THREE.BoxGeometry(15,8,5),mat(bodyColor,0.78));
+   body.position.set(s.x,s.y+4,s.z);body.rotation.y=s.yaw;body.castShadow=true;world.add(body);
+   const roof=new THREE.Mesh(new THREE.BoxGeometry(16,0.8,5.6),mat(roofColor,0.5));
+   roof.position.set(s.x,s.y+8.4,s.z);roof.rotation.y=s.yaw;roof.castShadow=true;world.add(roof);
+   const[cn,cx]=mkCanvas(512,96);cx.fillStyle='#15171b';cx.fillRect(0,0,512,96);cx.fillStyle='#f5eee0';cx.font='700 48px sans-serif';cx.textAlign='center';cx.textBaseline='middle';cx.fillText(text,256,50);
+   const signMat=new THREE.MeshStandardMaterial({map:ctex(cn,false),emissive:0x171717,emissiveIntensity:0.35,side:THREE.DoubleSide});
+   const sign=new THREE.Mesh(new THREE.PlaneGeometry(12,2.25),signMat);sign.position.set(s.x,s.y+4.4,s.z);sign.lookAt(s.cx,s.y+4.4,s.cz);sign.translateZ(2.56);world.add(sign);
+  };
+  const mat=(color,rough=0.78,emissive=0,ei=0)=>new THREE.MeshStandardMaterial({color,roughness:rough,emissive,emissiveIntensity:ei});
+  const block=(s,w,h,d,color,roofColor=color)=>{
+   const body=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat(color));
+   body.position.set(s.x,s.y+h/2,s.z);body.rotation.y=s.yaw;body.castShadow=true;world.add(body);
+   const roof=new THREE.Mesh(new THREE.BoxGeometry(w*1.06,0.45,d*1.06),mat(roofColor,0.56));
+   roof.position.set(s.x,s.y+h+0.22,s.z);roof.rotation.y=s.yaw;roof.castShadow=true;world.add(roof);
+   return body;
+  };
+  const tower=(frac,side,h,w,color,accent=color)=>{
+   const s=venueSpot(frac,side,Math.max(T.latLimit+28,Math.min(120,T.latLimit+28+ h*.5)));
+   const body=new THREE.Mesh(new THREE.BoxGeometry(w,h,w*.72),mat(color,0.68));
+   body.position.set(s.x,s.y+h/2,s.z);body.rotation.y=s.yaw;body.castShadow=true;world.add(body);
+   const cap=new THREE.Mesh(new THREE.ConeGeometry(w*.72,w*.7,5),mat(accent,0.52,accent,accent===0xff3b18?0.5:0));
+   cap.position.set(s.x,s.y+h+0.35,s.z);cap.rotation.y=s.yaw;cap.castShadow=true;world.add(cap);
+  };
+  const palm=(frac,side,scale=1,leafColor=0x2d7138)=>{
+   const s=venueSpot(frac,side,T.latLimit+30+scale*5),h=5.8*scale;
+   const trunk=new THREE.Mesh(new THREE.CylinderGeometry(0.18*scale,0.34*scale,h,7),mat(0x8a6038));
+   trunk.position.set(s.x,s.y+h/2,s.z);trunk.rotation.z=rand(-0.08,0.08);trunk.castShadow=true;world.add(trunk);
+   for(let i=0;i<6;i++){
+    const a=i*Math.PI/3+rand(-0.12,0.12);
+    const leaf=new THREE.Mesh(new THREE.ConeGeometry(0.16*scale,2.9*scale,5),mat(leafColor,0.9));
+    leaf.position.set(s.x+Math.cos(a)*1.0*scale,s.y+h+Math.sin(i*1.7)*0.12*scale,s.z+Math.sin(a)*1.0*scale);
+    leaf.rotation.set(Math.cos(a)*0.65,0,-Math.sin(a)*0.65);leaf.castShadow=true;world.add(leaf);
+   }
+  };
+  const cypress=(frac,side,scale=1,color=0x244b2c)=>{
+   const s=venueSpot(frac,side,T.latLimit+28),h=7.5*scale;
+   const trunk=new THREE.Mesh(new THREE.CylinderGeometry(0.18*scale,0.3*scale,h,6),mat(0x5d432f));
+   trunk.position.set(s.x,s.y+h/2,s.z);world.add(trunk);
+   const crown=new THREE.Mesh(new THREE.ConeGeometry(1.35*scale,h*0.88,7),mat(color,1));
+   crown.position.set(s.x,s.y+h*0.72,s.z);crown.castShadow=true;world.add(crown);
+  };
+  const mountains=(frac,side,color=0x55645d,count=5)=>{
+   for(let i=0;i<count;i++){
+    const s=venueSpot(frac+i/count*.18,side,125+i*14),r=24+rand(8,18),h=28+rand(12,28);
+    const m=new THREE.Mesh(new THREE.ConeGeometry(r,h,5),mat(color,1));
+    m.position.set(s.x,s.y+h/2,s.z);m.rotation.y=rand(0,Math.PI);m.scale.x=rand(0.8,1.5);m.scale.z=rand(0.7,1.3);m.castShadow=true;world.add(m);
+   }
+  };
+  const pagoda=(frac,side,color=0xc53a2f)=>{
+   const s=venueSpot(frac,side,T.latLimit+38),dark=mat(0x25262a,0.6);
+   const base=new THREE.Mesh(new THREE.CylinderGeometry(2.4,2.8,1.2,8),mat(0x8f332e));base.position.set(s.x,s.y+0.6,s.z);world.add(base);
+   for(let i=0;i<3;i++){
+    const y=s.y+2+i*2.4,w=2.3-i*.42;
+    const level=new THREE.Mesh(new THREE.CylinderGeometry(w,w*.9,1.0,8),mat(color,0.68));level.position.set(s.x,y,s.z);world.add(level);
+    const eave=new THREE.Mesh(new THREE.ConeGeometry(w*1.35,0.55,8),dark);eave.position.set(s.x,y+0.7,s.z);world.add(eave);
+   }
+   const fin=new THREE.Mesh(new THREE.ConeGeometry(0.38,2.8,6),mat(0xe2b43d,0.55));fin.position.set(s.x,s.y+9,s.z);world.add(fin);
+  };
+  const torii=(frac,side)=>{
+   const s=venueSpot(frac,side,T.latLimit+32),red=mat(0xb82b25,0.62);
+   for(const dx of[-3.1,3.1]){const p=new THREE.Mesh(new THREE.CylinderGeometry(0.32,0.42,6,7),red);p.position.set(s.x+Math.cos(s.yaw)*dx,s.y+3,s.z+Math.sin(s.yaw)*dx);world.add(p);}
+   const top=new THREE.Mesh(new THREE.BoxGeometry(7.8,0.45,0.55),red);top.position.set(s.x,s.y+6.1,s.z);top.rotation.y=s.yaw;world.add(top);
+   const cap=new THREE.Mesh(new THREE.BoxGeometry(9.0,0.28,0.75),red);cap.position.set(s.x,s.y+6.55,s.z);cap.rotation.y=s.yaw;world.add(cap);
+  };
+  const ferris=(frac,side,color=0x6ed1df)=>{
+   const s=venueSpot(frac,side,T.latLimit+40),g=new THREE.Group();
+   const ring=new THREE.Mesh(new THREE.TorusGeometry(15,0.8,8,28),mat(color,0.5,0x123b55,0.35));ring.rotation.x=Math.PI/2;g.add(ring);
+   const hub=new THREE.Mesh(new THREE.CylinderGeometry(1.2,1.2,1.2,8),mat(0xf1d47a,0.5));hub.rotation.x=Math.PI/2;g.add(hub);
+   for(let i=0;i<8;i++){const a=i*Math.PI/4;const pod=new THREE.Mesh(new THREE.BoxGeometry(1.2,1.2,0.8),mat(i%2?0xf4b63f:0xec5366,0.65));pod.position.set(Math.cos(a)*15,Math.sin(a)*15,0);g.add(pod);}
+   g.position.set(s.x,s.y+17,s.z);g.rotation.y=s.yaw;world.add(g);
+  };
+  const windmill=(frac,side)=>{
+   const s=venueSpot(frac,side,T.latLimit+35),body=new THREE.Mesh(new THREE.ConeGeometry(2.3,9,6),mat(0xd6c6a7,0.92));body.position.set(s.x,s.y+4.5,s.z);world.add(body);
+   const hubY=s.y+7.3;
+   for(let i=0;i<4;i++){const blade=new THREE.Mesh(new THREE.BoxGeometry(0.35,5.2,0.22),mat(0x5d5145,0.8));blade.position.set(s.x,hubY,s.z);blade.rotation.set(0,s.yaw,i*Math.PI/2);world.add(blade);}
+   const hub=new THREE.Mesh(new THREE.SphereGeometry(0.55,7,5),mat(0x443b37));hub.position.set(s.x,hubY,s.z);world.add(hub);
+  };
+  const labelColors={
+   italian_park:['TEMPLE OF SPEED',0xf1e6c9,0xb6151b],british_airfield:['HOME OF BRITISH MOTORSPORT',0xdde5ea,0x17437a],ardennes:['ARDENNES',0x708a78,0x263d32],alpine:['RED BULL RING',0x8ba4b1,0x243f73],japanese:['SUZUKA',0xe8e2d4,0xb62526],melbourne:['ALBERT PARK',0xcbd5d0,0x2c7180],shanghai:['SHANGHAI',0xc4d0d4,0xb73534],bahrain:['SAKHIR',0xd5b27b,0x9c5a24],jeddah:['JEDDAH CORNICHE',0xc7d5dd,0x1682a6],miami:['MIAMI',0xf2c1a2,0x1688a0],montreal:['WALL OF CHAMPIONS',0xdfe5eb,0xa62432],barcelona:['BARCELONA',0xe1c7a1,0xa52b31],hungary:['HUNGARORING',0xb4a48c,0x2e5138],zandvoort:['ZANDVOORT',0xd7b889,0xe16b24],madrid:['MADRING',0xd8cbc0,0xb32825],baku:['BAKU',0xcbbd9b,0x8b3a28],tropical:['SEPANG',0x55705f,0x2d6b40],singapore:['MARINA BAY',0x90b6c1,0x0e5c77],austin:['COTA',0xc8c3b7,0xa32632],mexico:['FORO SOL',0xd7b69d,0x9b2534],sao_paulo:['INTERLAGOS',0xa7c0a4,0x167749],vegas:['LAS VEGAS',0x282b49,0xb719e7],qatar:['LUSAIL',0xd6bb8d,0x8b6339],yas:['YAS MARINA',0xb8d4d8,0x1b6d8d]
+  };
+  if(labelColors[venue]&&!['monaco','baku','singapore','vegas','british_airfield','italian_park'].includes(venue)){
+   const[l,bodyC,roofC]=labelColors[venue];venueSign(l,0.08,1,bodyC,roofC);
+  }
+  switch(venue){
+   case'italian_park':cypress(0.15,1,1.2);cypress(0.19,1,0.9);cypress(0.24,-1,1.1);break;
+   case'british_airfield':block(venueSpot(0.32,-1,T.latLimit+22),30,5,8,0x8d969b,0x39424a);break;
+   case'ardennes':mountains(0.28,1,0x405b4a,6);break;
+   case'alpine':mountains(0.36,1,0x60716c,6);mountains(0.58,-1,0x718079,4);break;
+   case'japanese':pagoda(0.22,1);torii(0.56,-1);break;
+   case'melbourne':palm(0.17,1,1.0,0x477f43);palm(0.24,-1,0.85,0x477f43);break;
+   case'shanghai':tower(0.22,1,38,7,0x63747a,0x9d3031);tower(0.28,1,27,9,0x88959b,0xb53a38);pagoda(0.61,-1,0xb83b33);break;
+   case'bahrain':mountains(0.42,1,0xa8845d,5);tower(0.16,-1,25,5,0xb79164,0xf0cf83);palm(0.24,1,0.7,0x53733e);break;
+   case'jeddah':palm(0.08,1,1.15,0x2f7541);palm(0.14,1,0.9,0x2f7541);tower(0.44,-1,33,6,0xb9d0d2,0x2d8daa);break;
+   case'miami':palm(0.06,1,1.15,0x2f8b49);palm(0.12,1,0.9,0x2f8b49);palm(0.18,-1,1.0,0x2f8b49);block(venueSpot(0.32,1,T.latLimit+24),30,14,11,0x8a9ba0,0x244f6c);break;
+   case'montreal':cypress(0.18,1,1.0,0x3f7045);venueSign('WALL OF CHAMPIONS',0.72,-1,0x2b3037,0xc72c35);break;
+   case'barcelona':mountains(0.4,1,0x8a7558,5);tower(0.25,-1,24,6,0xc79e72,0xb12f31);break;
+   case'hungary':mountains(0.36,1,0x687353,5);break;
+   case'zandvoort':mountains(0.24,1,0xb6a078,4);windmill(0.56,-1);break;
+   case'madrid':tower(0.27,1,42,7,0x867c75,0xb23b2e);tower(0.34,1,31,8,0xb7a38b,0xd7c5a7);break;
+   case'baku':tower(0.12,1,44,7,0x8f4b30,0xff6a24);tower(0.16,1,37,6,0x9b5633,0xff8a30);tower(0.20,1,31,6,0x81503e,0xff4b1f);break;
+   case'tropical':palm(0.08,1,1.2,0x25693b);palm(0.16,-1,1.0,0x25693b);palm(0.25,1,0.9,0x25693b);tower(0.48,-1,35,7,0x718c87,0xb3d4c8);break;
+   case'singapore':tower(0.12,1,52,7,0x71838b,0x6ad2dc);tower(0.18,1,37,8,0x84929b,0x4daac0);ferris(0.39,-1,0x62c3d2);break;
+   case'austin':tower(0.11,1,58,5,0xd9d9d0,0xb7272b);block(venueSpot(0.16,-1,T.latLimit+24),22,8,8,0x9b4c35,0x2c4159);break;
+   case'mexico':{
+    const s=venueSpot(0.61,1,T.latLimit+38),ring=new THREE.Mesh(new THREE.TorusGeometry(16,2.2,8,22),mat(0xb54b3b,0.75));ring.rotation.x=Math.PI/2;ring.position.set(s.x,s.y+2,s.z);world.add(ring);
+    tower(0.66,1,25,6,0xe1c4a0,0xb7352d);break;
+   }
+   case'sao_paulo':palm(0.18,1,0.9,0x34773e);mountains(0.32,-1,0x536852,4);tower(0.72,1,29,9,0x87909a,0x1b714d);break;
+   case'vegas':tower(0.18,1,47,7,0x22273d,0xb319ff);tower(0.23,1,33,8,0x2b314d,0x17d9ff);palm(0.31,-1,0.85,0x3c7741);break;
+   case'qatar':mountains(0.34,1,0xb18b5e,5);tower(0.16,-1,30,6,0xd9c7a5,0x93704b);break;
+   case'yas':palm(0.1,1,1.0,0x327648);palm(0.17,1,0.9,0x327648);palm(0.24,-1,0.95,0x327648);ferris(0.58,-1,0x5bcae0);break;
+  }
+ }
+
  // 12. Puddles — reflective patches on straighter sections, shown when wet
  {
+
   const puddleDefs=[];let lastPI=-999;
   for(let i=0;i<N;i+=17){
    if(Math.abs(samples[i].curv)>0.011)continue;
@@ -4113,6 +4312,24 @@ function pickDirectorShot(){
  }
  director.swoop=0;
 }
+// Camera safety authority. External cameras can sit over runoff, while the
+// helmet/hood cameras sit over the tarmac; both must use the same rendered
+// surface height or a hilly circuit can put the lens under the road.
+function cameraSurfaceY(x,z){
+ if(!T)return 0;
+ const near=T.nearestTrackY?T.nearestTrackY(x,z):null;
+ if(near&&Number.isFinite(near.dist)&&near.dist<=((T.latLimit||0)+6))return near.y;
+ return T.terrainHeightAt?T.terrainHeightAt(x,z):0;
+}
+function clampCameraToSurface(clearance=0.32){
+ if(!Number.isFinite(camera.position.x)||!Number.isFinite(camera.position.y)||!Number.isFinite(camera.position.z))return;
+ const floor=cameraSurfaceY(camera.position.x,camera.position.z);
+ if(Number.isFinite(floor))camera.position.y=Math.max(camera.position.y,floor+clearance);
+}
+function carLookY(c,lift=1.0){
+ const p=c.mesh.g.position;
+ return Math.max(p.y+lift,cameraSurfaceY(c.x,c.z)+lift*0.72);
+}
 function updCamera(dt){
  camera.up.set(0,1,0);
  if(!player||state.mode==='title'||demoOn){
@@ -4129,23 +4346,24 @@ function updCamera(dt){
    cam.pos.z=damp(cam.pos.z,tp.z-fz*back,7,dt);
    camera.position.copy(cam.pos);
    camera.position.x+=rand(-1,1)*sp*0.0012;camera.position.y+=rand(-1,1)*sp*0.0008;
-   camera.lookAt(tp.x+fx*6,tp.y+1.2,tp.z+fz*6);
+   camera.lookAt(tp.x+fx*6,Math.max(tp.y+1.2,cameraSurfaceY(tc.x,tc.z)+0.8),tp.z+fz*6);
    // Camera rolls slightly with the car's lateral slip — a live-camera feel.
    // rotateZ rolls around the view axis only, so it can never flip the view.
    const latV=tc.vx*Math.cos(yaw)-tc.vz*Math.sin(yaw);
    camera.rotateZ(clamp(latV*0.012,-0.08,0.08));
+   clampCameraToSurface();
    camera.fov=damp(camera.fov,clamp(60+sp*0.24,60,80),4,dt);camera.updateProjectionMatrix();return;
   }else if(tc&&director.shot==='tv'&&T.tvCams.length){
    const tp=tc.mesh.g.position;
    let best=T.tvCams[0],bd=1e18;
    for(const c2 of T.tvCams){const d=(c2.x-tp.x)**2+(c2.z-tp.z)**2;if(d<bd){bd=d;best=c2;}}
-   camera.position.copy(best);camera.lookAt(tp.x,tp.y+1,tp.z);
+   camera.position.copy(best);clampCameraToSurface(0.5);camera.lookAt(tp.x,carLookY(tc),tp.z);
    camera.fov=damp(camera.fov,clamp(3200/(Math.sqrt(bd)+30),22,55),4,dt);camera.updateProjectionMatrix();return;
   }else if(tc&&director.shot==='orbit'){
    cam.orbA+=dt*0.45;
    const tp=tc.mesh.g.position;
    camera.position.set(tp.x+Math.sin(cam.orbA)*14,tp.y+5.5,tp.z+Math.cos(cam.orbA)*14);
-   camera.lookAt(tp.x,tp.y+0.8,tp.z);
+   clampCameraToSurface(0.5);camera.lookAt(tp.x,carLookY(tc,0.8),tp.z);
    camera.fov=damp(camera.fov,58,4,dt);camera.updateProjectionMatrix();return;
   }else if(tc&&director.shot==='cine'){
    // A low, slow tracking dolly just ahead of the leader with a shallow
@@ -4157,7 +4375,7 @@ function updCamera(dt){
    const px=tp.x+fx*ahead-Math.sin(yaw)*side;
    const pz=tp.z+fz*ahead+Math.cos(yaw)*side;
    camera.position.set(px,tp.y+1.7,pz);
-   camera.lookAt(tp.x,tp.y+1.0,tp.z);
+   clampCameraToSurface(0.45);camera.lookAt(tp.x,carLookY(tc,0.9),tp.z);
    camera.fov=damp(camera.fov,40,3,dt);camera.updateProjectionMatrix();return;
   }
   // Helicopter establishing shot: sweep along the whole circuit from high
@@ -4207,6 +4425,7 @@ function updCamera(dt){
   cam.heliPos.y=damp(cam.heliPos.y,py+alt,3,dt);
   cam.heliPos.z=damp(cam.heliPos.z,pz+swayZ,3,dt);
   camera.position.copy(cam.heliPos);
+  clampCameraToSurface(1.0);
   camera.up.set(0,1,0);
   camera.lookAt(cam.heliLook);
   // Gentle banking via a roll around the camera's own view axis only —
@@ -4226,7 +4445,8 @@ function updCamera(dt){
   cam.pos.y=damp(cam.pos.y,pp.y+up,6,dt);
   cam.pos.z=damp(cam.pos.z,pp.z-fz*back,7,dt);
   camera.position.copy(cam.pos);
-  camera.lookAt(pp.x+fx*6,pp.y+1.2,pp.z+fz*6);
+  clampCameraToSurface();
+  camera.lookAt(pp.x+fx*6,Math.max(pp.y+1.2,cameraSurfaceY(p.x,p.z)+0.8),pp.z+fz*6);
   tf=clamp(60+sp*0.24,60,80);
  }else if(state.camMode===2){
   /* Helmet cam — a small onboard camera perched just behind and above the
@@ -4254,13 +4474,14 @@ function updCamera(dt){
   const buzz=(0.0007+sp01*0.0060)*(p.onCurb?2.4:1);
   const bx=Math.sin(timeSec*51.3+p.phase)*buzz;
   const by=Math.cos(timeSec*63.7+p.phase*2)*buzz*0.7;
-  const hx=headWorld.x-fx*0.50,hz=headWorld.z-fz*0.50;
+  const hx=headWorld.x-fx*0.32,hz=headWorld.z-fz*0.32;
   cam.pos.x=damp(cam.pos.x===undefined?hx:cam.pos.x,hx,22,dt);
   cam.pos.z=damp(cam.pos.z===undefined?hz:cam.pos.z,hz,22,dt);
   cam.pos.y=damp(cam.pos.y===undefined?targetY:cam.pos.y,targetY,22,dt);
   // Final floor clamp is deliberately after damping: smoothing must never lag
   // the camera down through the tarmac at the foot of a steep climb.
   camera.position.set(cam.pos.x+bx,Math.max(cam.pos.y+by,roadHere),cam.pos.z);
+  clampCameraToSurface(0.18);
 
   // Look along the road rather than at a fixed world-height point. This keeps
   // crests visible and braking markers readable while head movement still
@@ -4272,7 +4493,9 @@ function updCamera(dt){
   cam.lookX=damp(cam.lookX===undefined?lx:cam.lookX,lx,16,dt);
   cam.lookZ=damp(cam.lookZ===undefined?lz:cam.lookZ,lz,16,dt);
   cam.lookY=damp(cam.lookY===undefined?roadAhead+1.0:cam.lookY,roadAhead+1.0+nod*ahead*0.22,14,dt);
-  camera.up.set(Math.sin(lean),Math.cos(lean),0);
+  // Keep the horizon tied to the car; the final rotateZ supplies the small
+  // head roll without a world-axis up vector skewing the view on corner exit.
+  camera.up.set(0,1,0);
   camera.lookAt(cam.lookX,cam.lookY,cam.lookZ);
   camera.rotateZ(lean*0.24);
   // Wider FOV and gentle speed ramp create excitement without the severe
@@ -4287,26 +4510,31 @@ function updCamera(dt){
   // keeps them in view without that distortion.
   const yaw=p.hdg,fx=Math.sin(yaw),fz=Math.cos(yaw);
   camera.position.set(pp.x+fx*0.15,pp.y+1.42,pp.z+fz*0.15);
-  camera.lookAt(pp.x+fx*40,pp.y+1.05,pp.z+fz*40);
+  clampCameraToSurface(0.55);
+  camera.lookAt(pp.x+fx*40,Math.max(pp.y+1.05,cameraSurfaceY(p.x,p.z)+0.75),pp.z+fz*40);
   tf=58+sp*0.06;
  }else if(state.camMode===3){
   let best=T.tvCams[0],bd=1e18;
   for(const c of T.tvCams){const d=(c.x-pp.x)**2+(c.z-pp.z)**2;if(d<bd){bd=d;best=c;}}
-  camera.position.copy(best);camera.lookAt(pp.x,pp.y+1,pp.z);
+  camera.position.copy(best);clampCameraToSurface(0.5);camera.lookAt(pp.x,carLookY(p),pp.z);
   tf=clamp(3200/(Math.sqrt(bd)+30),22,55);
  }else if(state.camMode===4){
   cam.orbA+=dt*0.4;
   camera.position.set(pp.x+Math.sin(cam.orbA)*13,pp.y+5.5,pp.z+Math.cos(cam.orbA)*13);
-  camera.lookAt(pp.x,pp.y+0.8,pp.z);tf=58;
+  clampCameraToSurface(0.5);camera.lookAt(pp.x,carLookY(p,0.8),pp.z);tf=58;
  }else{ /* top-down 2D — car always points up the screen */
   cam.smHdg=lerpAngle(cam.smHdg,p.hdg,1-Math.exp(-5*dt));
   const fx=Math.sin(cam.smHdg),fz=Math.cos(cam.smHdg);
   const cx0=pp.x+fx*8,cz0=pp.z+fz*8;
   camera.up.set(fx,0,fz);
   camera.position.set(cx0,pp.y+state.zoom,cz0);
-  camera.lookAt(cx0,pp.y,cz0);
+  clampCameraToSurface(1.0);
+  camera.lookAt(cx0,Math.max(pp.y,cameraSurfaceY(cx0,cz0)),cz0);
   tf=50;
  }
+ // Final guard for every race camera, including a camera that has just
+ // switched modes or is still damping from a previous view.
+ clampCameraToSurface(state.camMode===2?0.18:0.32);
  // Cinematic: pull in closer/tighter to the crash while slow-mo runs.
  // Keep helmet view wide and driveable during impacts; the external cameras
  // may punch in for the cinematic slow-motion shot.
