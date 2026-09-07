@@ -964,27 +964,29 @@ export function getAxleGeo(){if(axleGeo&&brakeGeo)return axleGeo;
 // rails frame the cockpit and the central front splitter is directly ahead.
 function makeHaloAssembly(){
  const group=new THREE.Group();
- const steel=new THREE.MeshStandardMaterial({color:0x9aa4aa,roughness:0.34,metalness:0.72,envMapIntensity:1.25});
- const darkSteel=new THREE.MeshStandardMaterial({color:0x30363b,roughness:0.42,metalness:0.64});
+ // MeshBasic keeps the titanium rails visible in every camera/light condition;
+ // the reference halo is a light metal part, not a black shadowed hoop.
+ const steel=new THREE.MeshBasicMaterial({color:0xd2d9dc,side:THREE.DoubleSide});
+ const darkSteel=new THREE.MeshBasicMaterial({color:0x555d62,side:THREE.DoubleSide});
  const tube=(points,radius,mat=steel)=>{
   const curve=new THREE.CatmullRomCurve3(points.map(v=>new THREE.Vector3(v[0],v[1],v[2])),false,'centripetal',0.34);
   const mesh=new THREE.Mesh(new THREE.TubeGeometry(curve,48,radius,8,false),mat);
-  mesh.castShadow=true;mesh.receiveShadow=true;mesh.renderOrder=5;group.add(mesh);return mesh;
+  mesh.renderOrder=8;group.add(mesh);return mesh;
  };
- // Each side is one continuous rail: rear foot, rise beside the helmet,
- // curve over it and converge at the front crown. This is the side silhouette
- // in the supplied reference image, not a closed hoop.
- tube([[-0.64,0.55,-0.30],[-0.63,0.64,0.00],[-0.57,0.80,0.32],[-0.43,0.94,0.60],[-0.23,1.03,0.80],[0,1.055,0.90]],0.058);
- tube([[0.64,0.55,-0.30],[0.63,0.64,0.00],[0.57,0.80,0.32],[0.43,0.94,0.60],[0.23,1.03,0.80],[0,1.055,0.90]],0.058);
- // The splitter is the middle bar the driver must see: it starts at the
- // crown ahead of the helmet and drops forward/down to the nose bulkhead.
- tube([[0,1.055,0.90],[0,0.92,1.06],[0,0.71,1.25],[0,0.53,1.42]],0.078,steel);
+ // Each side is one continuous, open rail in the exact side-profile sense of
+ // the reference: rear mounting foot, sweep around the driver's helmet, then
+ // forward to the crown. There is no rear hoop or closed torus.
+ tube([[-0.64,0.55,-0.30],[-0.63,0.62,0.00],[-0.57,0.76,0.30],[-0.43,0.88,0.52],[-0.23,0.96,0.70],[0,0.985,0.79]],0.036);
+ tube([[0.64,0.55,-0.30],[0.63,0.62,0.00],[0.57,0.76,0.30],[0.43,0.88,0.52],[0.23,0.96,0.70],[0,0.985,0.79]],0.036);
+ // The central splitter is a real forward bar between the two rails, close
+ // enough to the visor that it is unmissable in HELMET/IMMERSIVE view.
+ tube([[0,0.985,0.79],[0,0.87,0.96],[0,0.68,1.18],[0,0.53,1.42]],0.046,steel);
  for(const sx of[-1,1]){
   const shoe=new THREE.Mesh(new THREE.BoxGeometry(0.24,0.07,0.30),darkSteel);
-  shoe.position.set(sx*0.64,0.54,-0.30);shoe.castShadow=true;group.add(shoe);
+  shoe.position.set(sx*0.64,0.54,-0.30);group.add(shoe);
  }
  const frontShoe=new THREE.Mesh(new THREE.BoxGeometry(0.30,0.07,0.25),darkSteel);
- frontShoe.position.set(0,0.54,1.42);frontShoe.castShadow=true;group.add(frontShoe);
+ frontShoe.position.set(0,0.54,1.42);group.add(frontShoe);
  group.userData.isHaloAssembly=true;
  return group;
 }
@@ -1268,7 +1270,7 @@ function updLens(dt){
  for(let i=lensDrops.length-1;i>=0;i--){const d=lensDrops[i];
   d.life-=dt*(1+spd*0.05);d.y+=d.vy*dt*(0.4+spd*0.03);
   if(d.life<=0||d.y>dropCv.height){lensDrops.splice(i,1);continue;}
-  dropCx.globalAlpha=Math.min(d.life,1)*0.20;
+  dropCx.globalAlpha=Math.min(d.life,1)*0.10;
   
   // Refraction effect (using a radial gradient to simulate light bending)
   const grad = dropCx.createRadialGradient(d.x - d.r*0.2, d.y - d.r*0.2, 0, d.x, d.y, d.r * (1 + spd*0.01));
@@ -1512,7 +1514,7 @@ function applyWeatherVisuals(){
  sunLight.intensity=sunBase;
  hemi.color.copy(cur.hS);hemi.groundColor.copy(cur.hG);hemi.intensity=cur.hI*tod.hMul;
  renderer.toneMappingExposure=cur.exp*tod.expMul;
- rainMesh.material.opacity=0.012+cur.rain*0.033;
+ rainMesh.material.opacity=0.008+cur.rain*0.028;
  if(cloudMat){const g=cur.rain;cloudMat.color.setRGB(1-g*0.45,1-g*0.43,1-g*0.40);}
  if(T){const wet=cur.wet;
   // A wet road is not merely a damp one: it goes darker, glassier and it
@@ -4808,32 +4810,14 @@ function cockpitFrame(speed){
  const narrow=clamp((1.78-ar)/1.10,0,1);
  const wide=clamp((ar-1.78)/1.45,0,1);
  return{
-  ahead:38+wide*8-narrow*18+speed*0.44,
-  lookDrop:0.74-narrow*0.36+wide*0.04,
-  fov:clamp(86+narrow*21-wide*10,76,108)
+  ahead:28+wide*7-narrow*10+speed*0.36,
+  lookDrop:0.34-narrow*0.10+wide*0.04,
+  fov:clamp(94+narrow*12-wide*8,86,108)
  };
-}
-function updStartGridCamera(dt){
- if(!cars.length)return;
- let gx=0,gy=0,gz=0;
- for(const c of cars){gx+=c.mesh.g.position.x;gy+=c.mesh.g.position.y;gz+=c.mesh.g.position.z;}
- gx/=cars.length;gy/=cars.length;gz/=cars.length;
- const yaw=player?player.hdg:0,fx=Math.sin(yaw),fz=Math.cos(yaw);
- const side=Math.cos(yaw),sz=-Math.sin(yaw);
- const px=gx-fx*17+side*7,pz=gz-fz*17+sz*7;
- const floor=cameraSurfaceY(px,pz);
- camera.position.set(px,Math.max(gy+6.2,floor+5.0),pz);
- camera.up.set(0,1,0);
- camera.lookAt(gx+fx*2,gy+0.45,gz+fz*2);
- camera.fov=damp(camera.fov,58,8,dt);camera.updateProjectionMatrix();
 }
 function updCamera(dt){
  if(crashCam.active){updCrashCamera(dt);return;}
  camera.up.set(0,1,0);
- if(state.mode==='countdown'&&player){
-  if(player.mesh.driverGroup)player.mesh.driverGroup.visible=true;
-  updStartGridCamera(dt);return;
- }
  if(!player||state.mode==='title'||demoOn){
   director.timer-=dt;
   if(director.timer<=0||!director.target)pickDirectorShot();
@@ -4979,7 +4963,7 @@ function updCamera(dt){
   const headWorld=hg?hg.getWorldPosition(_camHead):_camHead.copy(pp).add(V3(0,0.98,0));
   const sp01=clamp(sp/PH.top,0,1);
   const roadHere=getRoadHAtCoords(pp.x,pp.z)+0.82;
-  const eyeX=headWorld.x+fx*0.08,eyeZ=headWorld.z+fz*0.09;
+  const eyeX=headWorld.x+fx*0.18,eyeZ=headWorld.z+fz*0.18;
   const eyeY=Math.max(headWorld.y+0.015,roadHere);
   const buzz=(0.0007+sp01*0.0055)*(p.onCurb?2.3:1);
   camera.position.set(eyeX+Math.sin(timeSec*51.3+p.phase)*buzz,
@@ -5005,7 +4989,7 @@ function updCamera(dt){
   const lean=hg?hg.rotation.z*0.82:0;
   const nod=hg?hg.rotation.x*0.62:0;
   const roadHere=getRoadHAtCoords(pp.x,pp.z)+0.82;
-  const eyeX=headWorld.x+fx*0.10,eyeZ=headWorld.z+fz*0.11;
+  const eyeX=headWorld.x+fx*0.18,eyeZ=headWorld.z+fz*0.18;
   const eyeY=Math.max(headWorld.y+0.02,roadHere);
   const sp01=clamp(sp/PH.top,0,1);
   const buzz=(0.0006+sp01*0.0045)*(p.onCurb?2.2:1);
@@ -6195,7 +6179,7 @@ function tick(){
    renderer.toneMapping=BASE_TONE;
    try{
     rainPass.renderScene(scene,camera);
-    rainPass.composite(timeSec,Math.min(effRain*0.72,1),speedKmh,lightningFlash,lightningSeed);
+    rainPass.composite(timeSec,Math.min(effRain*0.62,1),speedKmh,lightningFlash,lightningSeed);
     if(snowPass&&snowAccum>0.02)snowPass.composite(timeSec,snowAccum*(0.55+0.45*cur.snow),0.3+snowGust*0.7);
    }catch(e){
     rainPass.failed=true;

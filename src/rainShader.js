@@ -149,9 +149,9 @@ void main() {
 // rainAmount > 0.6), smoother speed response, and a stronger lightning
 // flash with brief brightness spike followed by quick fade (simulating the
 // lightning's actual after-image on the retina).
-  float layer3 = S(.68, .95, rainAmount)*0.42;
-  float staticDrops = S(-.5, 1., rainAmount)*0.72;
-  float layer1 = S(.25, .75, rainAmount)*0.68;
+  float layer3 = S(.68, .95, rainAmount)*0.28;
+  float staticDrops = S(-.5, 1., rainAmount)*0.50;
+  float layer1 = S(.25, .75, rainAmount)*0.70;
   float layer2 = S(.0, .5, rainAmount)*0.58;
   float speedFactor = clamp(uCarSpeed / 200.0, 0.0, 1.2); // speed-driven streak elongation
 
@@ -179,10 +179,15 @@ void main() {
   // the background blur modest preserves braking markers for gameplay.
   // Speed-driven streak elongation applied to the blur amount: faster cars
   // stretch the drop trails horizontally as the relative wind pulls them out.
-  float wetGlass = (0.00012 + rainAmount * 0.00034) * (1.0 - c.x * 0.78);
-  wetGlass += c.y * 0.00034;
+  float wetGlass = (0.00004 + rainAmount * 0.00012) * (1.0 - c.x * 0.78);
+  wetGlass += c.y * 0.00012;
   wetGlass *= trailElong; // speed-stretched glass distortion
-  vec3 col = blurScene(clamp(UV + n, 0.0, 1.0), wetGlass);
+  vec3 originalScene = texture2D(uScene, UV).rgb;
+  vec3 refractedScene = blurScene(clamp(UV + n, 0.0, 1.0), wetGlass);
+  // Keep the windshield optically transparent: only the droplet itself gets
+  // the refracted/softened treatment, never the whole race image.
+  float dropletAlpha=clamp(c.x*0.24+c.y*0.075,0.0,0.28);
+  vec3 col=mix(originalScene,refractedScene,dropletAlpha);
 
   // Fresnel rim and bright pin highlight make droplets read as water rather
   // than transparent distortion. Trails get a cooler, subtler sheen.
@@ -190,9 +195,9 @@ void main() {
   float glint = pow(clamp(1.0 - length(n) * 18.0, 0.0, 1.0), 18.0) * c.x;
   // Lightning is kept separate from the rain density. The game supplies a
   // short strike envelope, so wet glass never becomes a full-screen white veil.
-  col+=vec3(0.52,0.68,0.82)*edge*0.045;
-  col+=vec3(0.95,0.98,1.0)*glint*0.16;
-  col=mix(col,col*vec3(0.82,0.91,1.03),clamp(c.y*0.32,0.0,0.32));
+  col+=vec3(0.52,0.68,0.82)*edge*0.030*dropletAlpha;
+  col+=vec3(0.95,0.98,1.0)*glint*0.075*dropletAlpha;
+  col=mix(col,col*vec3(0.82,0.91,1.03),clamp(c.y*0.08,0.0,0.08));
 
   // The matching Shadertoy Heartfelt effect is a glass/rain shader; lightning
   // is layered separately so it can be spectacular without making rain itself
@@ -209,8 +214,8 @@ void main() {
   // instead of a lit car sitting on a lit road). Gamma brightens shadows more
   // than highlights while preserving relative detail, and the additive term
   // gives a visible lift even to true blacks.
-  col = pow(max(col, 0.0), vec3(1.0 - 0.18*rainAmount));
-  col += vec3(0.012, 0.015, 0.018)*rainAmount;
+  col = max(col,0.0);
+  col += vec3(0.002, 0.003, 0.004)*rainAmount;
 
   gl_FragColor = vec4(col, 1.0);
 }
