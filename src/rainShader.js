@@ -149,10 +149,13 @@ void main() {
 // rainAmount > 0.6), smoother speed response, and a stronger lightning
 // flash with brief brightness spike followed by quick fade (simulating the
 // lightning's actual after-image on the retina).
-  float layer3 = S(.68, .95, rainAmount)*0.28;
-  float staticDrops = S(-.5, 1., rainAmount)*0.50;
-  float layer1 = S(.25, .75, rainAmount)*0.70;
-  float layer2 = S(.0, .5, rainAmount)*0.58;
+  // Keep the authored Heartfelt layer weights: the drop field itself must be
+  // dense enough to see. Transparency is controlled at the composite stage,
+  // not by starving the field until it becomes invisible.
+  float layer3 = S(.62, .95, rainAmount)*0.42;
+  float staticDrops = S(-.5, 1., rainAmount)*1.45;
+  float layer1 = S(.25, .75, rainAmount)*0.94;
+  float layer2 = S(.0, .5, rainAmount)*0.78;
   float speedFactor = clamp(uCarSpeed / 200.0, 0.0, 1.2); // speed-driven streak elongation
 
   vec2 c = Drops(uv, t, staticDrops, layer1, layer2);
@@ -168,11 +171,14 @@ void main() {
   float trailElong = 1.0 + speedFactor * 0.55;
   // Screen-space derivative of the Heartfelt drop field: this is the glass
   // normal that bends the actual rendered circuit behind every bead.
-  vec2 e = vec2(1.5/max(uResolution.x,uResolution.y), 0.);
+  // Heartfelt uses a one-pixel finite difference for the wet-glass normal.
+  // The previous port divided this twice and reduced it to almost zero, so
+  // the pass technically ran but produced no readable bead refraction.
+  vec2 e = vec2(1.0/max(uResolution.x,uResolution.y), 0.);
   float cx = Drops(uv+e, t, staticDrops, layer1, layer2).x;
   float cy = Drops(uv+e.yx, t, staticDrops, layer1, layer2).x;
-  vec2 n = vec2(cx-c.x, cy-c.x)/max(e.x,0.00001);
-  n=clamp(n*0.00034,vec2(-0.035),vec2(0.035));
+  vec2 n = vec2(cx-c.x, cy-c.x);
+  n=clamp(n*0.85,vec2(-0.028),vec2(0.028));
 
   // Faithful Shadertoy-style optical hierarchy: a faintly defocused wet pane,
   // a sharp refracted scene inside beads, and softer running trails. Keeping
@@ -186,7 +192,7 @@ void main() {
   vec3 refractedScene = blurScene(clamp(UV + n, 0.0, 1.0), wetGlass);
   // Keep the windshield optically transparent: only the droplet itself gets
   // the refracted/softened treatment, never the whole race image.
-  float dropletAlpha=clamp(c.x*0.24+c.y*0.075,0.0,0.28);
+  float dropletAlpha=clamp(c.x*0.58+c.y*0.18,0.0,0.52);
   vec3 col=mix(originalScene,refractedScene,dropletAlpha);
 
   // Fresnel rim and bright pin highlight make droplets read as water rather
@@ -195,9 +201,11 @@ void main() {
   float glint = pow(clamp(1.0 - length(n) * 18.0, 0.0, 1.0), 18.0) * c.x;
   // Lightning is kept separate from the rain density. The game supplies a
   // short strike envelope, so wet glass never becomes a full-screen white veil.
-  col+=vec3(0.52,0.68,0.82)*edge*0.030*dropletAlpha;
-  col+=vec3(0.95,0.98,1.0)*glint*0.075*dropletAlpha;
-  col=mix(col,col*vec3(0.82,0.91,1.03),clamp(c.y*0.08,0.0,0.08));
+  col+=vec3(0.48,0.68,0.82)*edge*0.18*rainAmount;
+  col+=vec3(0.95,0.99,1.0)*glint*0.42*rainAmount;
+  // A restrained trail sheen is the readable part of the moving bead path.
+  col+=vec3(0.42,0.62,0.76)*c.y*0.16*rainAmount;
+  col=mix(col,col*vec3(0.82,0.91,1.03),clamp(c.y*0.12,0.0,0.12));
 
   // The matching Shadertoy Heartfelt effect is a glass/rain shader; lightning
   // is layered separately so it can be spectacular without making rain itself

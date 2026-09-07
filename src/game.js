@@ -1253,42 +1253,46 @@ function updWeatherFX(dt){
 
 /* rain on the camera lens (2D canvas) */
 const dropCv=$('drops'),dropCx=dropCv.getContext('2d');
+const RAIN_RENDER_REV='20260907.8-rain-03';
 let lensDrops=[];
-function sizeDrops(){dropCv.width=innerWidth;dropCv.height=innerHeight;}
+function sizeDrops(){dropCv.width=innerWidth;dropCv.height=innerHeight;dropCv.dataset.renderRevision=RAIN_RENDER_REV;}
+function newLensDrop(){return{
+ x:Math.random()*dropCv.width,y:Math.random()*dropCv.height,
+ r:rand(1.4,5.8),life:rand(2.5,5.8),vy:rand(10,30),vx:rand(-2.5,2.5),
+ trail:rand(4,22),phase:rand(0,6.28)
+};}
 function updLens(dt){
  dropCx.clearRect(0,0,dropCv.width,dropCv.height);
  const amt=state.mode==='title'?0:clamp(cur.rain,0,1);
  if(amt<0.08){lensDrops.length=0;return;}
- // A small number of fine beads is intentionally drawn over the shader pass as
- // a visibility guarantee. They are cool translucent water, not white blobs.
- // Seed the pane immediately when heavy rain starts; waiting for random
- // spawns made the first seconds look dry even though the shader was active.
- if(lensDrops.length===0){
-  for(let k=0;k<58;k++)lensDrops.push({x:Math.random()*dropCv.width,y:Math.random()*dropCv.height,
-   r:rand(1.1,4.8),life:rand(1.4,4.2),vy:rand(9,32),phase:rand(0,6.28)});
- }
- if(Math.random()<amt*dt*52&&lensDrops.length<115){
-  lensDrops.push({x:Math.random()*dropCv.width,y:Math.random()*dropCv.height,
-   r:rand(1.1,4.8),life:rand(1.4,4.2),vy:rand(9,32),phase:rand(0,6.28)});
- }
+ // This is a guaranteed, independent glass layer. The first frame of rain is
+ // populated rather than waiting on a probabilistic spawn, which made the
+ // original effect look absent on a new race or after changing weather.
+ const target=Math.round(115+amt*75);
+ while(lensDrops.length<target)lensDrops.push(newLensDrop());
  const spd=player?Math.abs(player.vF):0;
  for(let i=lensDrops.length-1;i>=0;i--){
   const d=lensDrops[i];
-  d.life-=dt*(1+spd*0.035);d.y+=d.vy*dt*(0.45+spd*0.018);
-  if(d.life<=0||d.y>dropCv.height+12){lensDrops.splice(i,1);continue;}
-  const fade=Math.min(d.life,1)*0.34;
-  // A thin running trail precedes the bead; both are low-alpha blue-grey water.
+  d.life-=dt*(0.72+spd*0.006);
+  d.x+=d.vx*dt+Math.sin(timeSec*1.7+d.phase)*dt*0.8;
+  d.y+=d.vy*dt*(0.48+spd*0.012);
+  if(d.life<=0||d.y>dropCv.height+30||d.x<-30||d.x>dropCv.width+30){lensDrops.splice(i,1);continue;}
+  const fade=clamp(Math.min(d.life,1.2)/1.2,0,1)*(0.72+amt*0.28);
+  const stretch=d.trail*(0.65+spd*0.018);
+  // Thin blue-grey water trails and a bright upper rim read as wet glass,
+  // while avoiding the opaque white blobs of the earlier fallback.
+  dropCx.globalAlpha=fade*0.42;
+  dropCx.strokeStyle='rgb(159,199,218)';dropCx.lineWidth=Math.max(0.55,d.r*0.22);
+  dropCx.lineCap='round';dropCx.beginPath();
+  dropCx.moveTo(d.x,d.y-stretch);dropCx.lineTo(d.x,d.y);dropCx.stroke();
+  dropCx.globalAlpha=fade*0.72;
+  dropCx.strokeStyle='rgb(205,232,241)';dropCx.lineWidth=Math.max(0.75,d.r*0.28);
+  dropCx.beginPath();dropCx.ellipse(d.x,d.y,d.r,d.r*1.25,0,Math.PI*1.04,Math.PI*2.72);dropCx.stroke();
   dropCx.globalAlpha=fade*0.52;
-  dropCx.strokeStyle='rgb(179,210,225)';dropCx.lineWidth=Math.max(0.45,d.r*0.26);
-  dropCx.beginPath();dropCx.moveTo(d.x,d.y-d.r*(3.0+spd*0.018));dropCx.lineTo(d.x,d.y);dropCx.stroke();
-  dropCx.globalAlpha=fade;
-  const grad=dropCx.createRadialGradient(d.x-d.r*.25,d.y-d.r*.28,0,d.x,d.y,d.r*1.15);
-  grad.addColorStop(0,'rgba(226,242,249,.38)');
-  grad.addColorStop(.38,'rgba(178,214,229,.16)');
-  grad.addColorStop(1,'rgba(100,145,165,0)');
-  dropCx.fillStyle=grad;dropCx.beginPath();dropCx.ellipse(d.x,d.y,d.r,d.r*1.35,0,0,7);dropCx.fill();
+  dropCx.strokeStyle='rgb(245,252,255)';dropCx.lineWidth=Math.max(0.45,d.r*0.16);
+  dropCx.beginPath();dropCx.arc(d.x-d.r*.22,d.y-d.r*.3,d.r*.58,Math.PI*1.05,Math.PI*1.78);dropCx.stroke();
  }
- dropCx.globalAlpha=1;
+ dropCx.globalAlpha=1;dropCx.lineCap='butt';
 }
 /* ============ clouds ============ */
 let cloudGrp=null,cloudMat=null;
