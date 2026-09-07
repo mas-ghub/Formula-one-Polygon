@@ -1067,6 +1067,26 @@ function sparkBurst(x,y,z,amt){const n=Math.round(amt*18);
   puff(sparks,x,y,z,rand(-13,13),rand(2,13),rand(-13,13),rand(0.22,0.62),rand(.10,.28),1.0,0.92,0.48,-31);
  for(let i=0;i<Math.ceil(n*0.28);i++)
   puff(sparks,x,y,z,rand(-9,9),rand(1,9),rand(-9,9),rand(0.18,0.42),rand(.22,.48),1.0,0.48,0.06,-28);}
+// Underbody strikes are directional: the hot metal is dragged backwards and
+// out toward the sidepod, so a bump reads as a brief fan of sparks rather than
+// an orange explosion floating above the car.
+function underbodySpark(x,y,z,hdg,side,amt){
+ const fx=Math.sin(hdg),fz=Math.cos(hdg),rx=-fz,rz=fx;
+ const n=Math.max(4,Math.round(amt*24));
+ for(let i=0;i<n;i++){
+  const spread=rand(1.0,4.8)*side,back=rand(5.5,13.5);
+  puff(sparks,x+rx*side*rand(0,.06),y+rand(-.025,.035),z+rz*side*rand(0,.06),
+   -fx*back+rx*spread,rand(0.8,6.5),-fz*back+rz*spread,
+   rand(.28,.78),rand(.12,.26),1.0,0.97,0.62,-34);
+ }
+ // A couple of short-lived cooling embers give the fan a warm tail without
+ // turning it into fire or smoke.
+ for(let i=0;i<Math.ceil(n*.18);i++){
+  const back=rand(3,9);
+  puff(sparks,x,y,z,-fx*back+rx*rand(0.5,3)*side,rand(.4,3.5),-fz*back+rz*rand(0.5,3)*side,
+   rand(.18,.45),rand(.22,.42),1.0,0.55,0.12,-28);
+ }
+}
 function confetti(x,y,z){for(let i=0;i<130;i++){const c=new THREE.Color().setHSL(Math.random(),0.85,0.6);
  smk(x+rand(-3,3),y+rand(2,7),z+rand(-3,3),rand(-4,4),rand(1,5),rand(-4,4),rand(1,2),rand(1.4,2.6),c.r,c.g,c.b,-3);}}
 
@@ -3581,7 +3601,29 @@ function updCarVisual(c,dt){
   const gLat=clamp(-yawG*0.09,-1,1);
   const gLon=clamp(-acc*0.055,-1,1);
   const sp01=clamp(Math.abs(c.vF)/PH.top,0,1);
-  const[,bsl]=bumpAt(c);
+  const[bumpHeight,bsl]=bumpAt(c);
+  // Detect a change in the road's slope, not just a hill. A constant climb
+  // should never shower sparks; a sharp crest, dip or compression should.
+  const bumpDelta=bumpHeight-(c._sparkBumpHeight===undefined?bumpHeight:c._sparkBumpHeight);
+  const slopeDelta=bsl-(c._sparkBumpSlope===undefined?bsl:c._sparkBumpSlope);
+  c._sparkBumpHeight=bumpHeight;c._sparkBumpSlope=bsl;
+  c._bumpSparkCd=Math.max(0,(c._bumpSparkCd||0)-dt);
+  const bumpSeverity=clamp((Math.abs(slopeDelta)-0.012)*18+(Math.abs(bumpDelta)-0.018)*4,0,1.6);
+  const bumpSpeed=clamp((Math.abs(c.vF)-22)/48,0,1);
+  // Kerb ribs are the most visible form of a bump in a low-poly circuit;
+  // phase them at wheel speed so a long kerb produces a natural chatter.
+  const ribStrike=c.onCurb&&Math.sin(timeSec*(30+Math.abs(c.vF)*0.32)+c.phase)>0.88;
+  if(c._bumpSparkCd<=0&&(bumpSeverity*bumpSpeed>0.12||(ribStrike&&bumpSpeed>0.12))&&!c.airborne){
+   c._bumpSparkCd=0.13;
+   const sparkY=Math.max(c.y||bumpHeight,bumpHeight)+0.13;
+   const sparkAmt=clamp(0.28+bumpSeverity*bumpSpeed*1.15+(ribStrike?0.32:0),0.28,1.55);
+   for(const side of[1,-1]){
+    const sx=c.x+rx*0.78*side-fx*0.92,sz=c.z+rz*0.78*side-fz*0.92;
+    underbodySpark(sx,sparkY,sz,c.hdg,side,sparkAmt);
+   }
+   if(c.isPlayer&&p.position.distanceToSquared(camera.position)<12000)
+    AudioSys.bump(clamp(bumpSeverity*bumpSpeed,0.15,1));
+  }
   const curbPulse=c.onCurb?Math.sin((T.samples[c.ti].cum+c.f%1*T.segLen)*Math.PI/0.6):0;
   const vib=(0.0016+sp01*0.0075)*(c.onCurb?7.5:1);
   const road=Math.sin(timeSec*47+c.phase*5)*vib+bsl*0.035+Math.abs(curbPulse)*0.022*sp01;
@@ -3779,6 +3821,13 @@ const AudioSys={started:false,
   this.gridf=ctx.createBiquadFilter();this.gridf.type='bandpass';this.gridf.frequency.value=220;this.gridf.Q.value=0.7;
   this.gridg=ctx.createGain();this.gridg.gain.value=0;
   gn.connect(this.gridf);this.gridf.connect(this.gridg);this.gridg.connect(this.master);gn.start();
+  // A stable pitched layer carries the start-line mass. Keep the noise bed
+  // nearly inaudible; a filtered triangle gives the pack a musical low rumble
+  // without the crackle that used to dominate the lights sequence.
+  this.gridToneO=ctx.createOscillator();this.gridToneO.type='triangle';
+  this.gridToneF=ctx.createBiquadFilter();this.gridToneF.type='lowpass';this.gridToneF.frequency.value=620;this.gridToneF.Q.value=0.65;
+  this.gridToneG=ctx.createGain();this.gridToneG.gain.value=0;
+  this.gridToneO.connect(this.gridToneF);this.gridToneF.connect(this.gridToneG);this.gridToneG.connect(this.master);this.gridToneO.start();
   // Tunnel reverb — a short feedback-delay send tapped off the engine bus.
   // While driving through a covered section the engine is muffled and fed a
   // slap echo, so the tunnel reads as a big enclosed space (a small taste of
@@ -3800,27 +3849,50 @@ const AudioSys={started:false,
   const g=this.ctx.createGain();g.gain.setValueAtTime(0.13,t);g.gain.exponentialRampToValueAtTime(0.001,t+0.12);
   const f=this.ctx.createBiquadFilter();f.type='highpass';f.frequency.value=1400;
   n.connect(f);f.connect(g);g.connect(this.master);n.start(t);n.stop(t+0.14);},
- beep(freq,vol){if(!this.started)return;const t=this.ctx.currentTime;
-  const o=this.ctx.createOscillator();o.type='square';o.frequency.value=freq;
-  const g=this.ctx.createGain();g.gain.setValueAtTime(0.0001,t);
-  g.gain.exponentialRampToValueAtTime(vol||0.22,t+0.01);
-  g.gain.exponentialRampToValueAtTime(0.0001,t+0.16);
-  o.connect(g);g.connect(this.master);o.start(t);o.stop(t+0.18);},
- thump(v){if(!this.started)return;const t=this.ctx.currentTime;
+  // Clean sine cues keep UI and race-start sounds musical instead of the
+  // brittle square-wave clicks used previously.
+  beep(freq,vol){if(!this.started)return;const t=this.ctx.currentTime;
+   const o=this.ctx.createOscillator();o.type='sine';o.frequency.setValueAtTime(freq,t);
+   o.frequency.exponentialRampToValueAtTime(freq*0.97,t+0.11);
+   const g=this.ctx.createGain();g.gain.setValueAtTime(0.0001,t);
+   g.gain.exponentialRampToValueAtTime(vol||0.12,t+0.012);
+   g.gain.exponentialRampToValueAtTime(0.0001,t+0.16);
+   o.connect(g);g.connect(this.master);o.start(t);o.stop(t+0.18);},
+  startLight(step){if(!this.started)return;
+   const freqs=[392,440,494,523,587],freq=freqs[clamp(step-1,0,4)];
+   this.beep(freq,0.10+step*0.012);},
+  lightsOut(){if(!this.started)return;const t=this.ctx.currentTime,ctx=this.ctx;
+   const o=ctx.createOscillator();o.type='triangle';o.frequency.setValueAtTime(196,t);
+   o.frequency.exponentialRampToValueAtTime(392,t+0.22);
+   const g=ctx.createGain();g.gain.setValueAtTime(0.0001,t);
+   g.gain.exponentialRampToValueAtTime(0.22,t+0.018);
+   g.gain.exponentialRampToValueAtTime(0.0001,t+0.42);
+   o.connect(g);g.connect(this.master);o.start(t);o.stop(t+0.45);
+   this.beep(784,0.12);},
+  // A short undertray scrape: tonal metal, no broadband burst, so a bump
+  // supports the visual sparks without reintroducing the old noisy start mix.
+  bump(v){if(!this.started)return;const t=this.ctx.currentTime,ctx=this.ctx;
+   const o=ctx.createOscillator();o.type='triangle';o.frequency.setValueAtTime(1450,t);
+   o.frequency.exponentialRampToValueAtTime(420,t+0.12);
+   const g=ctx.createGain();g.gain.setValueAtTime(0.0001,t);
+   g.gain.exponentialRampToValueAtTime(0.018+v*0.035,t+0.006);
+   g.gain.exponentialRampToValueAtTime(0.0001,t+0.14);
+   o.connect(g);g.connect(this.master);o.start(t);o.stop(t+0.16);},
+  thump(v){if(!this.started)return;const t=this.ctx.currentTime;
   const o=this.ctx.createOscillator();o.type='sine';
   o.frequency.setValueAtTime(120,t);o.frequency.exponentialRampToValueAtTime(38,t+0.18);
   const g=this.ctx.createGain();g.gain.setValueAtTime(Math.min(0.5,0.1+v*0.25),t);
   g.gain.exponentialRampToValueAtTime(0.001,t+0.22);
   o.connect(g);g.connect(this.master);o.start(t);o.stop(t+0.24);},
- // Metal-on-metal "clank" for car-to-car contact — a short, bright square
+ // Metal-on-metal "clank" for car-to-car contact — a short, bright tonal
  // blip that decays fast, so wheel-to-wheel touches read audibly.
- clank(v){if(!this.started)return;const t=this.ctx.currentTime;
-  const o=this.ctx.createOscillator();o.type='square';
-  o.frequency.setValueAtTime(190,t);o.frequency.exponentialRampToValueAtTime(55,t+0.09);
-  const g=this.ctx.createGain();
-  g.gain.setValueAtTime(Math.min(0.35,0.05+v*0.22),t);
-  g.gain.exponentialRampToValueAtTime(0.001,t+0.13);
-  o.connect(g);g.connect(this.master);o.start(t);o.stop(t+0.14);},
+  clank(v){if(!this.started)return;const t=this.ctx.currentTime;
+   const o=this.ctx.createOscillator();o.type='triangle';
+   o.frequency.setValueAtTime(260,t);o.frequency.exponentialRampToValueAtTime(72,t+0.09);
+   const g=this.ctx.createGain();
+   g.gain.setValueAtTime(Math.min(0.18,0.025+v*0.10),t);
+   g.gain.exponentialRampToValueAtTime(0.001,t+0.13);
+   o.connect(g);g.connect(this.master);o.start(t);o.stop(t+0.14);},
  thunder(strength){if(!this.started)return;const t=this.ctx.currentTime;
   strength=clamp(strength,0.1,1);
   const o=this.ctx.createOscillator();o.type='sine';
@@ -3847,9 +3919,15 @@ const AudioSys={started:false,
   // start actually sounds like ~20 F1 engines, not just your own idling one.
   let gridActivity=0.15;
   if(cars.length){let s=0;for(const c of cars)s+=c.audioRpm||0.15;gridActivity=s/cars.length;}
-  const gridTarget=state.mode==='countdown'?0.20+gridActivity*0.48:(run?0.025+gridActivity*0.075:0);
+  // Keep the random bed almost inaudible and let the pitched layer carry the
+  // start-line mass. The previous white-noise level was nearly half-scale on
+  // the lights and sounded like interference rather than engines.
+  const gridTarget=state.mode==='countdown'?0.002+gridActivity*0.010:(run?0.001+gridActivity*0.004:0);
   this.gridg.gain.setTargetAtTime(gridTarget,t,0.08);
   this.gridf.frequency.setTargetAtTime(140+gridActivity*380,t,0.1);
+  const gridToneTarget=state.mode==='countdown'?0.028+gridActivity*0.055:(run?0.004+gridActivity*0.012:0);
+  this.gridToneG.gain.setTargetAtTime(gridToneTarget,t,0.08);
+  this.gridToneO.frequency.setTargetAtTime(72+gridActivity*190,t,0.10);
   // Approximate a modern V6 firing spectrum rather than sweeping one arcade
   // oscillator. Gear/load add small independent movement between harmonics;
   // the soft rev limiter flutters only at the very top of the range.
@@ -3932,7 +4010,7 @@ const TitleTheme={
   const t=AudioSys.ctx.currentTime;
   this.gain.gain.cancelScheduledValues(t);
   this.gain.gain.setValueAtTime(this.gain.gain.value,t);
-  this.gain.gain.linearRampToValueAtTime(0.26,t+2.0);},
+  this.gain.gain.linearRampToValueAtTime(0.18,t+2.0);},
  stop(){if(!this.playing)return;
   this.playing=false;
   if(this.gain&&AudioSys.ctx){const t=AudioSys.ctx.currentTime;
@@ -3949,19 +4027,20 @@ const TitleTheme={
   o.frequency.setValueAtTime(150,t);o.frequency.exponentialRampToValueAtTime(42,t+0.10);
   const g=this._env(ctx,t,0.006,0.5,0.16);o.connect(g);g.connect(this.gain);
   o.start(t);o.stop(t+0.18);},
- snare(t){const ctx=AudioSys.ctx;
-  const n=ctx.createBufferSource();n.buffer=AudioSys.noiseBuf;
-  const f=ctx.createBiquadFilter();f.type='bandpass';f.frequency.value=1800;f.Q.value=0.8;
-  const g=this._env(ctx,t,0.004,0.22,0.12);n.connect(f);f.connect(g);g.connect(this.gain);
-  n.start(t);n.stop(t+0.14);
-  const o=ctx.createOscillator();o.type='triangle';o.frequency.value=180;
-  const g2=this._env(ctx,t,0.004,0.12,0.08);o.connect(g2);g2.connect(this.gain);
-  o.start(t);o.stop(t+0.1);},
- hat(t,open){const ctx=AudioSys.ctx;
-  const n=ctx.createBufferSource();n.buffer=AudioSys.noiseBuf;
-  const f=ctx.createBiquadFilter();f.type='highpass';f.frequency.value=open?6000:7800;
-  const g=this._env(ctx,t,0.002,open?0.1:0.07,open?0.22:0.05);
-  n.connect(f);f.connect(g);g.connect(this.gain);n.start(t);n.stop(t+(open?0.24:0.06));},
+  snare(t){const ctx=AudioSys.ctx;
+   // Synth percussion is intentionally tonal. The old white-noise snare and
+   // hats were the source of the sporadic static heard when the title started.
+   const o=ctx.createOscillator();o.type='triangle';o.frequency.setValueAtTime(210,t);
+   o.frequency.exponentialRampToValueAtTime(118,t+0.09);
+   const g=this._env(ctx,t,0.003,0.075,0.11);o.connect(g);g.connect(this.gain);
+   o.start(t);o.stop(t+0.13);
+   const tick=ctx.createOscillator();tick.type='sine';tick.frequency.value=1320;
+   const g2=this._env(ctx,t,0.001,0.035,0.045);tick.connect(g2);g2.connect(this.gain);
+   tick.start(t);tick.stop(t+0.06);},
+  hat(t,open){const ctx=AudioSys.ctx;
+   const o=ctx.createOscillator();o.type='sine';o.frequency.value=open?4300:5600;
+   const g=this._env(ctx,t,0.001,open?0.028:0.018,open?0.16:0.045);
+   o.connect(g);g.connect(this.gain);o.start(t);o.stop(t+(open?0.18:0.06));},
  bass(freq,t,dur){const ctx=AudioSys.ctx;
   const o=ctx.createOscillator();o.type='sawtooth';o.frequency.value=freq;
   const f=ctx.createBiquadFilter();f.type='lowpass';f.frequency.value=520;f.Q.value=0.9;
@@ -3972,18 +4051,22 @@ const TitleTheme={
    const o=ctx.createOscillator();o.type='sawtooth';o.frequency.value=freq;o.detune.value=i?-3:0;
    const sh=ctx.createWaveShaper();const cv=new Float32Array(256);
    for(let k=0;k<256;k++){const x=k/128-1;cv[k]=Math.tanh(1.8*x);}sh.curve=cv;
-   const f=ctx.createBiquadFilter();f.type='lowpass';f.frequency.value=1600;f.Q.value=0.7;
-   const g=this._env(ctx,t,0.01,0.11,dur);
+   const f=ctx.createBiquadFilter();f.type='lowpass';f.frequency.value=1250;f.Q.value=0.7;
+   const g=this._env(ctx,t,0.01,0.075,dur);
    o.connect(sh);sh.connect(f);f.connect(g);g.connect(this.gain);
    o.start(t);o.stop(t+dur);});},
- lead(freq,t,dur){const ctx=AudioSys.ctx;
-  const o=ctx.createOscillator();o.type='square';o.frequency.value=freq;
-  const f=ctx.createBiquadFilter();f.type='lowpass';f.frequency.value=2700;f.Q.value=1.2;
-  const g=this._env(ctx,t,0.02,0.09,dur);o.connect(f);f.connect(g);g.connect(this.gain);
-  o.start(t);o.stop(t+dur);},
- update(){if(!this.playing||!AudioSys.ctx)return;
-  const ctx=AudioSys.ctx;
-  while(this.nextNoteTime<ctx.currentTime+0.22){
+  lead(freq,t,dur){const ctx=AudioSys.ctx;
+   const o=ctx.createOscillator();o.type='triangle';o.frequency.value=freq;
+   const f=ctx.createBiquadFilter();f.type='lowpass';f.frequency.value=2200;f.Q.value=0.8;
+   const g=this._env(ctx,t,0.02,0.065,dur);o.connect(f);f.connect(g);g.connect(this.gain);
+   o.start(t);o.stop(t+dur);},
+  update(){if(!this.playing||!AudioSys.ctx)return;
+   const ctx=AudioSys.ctx,now=ctx.currentTime;
+   // If a tab stalls or the device is busy, discard late notes rather than
+   // firing a whole backlog at once. This keeps the groove continuous.
+   if(this.nextNoteTime<now-0.08)this.nextNoteTime=now+0.025;
+   let scheduled=0;
+   while(this.nextNoteTime<now+0.18&&scheduled<8){
    const c=this.chords[this.barIdx%this.chords.length];
    const s=this.step;
    // Kit: kick on 1 & 3, snare on 2 & 4, hats on the eighths.
@@ -3999,6 +4082,7 @@ const TitleTheme={
    if(s===4)this.lead(c.lead[4],this.nextNoteTime,this.stepDur*1.6);
    this.step++;if(this.step>=8){this.step=0;this.barIdx++;}
    this.nextNoteTime+=this.stepDur;
+   scheduled++;
   }
  }
 };
@@ -4432,8 +4516,10 @@ function updCountdown(dt){
   lis[i].className=on?'on':'';
   T.lampMats[i].color.set(on?0xff1a1a:0x230c0a);
  }
- if(nOn>cdLastOn){AudioSys.beep(520,0.22);cdLastOn=nOn;}
- if(nOn===5&&!cdGo)cdGo=cdT+rand(0.7,1.5);
+  if(nOn>cdLastOn){AudioSys.startLight(nOn);cdLastOn=nOn;}
+  // A short, musical pause after the fifth light makes the release feel
+  // deliberate instead of letting a random interval sound like a glitch.
+  if(nOn===5&&!cdGo)cdGo=cdT+0.95;
  player.throttle=keys.up?1:0;player.brake=0;player.steer=0;
  for(const c of cars){
   placeCar(c);
@@ -4448,7 +4534,7 @@ function updCountdown(dt){
  if(cdGo&&cdT>cdGo){
   lis.forEach(li=>li.className='');
   T.lampMats.forEach(m=>m.color.set(0x230c0a));
-  AudioSys.beep(300,0.3);
+  AudioSys.lightsOut();
   state.mode='race';raceT=0;
   for(const c of cars)c.lapStart=0;
   $('lights').classList.add('hidden');
