@@ -1,6 +1,6 @@
 /* ============ 3D Gyro Calibration & Interactive Test Lab ============ */
 import * as THREE from 'three';
-import { getBodyGeo, makeDriverMesh, getAxleGeo } from './game.js';
+import { getBodyGeo, makeDriverMesh, getAxleGeo } from './carGeometry.js';
 
 export class GyroCalibrationLab {
   constructor(tiltController) {
@@ -131,7 +131,7 @@ export class GyroCalibrationLab {
     this.carGroup.add(bodyMesh);
 
     // Articulated Driver & Helmet
-    const { driverGroup, helmetGroup } = makeDriverMesh('#f5f5f2', '#e10600');
+    const { driverGroup, helmetGroup } = makeDriverMesh('#f5f5f2', '#e10600', matBody);
     this.driverGroup = driverGroup;
     this.helmetGroup = helmetGroup;
     this.carGroup.add(driverGroup);
