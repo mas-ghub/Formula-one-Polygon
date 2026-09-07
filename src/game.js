@@ -828,16 +828,16 @@ export function getBodyGeo(colA,colB){
  const haloPts = [];
  {
   // side of the cockpit the ring lands on, just ahead of the helmet
-  const my = 0.60, mz = 0.28, topY = 1.10, topZ = 0.22;
+  const my = 0.56, mz = 0.82, topY = 0.99, topZ = 0.78;
   haloPts.push([0.60, my, mz]);              // left mount, on the tub
   for (let k = 1; k <= 7; k++) {             // left root rising into the hoop
    const t = k / 7;
-   haloPts.push([0.60 - 0.60 * t * t, my + (topY - my) * Math.pow(t, 0.85), mz - 0.10 * Math.sin(t * Math.PI)]);
+   haloPts.push([0.60 - 0.60 * t * t, my + (topY - my) * Math.pow(t, 0.85), mz - 0.04 * Math.sin(t * Math.PI)]);
   }
   haloPts.push([0, topY, topZ]);              // crown, sitting over the helmet
   for (let k = 7; k >= 1; k--) {             // mirror down to the right mount
    const t = k / 7;
-   haloPts.push([-(0.60 - 0.60 * t * t), my + (topY - my) * Math.pow(t, 0.85), mz - 0.10 * Math.sin(t * Math.PI)]);
+   haloPts.push([-(0.60 - 0.60 * t * t), my + (topY - my) * Math.pow(t, 0.85), mz - 0.04 * Math.sin(t * Math.PI)]);
   }
   haloPts.push([-0.60, my, mz]);
  }
@@ -845,13 +845,13 @@ export function getBodyGeo(colA,colB){
   tint(hg, '#1e2024'); P.push(ensureUV(hg));}
  // The forward pillar that carries the load into the chassis, with its foot
  // plate — from the front of the ring, angled down to the bulkhead.
- C(0.055, 0.07, 0.46, 7, '#1e2024', 0, 0.78, 0.68, 1.02);
- B(0.26, 0.05, 0.22, '#15161a', 0, 0.58, 0.84);
+ C(0.055, 0.07, 0.46, 7, '#1e2024', 0, 0.76, 1.08, 0.94);
+ B(0.26, 0.05, 0.22, '#15161a', 0, 0.57, 1.22);
  // Moulded winglets either side of the ring (the aero fairings real teams
  // bonded on) and the mounting pads the hoop is bolted through.
  for (const sx of [1, -1]) {
-  P.push(part(new THREE.BoxGeometry(0.30, 0.05, 0.16), '#1e2024', sx * 0.50, 0.86, 0.20, 0, 0, sx * 0.22));
-  B(0.17, 0.06, 0.24, '#15161a', sx * 0.60, 0.57, 0.28);
+  P.push(part(new THREE.BoxGeometry(0.30, 0.05, 0.16), '#1e2024', sx * 0.50, 0.82, 0.76, 0, 0, sx * 0.22));
+  B(0.17, 0.06, 0.24, '#15161a', sx * 0.60, 0.54, 0.74);
  }
  // Rear impact structure behind the driver's head, tying the two sides of the
  // cockpit together — it is what makes the ring read as part of a chassis.
@@ -4315,7 +4315,7 @@ const AudioSys={started:false,
  start(){if(this.started)return;
   const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;
   const ctx=this.ctx=new AC();
-  this.master=ctx.createGain();this.master.gain.value=0.9;
+  this.master=ctx.createGain();this.master.gain.value=1.0;
   const comp=ctx.createDynamicsCompressor();comp.threshold.value=-18;comp.knee.value=18;comp.ratio.value=5.5;comp.attack.value=0.003;comp.release.value=0.16;this.master.connect(comp);comp.connect(ctx.destination);
   const nb=ctx.createBuffer(1,ctx.sampleRate*2,ctx.sampleRate);
   const d=nb.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;this.noiseBuf=nb;
@@ -4556,19 +4556,19 @@ const AudioSys={started:false,
   this.eflt.frequency.setTargetAtTime((560+p.throttle*3500+p.audioRpm*2550)*(1-tun*0.42),t,0.03);
   this.tdFb.gain.setTargetAtTime(tun*0.45,t,0.07);
   this.tdGain.gain.setTargetAtTime(tun?0.55:0,t,0.07);
-  this.eg.gain.setTargetAtTime(run?(0.17+p.throttle*0.25+p.audioRpm*0.11)*limiterCut:0,t,0.05);
+  this.eg.gain.setTargetAtTime(run?(0.30+p.throttle*0.36+p.audioRpm*0.16)*limiterCut:0,t,0.05);
   this.engF.frequency.setTargetAtTime(105+p.audioRpm*560+p.throttle*180,t,0.045);
-  this.eng.gain.setTargetAtTime(run?0.016+p.throttle*0.095+p.audioRpm*0.070:0,t,0.06);
+  this.eng.gain.setTargetAtTime(run?0.028+p.throttle*0.18+p.audioRpm*0.12:0,t,0.06);
   this.intakeF.frequency.setTargetAtTime(720+p.throttle*2100+p.audioRpm*1750,t,0.04);
-  this.intakeG.gain.setTargetAtTime(run?0.003+p.throttle*0.105+p.audioRpm*0.030:0,t,0.06);
+  this.intakeG.gain.setTargetAtTime(run?0.008+p.throttle*0.20+p.audioRpm*0.060:0,t,0.06);
   this.exhaustF.frequency.setTargetAtTime(120+p.audioRpm*210+p.throttle*85,t,0.05);
   const exhaustLoad=clamp((1-p.throttle)*0.52+p.audioRpm*0.34+p.brake*0.18,0,1);
-  this.exhaustG.gain.setTargetAtTime(run?0.012+exhaustLoad*0.075:0,t,0.07);
+  this.exhaustG.gain.setTargetAtTime(run?0.024+exhaustLoad*0.15:0,t,0.07);
   this.whineO.frequency.setTargetAtTime(320+p.audioRpm*1850+(p.gear||1)*58,t,0.035);
-  this.whineG.gain.setTargetAtTime(run?0.004+p.throttle*0.010+p.audioRpm*0.018:0,t,0.06);
+  this.whineG.gain.setTargetAtTime(run?0.006+p.throttle*0.018+p.audioRpm*0.030:0,t,0.06);
   this.pulseF.frequency.setTargetAtTime(105+p.audioRpm*420,t,0.04);
   this.pulseO.frequency.setTargetAtTime(f*.5,t,0.03);
-  this.pulseG.gain.setTargetAtTime(run?0.018+p.audioRpm*0.045+p.throttle*0.018:0,t,0.05);
+  this.pulseG.gain.setTargetAtTime(run?0.028+p.audioRpm*0.070+p.throttle*0.030:0,t,0.05);
   this.wso.frequency.setTargetAtTime(f*5.2,t,0.02);
   this.wsg.gain.setTargetAtTime(run?p.wheelspin*0.08:0,t,0.03);
   this.skg.gain.setTargetAtTime(run?p.skidAmt*0.16:0,t,0.04);
@@ -4596,7 +4596,7 @@ const AudioSys={started:false,
     if(ch.pan){const rx=Math.cos(p.hdg),rz=-Math.sin(p.hdg);const side=((hit.c.x-p.x)*rx+(hit.c.z-p.z)*rz)/Math.max(hit.d,1);ch.pan.pan.setTargetAtTime(clamp(side,-1,1),t,.08);}
    }else ch.g.gain.setTargetAtTime(0,t,.12);
   }},
- setMute(m){if(this.started)this.master.gain.value=m?0:0.9;}
+ setMute(m){if(this.started)this.master.gain.value=m?0:1.0;}
 };
 
 /* ============ Title screen theme ============
@@ -4785,6 +4785,16 @@ function updCrashCamera(dt){
  camera.fov=damp(camera.fov,46,4,dt);camera.updateProjectionMatrix();
  if(crashCam.timer>=crashCam.duration)crashCam.active=false;
 }
+function cockpitFrame(speed){
+ const ar=clamp(camera.aspect||innerWidth/Math.max(innerHeight,1),0.55,3.2);
+ const narrow=clamp((1.78-ar)/1.10,0,1);
+ const wide=clamp((ar-1.78)/1.45,0,1);
+ return{
+  ahead:38+wide*8-narrow*18+speed*0.44,
+  lookDrop:0.74-narrow*0.36+wide*0.04,
+  fov:clamp(86+narrow*21-wide*10,76,108)
+ };
+}
 function updCamera(dt){
  if(crashCam.active){updCrashCamera(dt);return;}
  camera.up.set(0,1,0);
@@ -4907,9 +4917,9 @@ function updCamera(dt){
   camera.rotateZ((swooping?Math.sin(swoopT*Math.PI)*0.14:0)+Math.sin(timeSec*0.35)*0.03);
   camera.fov=damp(camera.fov,swooping?54:50,4,dt);camera.updateProjectionMatrix();return;}
  const p=player,pp=p.mesh.g.position;
- // The liked helmet-like view keeps the driver in shot. The true eye-level
- // camera hides the driver mesh so the shell cannot occlude the sightline.
- if(p.mesh.driverGroup)p.mesh.driverGroup.visible=state.camMode!==3;
+ // First-person modes hide the driver mesh so the camera is not trapped inside
+ // the helmet; the halo and nose remain part of the car body and stay visible.
+ if(p.mesh.driverGroup)p.mesh.driverGroup.visible=state.camMode!==2&&state.camMode!==3;
  const sp=Math.abs(p.vF);
  let tf=62;
  if(state.camMode===0){
@@ -4923,82 +4933,57 @@ function updCamera(dt){
   camera.lookAt(pp.x+fx*6,Math.max(pp.y+1.2,cameraSurfaceY(p.x,p.z)+0.8),pp.z+fz*6);
   tf=clamp(60+sp*0.24,60,80);
  }else if(state.camMode===2){
-  /* IMMERSIVE CAM — a small onboard camera perched just behind and above the
-     driver's helmet, like the modern F1 "driver's eye"/head-cam composite:
-     the crown of the helmet fills the bottom of the frame and you look OVER
-     it at the road. It still inherits the head spring's motion (rolls under
-     lateral load, snaps forward under braking, buzzes with speed), followed
-     at less than 1:1 so it reads as real without making you ill. */
+  /* IMMERSIVE / HALO CAM — this is a driver's view, not a chase camera.
+     The lens is at the visor, inside the cockpit, looking forward over the
+     nose. It must never use a rear offset: the halo is overhead and the nose
+     is visible at the bottom of the frame. */
   const yaw=p.hdg,fx=Math.sin(yaw),fz=Math.cos(yaw);
   const hg=p.mesh.helmetGroup;
-  const lean=hg?hg.rotation.z*0.62:0, nod=hg?hg.rotation.x*0.50:0, look=hg?hg.rotation.y*0.42:0;
+  const lean=hg?hg.rotation.z*0.66:0, nod=hg?hg.rotation.x*0.52:0;
+  const headWorld=hg?hg.getWorldPosition(_camHead):_camHead.copy(pp).add(V3(0,0.98,0));
   const sp01=clamp(sp/PH.top,0,1);
-  // Read the helmet's WORLD position. The old code used hg.position.y, which
-  // is only its local cockpit coordinate (~0.73 m); on an elevated or dipped
-  // circuit that put the camera below the actual road.
-  const headWorld=hg?hg.getWorldPosition(_camHead):_camHead.copy(pp).add(V3(0,1.0,0));
-  // Mount the lens BEHIND and ABOVE the helmet crown (not inside it, not out
-  // at the visor): the helmet is visible at the bottom of the frame and the
-  // road is visible over the top of it. 0.5 m back keeps the shell outside
-  // the camera's 0.3 m near plane so it renders instead of being clipped.
-  const roadHere=getRoadHAtCoords(pp.x,pp.z)+1.12;
-  const targetY=Math.max(headWorld.y+0.52,roadHere);
-  // A small vibration conveys speed, but stays below a centimetre so the view
-  // remains useful through braking zones and fast direction changes.
-  const buzz=(0.0007+sp01*0.0060)*(p.onCurb?2.4:1);
-  const bx=Math.sin(timeSec*51.3+p.phase)*buzz;
-  const by=Math.cos(timeSec*63.7+p.phase*2)*buzz*0.7;
-  const hx=headWorld.x-fx*0.32,hz=headWorld.z-fz*0.32;
-  cam.pos.x=damp(cam.pos.x===undefined?hx:cam.pos.x,hx,22,dt);
-  cam.pos.z=damp(cam.pos.z===undefined?hz:cam.pos.z,hz,22,dt);
-  cam.pos.y=damp(cam.pos.y===undefined?targetY:cam.pos.y,targetY,22,dt);
-  // Final floor clamp is deliberately after damping: smoothing must never lag
-  // the camera down through the tarmac at the foot of a steep climb.
-  camera.position.set(cam.pos.x+bx,Math.max(cam.pos.y+by,roadHere),cam.pos.z);
-  clampCameraToSurface(0.18);
-
-  // Look along the road rather than at a fixed world-height point. This keeps
-  // crests visible and braking markers readable while head movement still
-  // turns naturally into the corner.
-  const ahead=30+sp*0.48;
-  const fyaw=yaw+look;
+  const roadHere=getRoadHAtCoords(pp.x,pp.z)+0.82;
+  const eyeX=headWorld.x+fx*0.08,eyeZ=headWorld.z+fz*0.09;
+  const eyeY=Math.max(headWorld.y+0.015,roadHere);
+  const buzz=(0.0007+sp01*0.0055)*(p.onCurb?2.3:1);
+  camera.position.set(eyeX+Math.sin(timeSec*51.3+p.phase)*buzz,
+   Math.max(eyeY+Math.cos(timeSec*63.7+p.phase*2)*buzz*0.7,roadHere),eyeZ);
+  clampCameraToSurface(0.10);
+  const frame=cockpitFrame(sp);
+  const ahead=frame.ahead,fyaw=yaw+(hg?hg.rotation.y*0.38:0);
   const lx=pp.x+Math.sin(fyaw)*ahead,lz=pp.z+Math.cos(fyaw)*ahead;
   const roadAhead=getRoadHAtCoords(lx,lz);
-  cam.lookX=damp(cam.lookX===undefined?lx:cam.lookX,lx,16,dt);
-  cam.lookZ=damp(cam.lookZ===undefined?lz:cam.lookZ,lz,16,dt);
-  cam.lookY=damp(cam.lookY===undefined?roadAhead+1.0:cam.lookY,roadAhead+1.0+nod*ahead*0.22,14,dt);
-  // Keep the horizon tied to the car; the final rotateZ supplies the small
-  // head roll without a world-axis up vector skewing the view on corner exit.
   camera.up.set(0,1,0);
-  camera.lookAt(cam.lookX,cam.lookY,cam.lookZ);
-  camera.rotateZ(lean*0.24);
-  // Wider FOV and gentle speed ramp create excitement without the severe
-  // close-in zoom that made the mode hard to drive.
-  tf=clamp(74+sp*0.22,74,92);
+  camera.lookAt(lx,roadAhead+frame.lookDrop+nod*ahead*0.16,lz);
+  camera.rotateZ(lean*0.30);
+  tf=frame.fov;
  }else if(state.camMode===3){
-  /* HELMET CAM — true eye-level sightline. The camera is mounted at the
-     driver's visor rather than above/behind the shell: the road, kerbs and
-     braking boards are what the driver actually sees. */
+  /* HELMET CAM — true eye-level sightline. The lens sits at the visor,
+     slightly behind the halo's front hoop, with a lowered look target so the
+     front nose occupies the bottom of frame while the halo remains visible
+     above it. The driver mesh is hidden, but the halo is part of the car body
+     and remains in shot. */
   const yaw=p.hdg,fx=Math.sin(yaw),fz=Math.cos(yaw);
   const hg=p.mesh.helmetGroup;
   const headWorld=hg?hg.getWorldPosition(_camHead):_camHead.copy(pp).add(V3(0,0.93,0));
   const lean=hg?hg.rotation.z*0.82:0;
   const nod=hg?hg.rotation.x*0.62:0;
-  const roadHere=getRoadHAtCoords(pp.x,pp.z)+0.94;
-  const eyeX=headWorld.x+fx*0.13,eyeZ=headWorld.z+fz*0.13;
-  const eyeY=Math.max(headWorld.y+0.10,roadHere);
+  const roadHere=getRoadHAtCoords(pp.x,pp.z)+0.82;
+  const eyeX=headWorld.x+fx*0.10,eyeZ=headWorld.z+fz*0.11;
+  const eyeY=Math.max(headWorld.y+0.02,roadHere);
   const sp01=clamp(sp/PH.top,0,1);
   const buzz=(0.0006+sp01*0.0045)*(p.onCurb?2.2:1);
   camera.position.set(eyeX+Math.sin(timeSec*49.7+p.phase)*buzz,
    Math.max(eyeY+Math.cos(timeSec*61.3+p.phase)*buzz*0.65,roadHere),eyeZ);
   clampCameraToSurface(0.12);
-  const ahead=55+sp*0.62,fyaw=yaw+(hg?hg.rotation.y*0.30:0);
+  const frame=cockpitFrame(sp);
+  const ahead=frame.ahead,fyaw=yaw+(hg?hg.rotation.y*0.30:0);
   const lx=pp.x+Math.sin(fyaw)*ahead,lz=pp.z+Math.cos(fyaw)*ahead;
   const roadAhead=getRoadHAtCoords(lx,lz);
   camera.up.set(0,1,0);
-  camera.lookAt(lx,roadAhead+1.05+nod*ahead*0.20,lz);
+  camera.lookAt(lx,roadAhead+frame.lookDrop+nod*ahead*0.16,lz);
   camera.rotateZ(lean*0.34);
-  tf=clamp(78+sp*0.20,78,94);
+  tf=frame.fov;
 }else if(state.camMode===1){
   // "T-cam": mounted near the airbox/halo, behind the front axle, like the
   // real onboard camera — not out ahead of the front wheels. Putting the
