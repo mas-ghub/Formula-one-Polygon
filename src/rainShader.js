@@ -1,7 +1,9 @@
 /* ============ Windshield Rain — adapted from "Heartfelt" ============
-   Original GLSL by Martijn Steinrucken (BigWings), 2017 — Shadertoy: ltffzl
-   License: CC BY-NC-SA 3.0. The heart/story timeline from the original demo
-   has been removed; the droplet/streak noise functions are otherwise as
+   Original GLSL by Martijn Steinrucken aka BigWIngs, 2017 — Shadertoy: https://www.shadertoy.com/view/ltffzl
+   The N13 hash is credited in the source to Dave Hoskins.
+   License: CC BY-NC-SA 3.0. The original HAS_HEART story timeline is not drawn over the driving view; its
+   same Heartfelt glass/drop layers are kept as the weather pass, with a separate
+   strike overlay; the droplet/streak noise functions are otherwise as
    authored. This version renders the real 3D scene into a texture and
    refracts it through the drops (true glass distortion), driven by the
    current weather intensity and the player's speed, with a discrete
@@ -24,6 +26,7 @@ uniform vec2 uResolution;
 uniform float uRainAmount;
 uniform float uCarSpeed;
 uniform float uLightning;
+uniform float uLightningSeed;
 varying vec2 vUv;
 
 #define S(a, b, t) smoothstep(a, b, t)
@@ -108,6 +111,28 @@ vec3 blurScene(vec2 uv, float amount) {
   return col/total;
 }
 
+  float lineGlow(vec2 p, vec2 a, vec2 b){
+    vec2 pa=p-a,ba=b-a;
+    float h=clamp(dot(pa,ba)/max(dot(ba,ba),0.0001),0.0,1.0);
+    return exp(-dot(pa-ba*h,pa-ba*h)*6200.0);
+  }
+  float bolt(vec2 p,float seed){
+    float glow=0.0;
+    vec2 prev=vec2(0.72,1.04);
+    for(int i=1;i<8;i++){
+      float fi=float(i);
+      float y=1.04-fi*0.115;
+      float x=0.72+(fract(sin(fi*91.7+seed*3.1)*43758.5)-0.5)*0.24;
+      vec2 next=vec2(x,y);
+      glow=max(glow,lineGlow(p,prev,next));
+      prev=next;
+    }
+    // A short fork makes the strike read as a bolt, not a vertical overlay.
+    vec2 forkA=vec2(0.67,0.70),forkB=vec2(0.51,0.56);
+    glow=max(glow,lineGlow(p,forkA,forkB));
+    return clamp(glow,0.0,1.0);
+  }
+
 void main() {
   vec2 UV = vUv;
   float rainAmount = clamp(uRainAmount, 0.0, 1.0);
@@ -124,10 +149,10 @@ void main() {
 // rainAmount > 0.6), smoother speed response, and a stronger lightning
 // flash with brief brightness spike followed by quick fade (simulating the
 // lightning's actual after-image on the retina).
-  float layer3 = S(.6, .9, rainAmount);
-  float staticDrops = S(-.5, 1., rainAmount)*2.;
-  float layer1 = S(.25, .75, rainAmount);
-  float layer2 = S(.0, .5, rainAmount);
+  float layer3 = S(.68, .95, rainAmount)*0.42;
+  float staticDrops = S(-.5, 1., rainAmount)*0.72;
+  float layer1 = S(.25, .75, rainAmount)*0.68;
+  float layer2 = S(.0, .5, rainAmount)*0.58;
   float speedFactor = clamp(uCarSpeed / 200.0, 0.0, 1.2); // speed-driven streak elongation
 
   vec2 c = Drops(uv, t, staticDrops, layer1, layer2);
@@ -154,8 +179,8 @@ void main() {
   // the background blur modest preserves braking markers for gameplay.
   // Speed-driven streak elongation applied to the blur amount: faster cars
   // stretch the drop trails horizontally as the relative wind pulls them out.
-  float wetGlass = (0.00035 + rainAmount * 0.00075) * (1.0 - c.x * 0.78);
-  wetGlass += c.y * 0.0008;
+  float wetGlass = (0.00012 + rainAmount * 0.00034) * (1.0 - c.x * 0.78);
+  wetGlass += c.y * 0.00034;
   wetGlass *= trailElong; // speed-stretched glass distortion
   vec3 col = blurScene(clamp(UV + n, 0.0, 1.0), wetGlass);
 
@@ -163,19 +188,19 @@ void main() {
   // than transparent distortion. Trails get a cooler, subtler sheen.
   float edge = S(0.02, 0.22, c.x) * (1.0 - S(0.55, 0.95, c.x));
   float glint = pow(clamp(1.0 - length(n) * 18.0, 0.0, 1.0), 18.0) * c.x;
-  // Stronger lightning: a brief bright spike (1.5s peak intensity) plus
-  // a subtle after-image fade, simulating the eye's persistence of vision.
-  float lightningBase = clamp(uLightning, 0.0, 1.0);
-  float lightningSpike = exp(-pow(uLightning * 3.0, 2.0)) * 2.2; // Gaussian peak
-  float lightningFlash = max(lightningBase, lightningSpike);
-  col+=vec3(0.52,0.68,0.82)*edge*0.09;
-  col+=vec3(0.95,0.98,1.0)*glint*0.30;
+  // Lightning is kept separate from the rain density. The game supplies a
+  // short strike envelope, so wet glass never becomes a full-screen white veil.
+  col+=vec3(0.52,0.68,0.82)*edge*0.045;
+  col+=vec3(0.95,0.98,1.0)*glint*0.16;
   col=mix(col,col*vec3(0.82,0.91,1.03),clamp(c.y*0.32,0.0,0.32));
 
-  // Enhanced discrete lightning strike, driven by the game's thunder scheduler.
-  // Uses the computed flash (base intensity + brief Gaussian spike + after-image)
-  // rather than the raw uniform value, so strikes read as real brief flashes.
-  col += lightningFlash * vec3(1.0, 1.0, 1.05) * 2.0;
+  // The matching Shadertoy Heartfelt effect is a glass/rain shader; lightning
+  // is layered separately so it can be spectacular without making rain itself
+  // opaque. Draw a screen-space branched bolt for the short strike envelope.
+  float flash=clamp(uLightning,0.0,1.0);
+  float boltGlow=bolt(UV,uLightningSeed);
+  col += flash * vec3(0.94,0.97,1.0) * 1.55;
+  col += boltGlow * flash * vec3(1.0,1.0,1.0) * 4.5;
 
   // Lift storm-darkened areas so the track stays readable. This must be
   // proportional/additive, never a hard max() floor — a flat clamp collapses
@@ -195,6 +220,7 @@ export class RainShaderPass {
   constructor(renderer) {
     this.renderer = renderer;
     this.quality = 'HIGH';
+    this.failed = false;
 
     const size = this._targetSize();
     this.rt = new THREE.WebGLRenderTarget(size.w, size.h, {
@@ -210,6 +236,7 @@ export class RainShaderPass {
       uRainAmount: { value: 0 },
       uCarSpeed: { value: 0 },
       uLightning: { value: 0 },
+      uLightningSeed: { value: 0 },
     };
 
     const mat = new THREE.ShaderMaterial({
@@ -228,13 +255,17 @@ export class RainShaderPass {
   _targetSize() {
     const el = this.renderer.domElement;
     const scale = this.quality === 'ULTRA' ? 1.0 : this.quality === 'HIGH' ? 0.85 : this.quality === 'MED' ? 0.65 : 0.5;
-    return {
-      w: Math.max(2, Math.floor((el.width || innerWidth) * scale)),
-      h: Math.max(2, Math.floor((el.height || innerHeight) * scale)),
-    };
+    const baseW=Math.max(2,el.width||innerWidth),baseH=Math.max(2,el.height||innerHeight);
+    // Never allocate an unbounded full-resolution windshield target. On a
+    // Retina/4K display ULTRA used to request an enormous second RGBA buffer;
+    // some drivers responded with a white canvas instead of a clean failure.
+    const budget=this.quality==='ULTRA'?5200000:this.quality==='HIGH'?4000000:this.quality==='MED'?3000000:2000000;
+    const safe=Math.min(scale,2560/baseW,Math.sqrt(budget/(baseW*baseH)));
+    return {w:Math.max(2,Math.floor(baseW*safe)),h:Math.max(2,Math.floor(baseH*safe))};
   }
 
   setQuality(q) {
+    this.failed = false;
     this.quality = q;
     this.resize();
   }
@@ -256,11 +287,13 @@ export class RainShaderPass {
   // Draws the windshield composite (refracted scene + drops) to whatever the
   // renderer's current target is — call after renderScene(), with the render
   // target reset to the screen.
-  composite(timeSec, rainAmount, carSpeed, lightning) {
+  composite(timeSec, rainAmount, carSpeed, lightning, seed = 0) {
+    if(this.failed)return;
     this.uniforms.uTime.value = timeSec;
     this.uniforms.uRainAmount.value = rainAmount;
     this.uniforms.uCarSpeed.value = carSpeed;
     this.uniforms.uLightning.value = lightning || 0;
+    this.uniforms.uLightningSeed.value = seed || 0;
     this.renderer.render(this.quadScene, this.quadCamera);
   }
 }

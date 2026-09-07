@@ -114,6 +114,11 @@ export class QualityManager {
     const gl=this.renderer.getContext(),vp=gl.getParameter(gl.MAX_VIEWPORT_DIMS)||[4096,4096];
     const hard=Math.min((gl.getParameter(gl.MAX_TEXTURE_SIZE)||4096)/innerWidth,(gl.getParameter(gl.MAX_RENDERBUFFER_SIZE)||4096)/innerHeight,vp[0]/innerWidth,vp[1]/innerHeight);
     let ratio=Math.min(desired,hard);
+    // Keep the main canvas itself within a conservative pixel budget as well
+    // as probing framebuffer completeness. This prevents ULTRA from producing
+    // a white/context-lost screen on high-DPI displays.
+    const pixelBudget=mode==='ULTRA'?5200000:mode==='HIGH'?4000000:mode==='MED'?3000000:2000000;
+    ratio=Math.min(ratio,Math.sqrt(pixelBudget/Math.max(1,innerWidth*innerHeight)));
     // Test the requested allocation, then walk down until this GPU confirms a
     // complete colour/depth target. LOW is the final universally safe floor.
     while(ratio>0.55&&!this._probeFramebuffer(Math.floor(innerWidth*ratio),Math.floor(innerHeight*ratio)))ratio*=0.8;

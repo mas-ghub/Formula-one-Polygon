@@ -813,46 +813,13 @@ export function getBodyGeo(colA,colB){
  B(0.09,0.12,0.09,'#202226',0.17,0.26,2.50);            // centre pylons
  B(0.09,0.12,0.09,'#202226',-0.17,0.26,2.50);
  B(0.78,0.2,1.0,colA,0,0.58,0.55);B(0.5,0.1,0.9,'#101114',0,0.66,0.55);
- // Halo protection structure — a real halo shape: a thick front arc running
- // over the driver's head, a single forward spine down to the nose bulkhead,
- // two rear struts down to the chassis sides, and a rear cross-brace tying
- // those struts together (the "cross piece" that reads clearly even at a
- // distance). The arc sits just above the helmet crown like the real
- // titanium piece, and the helmet shows behind/under it from chase cams.
- // Halo — modelled as the real titanium ring, not a decoration. It is a single
- // closed hoop that springs from the chassis on the driver's LEFT, sweeps up and
- // OVER the crown, comes down on the RIGHT, and is bolted forward to the nose
- // bulkhead by one strong pillar. The old version was a half torus laid down in
- // the wrong plane, which is why it read as "half a hoop" from a chase cam.
- const HALO_R = 0.05;                       // 50 mm tube, like the real piece
- const haloPts = [];
- {
-  // side of the cockpit the ring lands on, just ahead of the helmet
-  const my = 0.56, mz = 0.82, topY = 0.99, topZ = 0.78;
-  haloPts.push([0.60, my, mz]);              // left mount, on the tub
-  for (let k = 1; k <= 7; k++) {             // left root rising into the hoop
-   const t = k / 7;
-   haloPts.push([0.60 - 0.60 * t * t, my + (topY - my) * Math.pow(t, 0.85), mz - 0.04 * Math.sin(t * Math.PI)]);
-  }
-  haloPts.push([0, topY, topZ]);              // crown, sitting over the helmet
-  for (let k = 7; k >= 1; k--) {             // mirror down to the right mount
-   const t = k / 7;
-   haloPts.push([-(0.60 - 0.60 * t * t), my + (topY - my) * Math.pow(t, 0.85), mz - 0.04 * Math.sin(t * Math.PI)]);
-  }
-  haloPts.push([-0.60, my, mz]);
- }
- {const hg=new THREE.TubeGeometry(new THREE.CatmullRomCurve3(haloPts.map(v => new THREE.Vector3(v[0], v[1], v[2])), false, 'catmullrom', 0.35), 44, HALO_R, 6, false);
-  tint(hg, '#1e2024'); P.push(ensureUV(hg));}
- // The forward pillar that carries the load into the chassis, with its foot
- // plate — from the front of the ring, angled down to the bulkhead.
- C(0.055, 0.07, 0.46, 7, '#1e2024', 0, 0.76, 1.08, 0.94);
- B(0.26, 0.05, 0.22, '#15161a', 0, 0.57, 1.22);
- // Moulded winglets either side of the ring (the aero fairings real teams
- // bonded on) and the mounting pads the hoop is bolted through.
- for (const sx of [1, -1]) {
-  P.push(part(new THREE.BoxGeometry(0.30, 0.05, 0.16), '#1e2024', sx * 0.50, 0.82, 0.76, 0, 0, sx * 0.22));
-  B(0.17, 0.06, 0.24, '#15161a', sx * 0.60, 0.54, 0.74);
- }
+ // Halo protection structure — modelled after the real open FIA halo: two
+ // side rails, two chassis feet, a front crown and one central forward pillar.
+ // It is deliberately not a closed hoop; the driver sits inside the open gap
+ // between the two rails and sees the central bar ahead of the visor.
+ // Halo protection is a separate assembly below. Keeping it out of the
+ // merged body mesh prevents the cockpit shell from swallowing the rails or
+ // the front splitter in side and helmet views.
  // Rear impact structure behind the driver's head, tying the two sides of the
  // cockpit together — it is what makes the ring read as part of a chassis.
  B(0.30, 0.16, 0.10, '#15161a', 0, 0.72, -0.10);
@@ -992,6 +959,36 @@ export function getAxleGeo(){if(axleGeo&&brakeGeo)return axleGeo;
  const d2=disc.clone();d2.translate(0.82,0,0);
  brakeGeo=mergeGeometries([d1,d2],false);
  return axleGeo;}
+// The halo is a separate, bright F1-style assembly. In side profile it is
+// an open curved rail wrapping around the helmet; in the driver's view the two
+// rails frame the cockpit and the central front splitter is directly ahead.
+function makeHaloAssembly(){
+ const group=new THREE.Group();
+ const steel=new THREE.MeshStandardMaterial({color:0x9aa4aa,roughness:0.34,metalness:0.72,envMapIntensity:1.25});
+ const darkSteel=new THREE.MeshStandardMaterial({color:0x30363b,roughness:0.42,metalness:0.64});
+ const tube=(points,radius,mat=steel)=>{
+  const curve=new THREE.CatmullRomCurve3(points.map(v=>new THREE.Vector3(v[0],v[1],v[2])),false,'centripetal',0.34);
+  const mesh=new THREE.Mesh(new THREE.TubeGeometry(curve,48,radius,8,false),mat);
+  mesh.castShadow=true;mesh.receiveShadow=true;mesh.renderOrder=5;group.add(mesh);return mesh;
+ };
+ // Each side is one continuous rail: rear foot, rise beside the helmet,
+ // curve over it and converge at the front crown. This is the side silhouette
+ // in the supplied reference image, not a closed hoop.
+ tube([[-0.64,0.55,-0.30],[-0.63,0.64,0.00],[-0.57,0.80,0.32],[-0.43,0.94,0.60],[-0.23,1.03,0.80],[0,1.055,0.90]],0.058);
+ tube([[0.64,0.55,-0.30],[0.63,0.64,0.00],[0.57,0.80,0.32],[0.43,0.94,0.60],[0.23,1.03,0.80],[0,1.055,0.90]],0.058);
+ // The splitter is the middle bar the driver must see: it starts at the
+ // crown ahead of the helmet and drops forward/down to the nose bulkhead.
+ tube([[0,1.055,0.90],[0,0.92,1.06],[0,0.71,1.25],[0,0.53,1.42]],0.078,steel);
+ for(const sx of[-1,1]){
+  const shoe=new THREE.Mesh(new THREE.BoxGeometry(0.24,0.07,0.30),darkSteel);
+  shoe.position.set(sx*0.64,0.54,-0.30);shoe.castShadow=true;group.add(shoe);
+ }
+ const frontShoe=new THREE.Mesh(new THREE.BoxGeometry(0.30,0.07,0.25),darkSteel);
+ frontShoe.position.set(0,0.54,1.42);frontShoe.castShadow=true;group.add(frontShoe);
+ group.userData.isHaloAssembly=true;
+ return group;
+}
+
 const drsGeo=new THREE.BoxGeometry(1.42,0.03,0.26);
 /* Animated spanner placeholder that floats over a car blown off into the
    gravel / clouted by another car. A wrench + a depleting gold countdown
@@ -1024,6 +1021,7 @@ function makeDamageSprite(){
 function makeCarMesh(d){
  const g=new THREE.Group();
  const body=new THREE.Mesh(getBodyGeo(d.colA,d.colB),matBody);body.castShadow=true;
+ const halo=makeHaloAssembly();
  const { driverGroup, helmetGroup } = makeDriverMesh(d.colA, d.helmet);
  getAxleGeo();
  const axleF=new THREE.Mesh(axleGeo,matWheel);axleF.rotation.order='YXZ';axleF.position.set(0,0.37,1.62);
@@ -1046,7 +1044,7 @@ function makeCarMesh(d){
  const tailGlow=new THREE.Mesh(new THREE.PlaneGeometry(0.9,0.5),new THREE.MeshBasicMaterial({map:softT,color:0xff2a10,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false}));
  tailGlow.position.set(0,0.6,-2.6);tailGlow.renderOrder=3;
  beam.userData.fx=1;pool.userData.fx=1;tailGlow.userData.fx=1;   // not bodywork
- g.add(beam,pool,tailGlow);
+ g.add(beam,pool,tailGlow,halo);
  const drs=new THREE.Mesh(drsGeo,new THREE.MeshStandardMaterial({color:d.colB,flatShading:true,roughness:0.4}));
  drs.position.set(0,1.0,-2.42);
  // Rear brake light — lights up under braking in any weather, and also
@@ -1061,7 +1059,7 @@ function makeCarMesh(d){
  const dmgSprite=makeDamageSprite();
  g.add(dmgSprite);
  g.add(body,driverGroup,axleF,axleR,brakes,drs,brakeLight);
- return{g,body,driverGroup,helmetGroup,axleF,axleR,brakes,brakeMat,drs,brakeLight,beam,pool,tailGlow,dmgSprite,steering:driverGroup.userData.steering||null};
+ return{g,body,driverGroup,helmetGroup,halo,axleF,axleR,brakes,brakeMat,drs,brakeLight,beam,pool,tailGlow,dmgSprite,steering:driverGroup.userData.steering||null};
 }
 
 /* ============ particles ============ */
@@ -1204,12 +1202,12 @@ function clearSkids(){const z=new THREE.Matrix4().makeScale(0,0,0);
  for(let i=0;i<skidMax;i++)skidMesh.setMatrixAt(i,z);skidMesh.instanceMatrix.needsUpdate=true;skidI=0;}
 
 /* rain world FX */
-const RAIN_N=1000;
+const RAIN_N=560;
 const rainGeo=new THREE.BufferGeometry();
 rainGeo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(RAIN_N*6),3).setUsage(THREE.DynamicDrawUsage));
 // Darker, glassier streaks — the old near-white 0x9db4c8 at 0.45 opacity read
 // as a curtain of white noise; real rain is mostly transparent.
-const rainMat = new THREE.LineBasicMaterial({color:0x53687c,transparent:true,opacity:0.16});
+const rainMat = new THREE.LineBasicMaterial({color:0x7892a4,transparent:true,opacity:0.045,depthWrite:false});
 const rainMesh=new THREE.LineSegments(rainGeo,rainMat);
 rainMesh.frustumCulled=false;scene.add(rainMesh);
 const rainP=new Float32Array(RAIN_N*3);
@@ -1243,7 +1241,8 @@ function updWeatherFX(dt){
    if(flake){rainP[i*3]+=Math.sin(timeSec*0.8+i)*dt*2.4;rainP[i*3+2]+=Math.cos(timeSec*0.6+i*0.7)*dt*2.4;}
    if(rainP[i*3+1]<0){rainP[i*3+1]+=26;rainP[i*3]=rand(-30,30);rainP[i*3+2]=rand(-30,30);}
    const x=cx+rainP[i*3],y=rainP[i*3+1],z=cz+rainP[i*3+2];
-   rp[i*6]=x;rp[i*6+1]=y;rp[i*6+2]=z;rp[i*6+3]=x-0.6;rp[i*6+4]=y+0.9;rp[i*6+5]=z;
+   const streak=0.28+cur.rain*0.30;
+   rp[i*6]=x;rp[i*6+1]=y;rp[i*6+2]=z;rp[i*6+3]=x;rp[i*6+4]=y+streak;rp[i*6+5]=z;
   }
   rainGeo.attributes.position.needsUpdate=true;
  }
@@ -1262,24 +1261,27 @@ function updLens(dt){
  if((QUALITY_PRESETS[effQuality()]||{}).rainShader!==false){lensDrops.length=0;return;}
  const amt=Math.max(cur.rain-0.12,0);
  if(amt<=0||state.mode==='title'){lensDrops.length=0;return;}
- if(Math.random()<amt*dt*38&&lensDrops.length<90)
-  lensDrops.push({x:Math.random()*dropCv.width,y:Math.random()*dropCv.height,r:rand(1.5,7),life:rand(1.5,5),vy:rand(4,26)});
+ if(Math.random()<amt*dt*24&&lensDrops.length<70)
+  lensDrops.push({x:Math.random()*dropCv.width,y:Math.random()*dropCv.height,r:rand(0.8,3.6),life:rand(1.5,4),vy:rand(5,28)});
  const spd=player?Math.abs(player.vF):0;
  
  for(let i=lensDrops.length-1;i>=0;i--){const d=lensDrops[i];
   d.life-=dt*(1+spd*0.05);d.y+=d.vy*dt*(0.4+spd*0.03);
   if(d.life<=0||d.y>dropCv.height){lensDrops.splice(i,1);continue;}
-  dropCx.globalAlpha=Math.min(d.life,1)*0.7;
+  dropCx.globalAlpha=Math.min(d.life,1)*0.20;
   
   // Refraction effect (using a radial gradient to simulate light bending)
   const grad = dropCx.createRadialGradient(d.x - d.r*0.2, d.y - d.r*0.2, 0, d.x, d.y, d.r * (1 + spd*0.01));
-  grad.addColorStop(0, 'rgba(255, 255, 255, 0.8)');
-  grad.addColorStop(0.4, 'rgba(200, 215, 228, 0.2)');
-  grad.addColorStop(1, 'rgba(100, 110, 120, 0.5)');
+  // Emergency LOW-quality fallback only: a few faint cool beads, never
+  // opaque white ellipses. The Heartfelt pass handles the real glass effect
+  // on MED/HIGH/ULTRA.
+  grad.addColorStop(0, 'rgba(220, 237, 246, 0.22)');
+  grad.addColorStop(0.45, 'rgba(180, 210, 226, 0.07)');
+  grad.addColorStop(1, 'rgba(100, 130, 150, 0)');
   
   dropCx.fillStyle = grad;
   dropCx.beginPath();
-  dropCx.ellipse(d.x, d.y, d.r*(1+spd*0.004), d.r*(1.6+spd*0.01), 0, 0, 7);
+  dropCx.ellipse(d.x, d.y, d.r*(1+spd*0.002), d.r*(1.45+spd*0.006), 0, 0, 7);
   dropCx.fill();
  }
  dropCx.globalAlpha=1;
@@ -1510,7 +1512,7 @@ function applyWeatherVisuals(){
  sunLight.intensity=sunBase;
  hemi.color.copy(cur.hS);hemi.groundColor.copy(cur.hG);hemi.intensity=cur.hI*tod.hMul;
  renderer.toneMappingExposure=cur.exp*tod.expMul;
- rainMesh.material.opacity=0.03+cur.rain*0.115;
+ rainMesh.material.opacity=0.012+cur.rain*0.033;
  if(cloudMat){const g=cur.rain;cloudMat.color.setRGB(1-g*0.45,1-g*0.43,1-g*0.40);}
  if(T){const wet=cur.wet;
   // A wet road is not merely a damp one: it goes darker, glassier and it
@@ -1539,26 +1541,30 @@ function snapWeather(k){const p=WX[k];
  applyWeatherVisuals();refreshEnv();}
 
 /* ============ thunderstorm: lightning flash + delayed thunder ============ */
-let lightningFlash=0,lightningTimer=rand(6,14);
+let lightningFlash=0,lightningTimer=rand(5,11),lightningSeed=0;
 function updLightning(dt){
- lightningFlash=Math.max(0,lightningFlash-dt*3.2);
- if(cur.wet<0.7){lightningTimer=Math.max(lightningTimer,4);}
+ // Drizzle and snow do not create a thunderstorm. A full wet-weather session
+ // gets a real flash/bolt envelope and a delayed thunderclap instead.
+ const storm=cur.rain>=0.78&&cur.wet>=0.78;
+ lightningFlash=Math.max(0,lightningFlash-dt*4.6);
+ if(!storm){lightningTimer=Math.max(lightningTimer,4);lightningFlash=0;}
  else{
   lightningTimer-=dt;
   if(lightningTimer<=0){
-   lightningTimer=rand(6,17)/Math.max(cur.rain,0.4);
+   lightningTimer=rand(4.5,11.5);
+   lightningSeed=Math.random()*1000;
    lightningFlash=1.0;
-   const distT=rand(0.15,2.2);
-   const strength=clamp(1-distT/2.2,0.15,1);
+   const distT=rand(0.10,1.75);
+   const strength=clamp(1-distT/1.75,0.2,1);
    setTimeout(()=>AudioSys.thunder(strength),distT*1000);
   }
  }
  const tod=TOD[state.tod]||TOD.day;
- // flashes lift the whole scene, not just the key light, or the cars go
- // black between strikes while the sky is white
- sunLight.intensity=sunBase+lightningFlash*4.0;
- hemi.intensity=cur.hI*tod.hMul+lightningFlash*1.8;
- if(scene.fog)scene.fog.density=cur.fogD*(1-lightningFlash*0.35);
+ // The flash is deliberately bright and brief: light, ambient fill and fog
+ // all react together, so the entire circuit reads as a lightning strike.
+ sunLight.intensity=sunBase+lightningFlash*8.0;
+ hemi.intensity=cur.hI*tod.hMul+lightningFlash*3.2;
+ if(scene.fog)scene.fog.density=cur.fogD*(1-lightningFlash*0.52);
 }
 
 /* ============ track build ============ */
@@ -2401,11 +2407,13 @@ function buildWorld(idx){
   // One printed face for the approaching cars, plus an opaque structural
   // back. A DoubleSide textured plane made every gantry readable backwards
   // when viewed from behind and allowed the sky to show through its edge.
-  const banMat=new THREE.MeshStandardMaterial({map:bannerTex(def.name),side:THREE.FrontSide,roughness:0.7});
+  const banMat=new THREE.MeshStandardMaterial({map:bannerTex(def.name),side:THREE.FrontSide,roughness:0.7,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2});
   const ban=new THREE.Mesh(new THREE.PlaneGeometry(halfW*2+3.6,1.0),banMat);
-  ban.position.set(0,7.1,-0.35);ban.rotation.y=Math.PI;gp.add(ban);
-  const banBack=new THREE.Mesh(new THREE.BoxGeometry(halfW*2+3.6,1.0,0.14),new THREE.MeshStandardMaterial({color:0x17191d,roughness:0.82}));
-  banBack.position.set(0,7.1,-0.27);gp.add(banBack);
+  // Local -z is the approaching-car face. The rear is never a textured plane.
+  ban.position.set(0,7.1,-0.44);ban.rotation.y=Math.PI;ban.renderOrder=3;gp.add(ban);
+  const banBack=new THREE.Mesh(new THREE.BoxGeometry(halfW*2+3.6,1.0,0.20),new THREE.MeshStandardMaterial({color:0x17191d,roughness:0.82,side:THREE.FrontSide}));
+  banBack.position.set(0,7.1,-0.30);banBack.renderOrder=2;gp.add(banBack);
+  T.gantryFace={banner:ban,center:gp,yaw};
   // A bare 0 here dropped the whole gantry to world-origin height, so on any
  // circuit whose start sits above or below zero its legs ended in mid-air.
  gp.position.set(_sv.x,terrainHeightAt(_sv.x,_sv.z),_sv.z);gp.rotation.y=yaw;world.add(gp);
@@ -4740,6 +4748,16 @@ function pickDirectorShot(){
  }
  director.swoop=0;
 }
+// Only the approach-facing printed panel is ever allowed to render. The
+// opposite side is the opaque slab, so a rear view can never reveal mirrored
+// lettering even if a driver/camera is looking back through the gantry.
+function updateGantryFace(){
+ const g=T&&T.gantryFace;
+ if(!g||!g.banner||!g.center)return;
+ const nx=-Math.sin(g.yaw),nz=-Math.cos(g.yaw);
+ const dx=camera.position.x-g.center.position.x,dz=camera.position.z-g.center.position.z;
+ g.banner.visible=dx*nx+dz*nz>-0.05;
+}
 // Camera safety authority. External cameras can sit over runoff, while the
 // helmet/hood cameras sit over the tarmac; both must use the same rendered
 // surface height or a hilly circuit can put the lens under the road.
@@ -4795,9 +4813,27 @@ function cockpitFrame(speed){
   fov:clamp(86+narrow*21-wide*10,76,108)
  };
 }
+function updStartGridCamera(dt){
+ if(!cars.length)return;
+ let gx=0,gy=0,gz=0;
+ for(const c of cars){gx+=c.mesh.g.position.x;gy+=c.mesh.g.position.y;gz+=c.mesh.g.position.z;}
+ gx/=cars.length;gy/=cars.length;gz/=cars.length;
+ const yaw=player?player.hdg:0,fx=Math.sin(yaw),fz=Math.cos(yaw);
+ const side=Math.cos(yaw),sz=-Math.sin(yaw);
+ const px=gx-fx*17+side*7,pz=gz-fz*17+sz*7;
+ const floor=cameraSurfaceY(px,pz);
+ camera.position.set(px,Math.max(gy+6.2,floor+5.0),pz);
+ camera.up.set(0,1,0);
+ camera.lookAt(gx+fx*2,gy+0.45,gz+fz*2);
+ camera.fov=damp(camera.fov,58,8,dt);camera.updateProjectionMatrix();
+}
 function updCamera(dt){
  if(crashCam.active){updCrashCamera(dt);return;}
  camera.up.set(0,1,0);
+ if(state.mode==='countdown'&&player){
+  if(player.mesh.driverGroup)player.mesh.driverGroup.visible=true;
+  updStartGridCamera(dt);return;
+ }
  if(!player||state.mode==='title'||demoOn){
   director.timer-=dt;
   if(director.timer<=0||!director.target)pickDirectorShot();
@@ -5174,6 +5210,7 @@ function resetRaceSession(){
  // Clear every transient race-control, cinematic, timing and visual state
  // before the fresh grid is created.
  slowMo=0;crashCam.active=false;crashCam.timer=0;crashCam.target=null;cam.shake=0;
+ lightningFlash=0;lightningSeed=0;lightningTimer=rand(5,11);
  raceControl.vsc=0;raceControl.yellow=0;raceControl.reason='';raceControl.blueWarn=0;
  gbActive=0;gbCar=null;crossSign.clear();gbCool.clear();angerByDriver.clear();
  raceT=0;cdT=0;cdGo=0;cdLastOn=0;posTimer=0;lastPos=0;resultsShown=false;wwT=0;hypeLineT=-10;
@@ -5187,6 +5224,11 @@ function resetRaceSession(){
 }
 function beginRace(){
  resetRaceSession();
+ // A new event always opens on the visible starting grid. Do not inherit a
+ // previous TV/orbit/top/helmet view, which could point away from the cars.
+ state.camMode=0;
+ if($('hCam'))$('hCam').textContent='CHASE';
+ if($('hCamChip'))$('hCamChip').textContent='CHASE';
  state.name=$('tName').value.trim()||'YOU';
  saveDriverProfile();
  Speech.enabled=$('tSpeech').classList.contains('on');
@@ -6126,6 +6168,7 @@ function tick(){
    updLightning(dtGlobal);
   }
   updCamera(state.paused?0.0001:dtGlobal);
+  updateGantryFace();
   AudioSys.update();
   TitleTheme.update();
  }catch(err){
@@ -6145,14 +6188,22 @@ function tick(){
   // fresh drops need a moment to build back up when you slow (rate 0.9).
   glassBead=damp(glassBead,beadTarget,beadTarget<glassBead?3.0:0.9,dt);
   const effRain=glassBead;
-  if(rainPass && rainShaderOn && state.mode!=='title' && (effRain>0.01||lightningFlash>0.01)){
+  if(rainPass && !rainPass.failed && rainShaderOn && state.mode!=='title' && (effRain>0.01||lightningFlash>0.01)){
    // The windshield pass does its own full-screen composite, so the grade
    // chain stands down for those frames rather than fighting it for the
    // canvas. ACES is restored first, so the look stays the same either way.
    renderer.toneMapping=BASE_TONE;
-   rainPass.renderScene(scene,camera);
-   rainPass.composite(timeSec,effRain,speedKmh,lightningFlash);
-   if(snowPass&&snowAccum>0.02)snowPass.composite(timeSec,snowAccum*(0.55+0.45*cur.snow),0.3+snowGust*0.7);
+   try{
+    rainPass.renderScene(scene,camera);
+    rainPass.composite(timeSec,Math.min(effRain*0.72,1),speedKmh,lightningFlash,lightningSeed);
+    if(snowPass&&snowAccum>0.02)snowPass.composite(timeSec,snowAccum*(0.55+0.45*cur.snow),0.3+snowGust*0.7);
+   }catch(e){
+    rainPass.failed=true;
+    renderer.setRenderTarget(null);
+    renderer.toneMapping=BASE_TONE;
+    renderer.render(scene,camera);
+    console.warn('[rain] pass disabled after render failure:',e&&e.message||e);
+   }
   }else{
    postfx.setMood({rain:cur.rain,wet:cur.wet,night:state.tod==='night',exposure:renderer.toneMappingExposure,time:timeSec});
    renderer.toneMapping=postfxActive()?THREE.NoToneMapping:BASE_TONE;
