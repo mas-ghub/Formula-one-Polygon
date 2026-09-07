@@ -22,14 +22,26 @@ const V3=(x,y,z)=>new THREE.Vector3(x,y,z);
 const nowT=()=>performance.now()/1000;
 const wrapA=a=>Math.atan2(Math.sin(a),Math.cos(a));
 const lerpAngle=(a,b,t)=>a+wrapA(b-a)*t;
-function fmtT(t){if(t==null||!isFinite(t))return'—';const m=Math.floor(t/60),s=t-m*60;return m+':'+s.toFixed(3).padStart(6,'0');}
-function fmtG(t){if(t==null)return'—';return'+'+t.toFixed(3);}
+function safeFixed(t,d,fallback='—'){const n=Number(t);return Number.isFinite(n)?n.toFixed(d):fallback;}
+function fmtT(t){if(t==null||!isFinite(t))return'—';const m=Math.floor(t/60),s=t-m*60;return m+':'+safeFixed(s,3,'0.000').padStart(6,'0');}
+function fmtG(t){const n=Number(t);return Number.isFinite(n)?'+'+safeFixed(n,3):'—';}
 // The concrete graphics tier actually in use — resolves AUTO (which adapts to
 // the device's measured FPS) down to one of ULTRA/HIGH/MED/LOW for the
 // rendering decisions (ground resolution, prop density, rain shader, etc.).
 function effQuality(){ return (qualityMgr&&qualityMgr.resolvedLevel)?qualityMgr.resolvedLevel():state.quality; }
 
-const state={mode:'boot',trackIdx:0,wx:'sun',tod:'day',laps:3,grid:20,diffMul:0.97,name:'YOU',driverPhoto:'',camMode:0,muted:false,paused:false,zoom: 52,quality:'AUTO'};
+const state={mode:'boot',trackIdx:0,wx:'sun',tod:'day',laps:3,grid:20,diffMul:0.97,name:'YOU',driverPhoto:'',camMode:0,muted:false,paused:false,zoom: 52,quality:'AUTO',ruleset:'basic'};
+// Race control is intentionally a preset rather than a hidden difficulty
+// multiplier. BASIC keeps the forgiving arcade experience; SPORTING adds the
+// most visible stewarding; FULL FIA enables the complete optional rule layer.
+const RULE_PRESETS={
+ basic:{trackLimits:false,contact:false,movingBraking:false,pitLane:false,vsc:false,flags:false,jumpStart:false,unsafeRejoin:false,drs:false,blueFlags:false},
+ sporting:{trackLimits:true,contact:true,movingBraking:true,pitLane:true,vsc:true,flags:true,jumpStart:true,unsafeRejoin:true,drs:true,blueFlags:false},
+ full:{trackLimits:true,contact:true,movingBraking:true,pitLane:true,vsc:true,flags:true,jumpStart:true,unsafeRejoin:true,drs:true,blueFlags:true}
+};
+const RULE_HINTS={basic:'ARCADE · NO STEWARD PENALTIES',sporting:'TRACK LIMITS · CONTACT · PIT LANE · VSC',full:'FULL FIA · LIMITS · FLAGS · DELTAS · PENALTIES'};
+const rulesOn=k=>!!(RULE_PRESETS[state.ruleset]||RULE_PRESETS.basic)[k];
+function currentRules(){return RULE_PRESETS[state.ruleset]||RULE_PRESETS.basic;}
 const PROFILE_KEY='polygon_gp_driver_profile_v1';
 function loadDriverProfile(){try{const p=JSON.parse(localStorage.getItem(PROFILE_KEY)||'{}');state.name=p.name||'YOU';state.driverPhoto=p.photo||'';}catch(e){}}
 function saveDriverProfile(){try{localStorage.setItem(PROFILE_KEY,JSON.stringify({name:state.name,photo:state.driverPhoto}));}catch(e){console.warn('Driver profile could not be stored',e);}}
@@ -44,7 +56,7 @@ const TOD={
  dusk:{sunMul:0.72,hMul:0.8,expMul:1.08,skyMul:0.78,el:0.13,az:1.9 ,haze:0.9 ,stars:0.15,cool:0.15},
  night:{sunMul:0.22,hMul:0.42,expMul:1.35,skyMul:0.3,el:0.28,az:3.6 ,haze:0.25,stars:1.0,cool:0.55}
 };
-const CAM_NAMES=['CHASE','HOOD','HALO','TV','ORBIT','TOP'];
+const CAM_NAMES=['CHASE','HOOD','IMMERSIVE','HELMET','TV','ORBIT','TOP'];
 
 /* ============ drivers ============ */
 // 2026 season grid — real team colours (OpenF1 / F1 live-timing hexes).
@@ -382,6 +394,14 @@ finishClose:['What a finish! Absolute scenes at the line!','They cross the line 
 giveBack:['That overtake was off the track — give the place back to {d}!','{d} is furious! You cut the corner — hand the position back!','Off track! Give {d} the place back right now!','The stewards are watching — hand that place back to {d}!','{d} is absolutely raging! That was illegal — give it back!','You gained an advantage off track — {d} wants it back!'],
 angry:['{d} is livid — he will remember that!','{d} waves his fist — that was a divebomb!','{d} is seeing red after that hit!','{d} is furious — you are on thin ice!'],
 apology:['Stewards are taking a look at that one.','Getting messy out there — the stewards are onto it.'],
+contact:['A little wheel-to-wheel contact there — both cars are still going.','That was a nudge in the midfield, but they keep it pointed straight.','Light contact between the two cars — no major damage reported.'],
+recovery:['The car is back up to speed — systems recovered.','Good work, the damage countdown is clear. Keep pushing.'],
+animal:['Animal on the track! Eyes up through the next sector.','There is wildlife crossing ahead — stay alert and leave it room.','A small animal is running across the racing line.'],
+terminal:['Huge accident in the barriers — the driver is out of the race.','That is a terminal shunt; marshals are heading to the wreck.'],
+penalty:['Race control: five-second penalty for {r}.','Stewards have issued a penalty — {r}.','That is noted by race control: {r}.'],
+vsc:['Virtual safety car deployed. Hold the delta and no overtaking.','VSC — slow down, respect the delta, and keep your distance.'],
+flag:['Yellow flags ahead — no overtaking through the incident zone.','Race control has yellow flags out. Lift and leave space.'],
+blue:['Blue flags — the leaders are approaching. Let them through safely.'],
 };
 const ATT_LINES=[
 'Welcome to {track}, for the Polygon Grand Prix.',
@@ -1044,19 +1064,37 @@ const smoke=makePointsSys(700,THREE.NormalBlending);smoke.pts.renderOrder=3;
 // point cloud needs real headroom for a wall of them on a big shunt.
 const sparks=makePointsSys(600,THREE.AdditiveBlending);
 const debris=[];
+function ejectDriverHelmet(c){
+ // The visual is a detached helmet/head assembly, not a raw sphere: at speed
+ // it is immediately readable as the driver's head leaving the cockpit.
+ if(!c.mesh||!c.mesh.helmetGroup)return;
+ c.mesh.g.updateMatrixWorld(true);
+ const wp=new THREE.Vector3();c.mesh.helmetGroup.getWorldPosition(wp);
+ const head=c.mesh.helmetGroup.clone(true);
+ head.position.copy(wp);head.rotation.set(0,c.hdg+rand(-0.35,0.35),0);head.scale.setScalar(1.08);
+ head.visible=true;scene.add(head);
+ const fx=Math.sin(c.hdg),fz=Math.cos(c.hdg);
+ debris.push({m:head,vx:c.vx-fx*6+rand(-4,4),vy:rand(8,13),vz:c.vz-fz*6+rand(-4,4),rx:rand(-12,12),ry:rand(-15,15),rz:rand(-12,12),life:9,dispose:false,helmet:true});
+ if(c.mesh.driverGroup)c.mesh.driverGroup.visible=false;
+}
 function shedCarParts(c){
  const fx=Math.sin(c.hdg),fz=Math.cos(c.hdg);
- for(let i=0;i<9;i++){
+ for(let i=0;i<12;i++){
   const mat=new THREE.MeshStandardMaterial({color:i%3===0?c.d.colB:(i%2?c.d.colA:0x17181b),roughness:0.55,metalness:0.45});
   const m=new THREE.Mesh(new THREE.BoxGeometry(rand(.12,.48),rand(.025,.12),rand(.18,.65)),mat);
   m.position.set(c.x+rand(-.7,.7),c.y+rand(.25,.9),c.z+rand(-1.5,1.5));scene.add(m);
-  debris.push({m,vx:c.vx+rand(-9,9)-fx*4,vy:rand(3,10),vz:c.vz+rand(-9,9)-fz*4,rx:rand(-9,9),rz:rand(-9,9),life:8});
+  debris.push({m,vx:c.vx+rand(-9,9)-fx*4,vy:rand(3,10),vz:c.vz+rand(-9,9)-fz*4,rx:rand(-9,9),ry:rand(-7,7),rz:rand(-9,9),life:8});
  }
+ ejectDriverHelmet(c);
+}
+function disposeDebrisObject(m){
+ if(!m||!m.traverse)return;
+ m.traverse(o=>{if(!o.isMesh)return;if(o.geometry)o.geometry.dispose();if(o.material){const mats=Array.isArray(o.material)?o.material:[o.material];for(const mat of mats)mat.dispose();}});
 }
 function updDebris(dt){for(let i=debris.length-1;i>=0;i--){const d=debris[i];d.life-=dt;d.vy-=18*dt;
- d.m.position.x+=d.vx*dt;d.m.position.y+=d.vy*dt;d.m.position.z+=d.vz*dt;d.m.rotation.x+=d.rx*dt;d.m.rotation.z+=d.rz*dt;
- const floor=T?getTrackHAtCoords(d.m.position.x,d.m.position.z):0;if(d.m.position.y<floor+.04){d.m.position.y=floor+.04;d.vy=Math.abs(d.vy)*.18;d.vx*=.82;d.vz*=.82;}
- if(d.life<=0){scene.remove(d.m);d.m.geometry.dispose();d.m.material.dispose();debris.splice(i,1);}}}
+ d.m.position.x+=d.vx*dt;d.m.position.y+=d.vy*dt;d.m.position.z+=d.vz*dt;d.m.rotation.x+=d.rx*dt;d.m.rotation.y+=(d.ry||0)*dt;d.m.rotation.z+=d.rz*dt;
+ const floor=T?getTrackHAtCoords(d.m.position.x,d.m.position.z):0;if(d.m.position.y<floor+.04){d.m.position.y=floor+.04;d.vy=Math.abs(d.vy)*.18;d.vx*=.82;d.vz*=.82;d.rx*=.72;d.ry*=.72;d.rz*=.72;}
+ if(d.life<=0){scene.remove(d.m);if(d.dispose!==false)disposeDebrisObject(d.m);debris.splice(i,1);}}}
 function puff(S,x,y,z,vx,vy,vz,size,life,r,g,b,grav=0){
  const i=S.i;S.i=(S.i+1)%S.n;
  S.px[i]=x;S.py[i]=y;S.pz[i]=z;S.vx[i]=vx;S.vy[i]=vy;S.vz[i]=vz;
@@ -1275,7 +1313,7 @@ function updFlybyPlane(dt){
   const scheme=pick(schemes);flybyPlane.userData.smoke=scheme.map(c=>new THREE.Color(c));
   flybyPlane.userData.bodyMat.color.set(pick([0xf2f4f7,0x202936,0xf0c419,0x39a7d8]));flybyPlane.userData.accentMat.color.set(scheme[0]);
   flybyPlane.rotation.y=a;flybyPlane.visible=true;
-  if(AudioSys.started)AudioSys.jetFlyby();
+  if(AudioSys.started)AudioSys.jetFlyby(1.15);
  }
  flybyPlane.position.x+=flybyPlane.userData.vx*dt;flybyPlane.position.z+=flybyPlane.userData.vz*dt;
  // Red-Arrows-style three-colour smoke from three outlets. It hangs and
@@ -1336,6 +1374,84 @@ function updBirds(dt){
   const f=Math.sin(timeSec*b.fs+b.ph)*amp;
   b.rw.rotation.z=-f*1.05;b.lw.rotation.z=f*1.05;
   b.rw.rotation.y=-.12+f*.10;b.lw.rotation.y=.12-f*.10;
+ }
+}
+
+/* ============ trackside wildlife ============
+   Small, deliberately low-poly animals use short track-normal crossings. They
+   are not random physics obstacles: the spawn is checked against the pack,
+   they warn the player at readable distance, and a close approach makes them
+   sprint clear rather than turning a wildlife moment into an unfair race end. */
+const trackAnimals=[];
+let animalTimer=14;
+function makeAnimals(){
+ const furMats=[0x8d5c3d,0x6e4834,0x9a7651,0x3c3a35,0xb58355].map(c=>new THREE.MeshStandardMaterial({color:c,roughness:0.95}));
+ const bellyMat=new THREE.MeshStandardMaterial({color:0xd5b58f,roughness:1});
+ const eyeMat=new THREE.MeshStandardMaterial({color:0x111215,roughness:0.6});
+ for(let i=0;i<6;i++){
+  const g=new THREE.Group();
+  const fur=furMats[i%furMats.length];
+  const body=new THREE.Mesh(new THREE.IcosahedronGeometry(0.34,1),fur);body.scale.set(0.72,0.58,1.28);body.position.y=0.43;g.add(body);
+  const belly=new THREE.Mesh(new THREE.IcosahedronGeometry(0.23,1),bellyMat);belly.scale.set(0.8,0.7,0.7);belly.position.set(0,0.40,0.26);g.add(belly);
+  const head=new THREE.Mesh(new THREE.IcosahedronGeometry(0.22,1),fur);head.position.set(0,0.62,0.45);g.add(head);
+  for(const side of[-1,1]){
+   const ear=new THREE.Mesh(new THREE.ConeGeometry(0.075,0.28,4),fur);ear.position.set(side*.12,0.88,0.42);ear.rotation.z=side*.18;g.add(ear);
+   const eye=new THREE.Mesh(new THREE.SphereGeometry(0.027,5,4),eyeMat);eye.position.set(side*.13,0.68,0.62);g.add(eye);
+   for(const z of[-.22,.22]){const leg=new THREE.Mesh(new THREE.BoxGeometry(0.075,0.34,0.075),fur);leg.position.set(side*.16,0.17,z);g.add(leg);}
+  }
+  const tail=new THREE.Mesh(new THREE.SphereGeometry(0.13,6,5),bellyMat);tail.scale.set(.8,.8,1.25);tail.position.set(0,0.58,-.45);g.add(tail);
+  g.visible=false;scene.add(g);
+  trackAnimals.push({g,x:0,z:0,vx:0,vz:0,active:false,phase:rand(0,9),speed:0,warned:false,hit:false});
+ }
+}
+function resetAnimals(){
+ animalTimer=rand(10,22);
+ for(const a of trackAnimals){a.active=false;a.g.visible=false;a.warned=false;a.hit=false;}
+}
+function spawnAnimal(){
+ if(!T||!player||!trackAnimals.length)return;
+ const a=trackAnimals.find(x=>!x.active);if(!a)return;
+ const fi=(Math.floor(player.f)+Math.floor(rand(72,190)))%T.N;
+ const s=T.samples[fi];
+ const side=Math.random()<0.5?1:-1;
+ const halfW=(TRACKS[state.trackIdx]&&TRACKS[state.trackIdx].width!==undefined?TRACKS[state.trackIdx].width:14)/2;
+ const start=halfW+rand(3.6,7.2),speed=rand(4.8,7.4);
+ a.x=s.p.x+s.n.x*start*side;a.z=s.p.z+s.n.z*start*side;
+ a.vx=-s.n.x*side*speed;a.vz=-s.n.z*side*speed;
+ a.speed=speed;a.phase=rand(0,9);a.warned=false;a.hit=false;a.active=true;a.g.visible=true;
+ a.g.rotation.y=Math.atan2(a.vx,a.vz);
+}
+function updAnimals(dt){
+ const activeMode=state.mode==='race'||state.mode==='countdown'||state.mode==='finished';
+ if(!activeMode||!T||!player){for(const a of trackAnimals)a.g.visible=false;return;}
+ animalTimer-=dt;
+ if(animalTimer<=0){animalTimer=rand(18,36);spawnAnimal();}
+ for(const a of trackAnimals){
+  if(!a.active){a.g.visible=false;continue;}
+  a.x+=a.vx*dt;a.z+=a.vz*dt;
+  const y=getTrackHAtCoords(a.x,a.z);
+  a.g.position.set(a.x,y+0.04+Math.abs(Math.sin(timeSec*9+a.phase))*.03,a.z);
+  a.g.rotation.y=Math.atan2(a.vx,a.vz);
+  const stride=Math.sin(timeSec*13+a.phase)*0.42;
+  let li=0;
+  a.g.children.forEach((part)=>{if(part.geometry&&part.geometry.type==='BoxGeometry'&&part.position.y<0.3){part.rotation.x=stride*(li%2?-1:1);li++;}});
+  const pd=Math.hypot(a.x-player.x,a.z-player.z);
+  if(pd<42&&!a.warned){
+   a.warned=true;
+   Speech.say(pick(LINES.animal),true,{rate:1.05,pitch:1.08});
+   if(player.vF>18)cam.shake=Math.max(cam.shake,.06);
+  }
+  // Wildlife has a visible close-pass response but no punitive car damage.
+  // If a car reaches the animal, it bolts off the line and the broadcast calls
+  // the moment rather than allowing a tiny prop to wreck a race.
+  for(const c of cars){
+   const cd=Math.hypot(a.x-c.x,a.z-c.z);
+   if(cd<2.2){
+    if(c.isPlayer&&!a.hit){a.hit=true;cam.shake=Math.max(cam.shake,.12);Speech.say('Clear! The animal has made it safely across.',true,{rate:1.0,pitch:1.06});}
+    a.vx*=1.35;a.vz*=1.35;
+   }
+  }
+  if(pd>250||Math.hypot(a.x-player.x,a.z-player.z)>320||a.hit&&pd>26){a.active=false;a.g.visible=false;}
  }
 }
 
@@ -2253,9 +2369,14 @@ function buildWorld(idx){
   for(let i=0;i<5;i++){const m=new THREE.MeshBasicMaterial({color:0x230c0a});
    T.lampMats.push(m);const lamp=new THREE.Mesh(new THREE.SphereGeometry(0.2,8,6),m);
    lamp.position.set((i-2)*1.15,7.55,-0.35);gp.add(lamp);}
-  const ban=new THREE.Mesh(new THREE.PlaneGeometry(halfW*2+3.6,1.0),
-   new THREE.MeshStandardMaterial({map:bannerTex(def.name),side:THREE.DoubleSide,roughness:0.7}));
-  ban.position.set(0,7.1,-0.35);gp.add(ban);
+  // One printed face for the approaching cars, plus an opaque structural
+  // back. A DoubleSide textured plane made every gantry readable backwards
+  // when viewed from behind and allowed the sky to show through its edge.
+  const banMat=new THREE.MeshStandardMaterial({map:bannerTex(def.name),side:THREE.FrontSide,roughness:0.7});
+  const ban=new THREE.Mesh(new THREE.PlaneGeometry(halfW*2+3.6,1.0),banMat);
+  ban.position.set(0,7.1,-0.35);ban.rotation.y=Math.PI;gp.add(ban);
+  const banBack=new THREE.Mesh(new THREE.BoxGeometry(halfW*2+3.6,1.0,0.14),new THREE.MeshStandardMaterial({color:0x17191d,roughness:0.82}));
+  banBack.position.set(0,7.1,-0.27);gp.add(banBack);
   // A bare 0 here dropped the whole gantry to world-origin height, so on any
  // circuit whose start sits above or below zero its legs ended in mid-air.
  gp.position.set(_sv.x,terrainHeightAt(_sv.x,_sv.z),_sv.z);gp.rotation.y=yaw;world.add(gp);
@@ -2308,7 +2429,7 @@ function buildWorld(idx){
    tex.colorSpace=THREE.SRGBColorSpace;
    // Bright, two-sided print with a slight self-lit lift: readable at dusk and
    // in rain without turning into a bloomy light source.
-   const am=new THREE.MeshStandardMaterial({map:tex,roughness:0.62,side:THREE.DoubleSide,emissive:0xffffff,emissiveMap:tex,emissiveIntensity:0.12});
+   const am=new THREE.MeshStandardMaterial({map:tex,roughness:0.62,side:THREE.FrontSide,emissive:0xffffff,emissiveMap:tex,emissiveIntensity:0.12});
    const yaw=Math.atan2(_st.x,_st.z);
    // Just beyond the safety barrier, never on the driving surface, and close
    // enough that its face fills useful screen space as the player passes.
@@ -2322,7 +2443,7 @@ function buildWorld(idx){
    const slab=new THREE.Mesh(new THREE.BoxGeometry(12.5,3.1,0.24),new THREE.MeshStandardMaterial({color:0x15171b,roughness:.7}));
    slab.position.set(bx,by+2.35,bz);slab.rotation.y=yaw+Math.PI/2;slab.castShadow=true;world.add(slab);
    const w=new THREE.Mesh(new THREE.PlaneGeometry(12.2,2.8),am);
-   w.position.set(bx,by+2.35,bz);w.lookAt(_sv.x,by+2.35,_sv.z);w.translateZ(.14);w.renderOrder=2;world.add(w);
+   w.position.set(bx,by+2.35,bz);w.lookAt(_sv.x,by+2.35,_sv.z);w.rotateY(Math.PI);w.translateZ(.14);w.renderOrder=2;world.add(w);
    // Wooden legs at either end along the track direction.
    const lx=_st.x,lz=_st.z;
    for(const s of[1,-1]){
@@ -2585,7 +2706,7 @@ function buildWorld(idx){
   dcx.fillText('DRS',128,42);
   dcx.fillStyle='#ffe600';dcx.font='700 18px sans-serif';dcx.fillText('▼ ZONE ▼',128,80);
   const drsTex=ctex(dcn,false);
-  const drsMat=new THREE.MeshStandardMaterial({map:drsTex,roughness:0.7,side:THREE.DoubleSide});
+  const drsMat=new THREE.MeshStandardMaterial({map:drsTex,roughness:0.7,side:THREE.FrontSide});
   let lastB=-999,nB=0;
   for(let i=70;i<N-70;i+=24){
    if(Math.abs(samples[i].curv)>0.006||i-lastB<120)continue;
@@ -2595,8 +2716,10 @@ function buildWorld(idx){
    const by=terrainHeightAt(bx,bz);
    const b=new THREE.Mesh(new THREE.PlaneGeometry(5.4,2.6),drsMat);
    b.position.set(bx,by+1.6,bz);
-   b.lookAt(bx-s.n.x*sg*6,by+1.6,bz-s.n.z*sg*6);
-   world.add(b);
+   b.lookAt(bx-s.n.x*sg*6,by+1.6,bz-s.n.z*sg*6);b.rotateY(Math.PI);b.translateZ(.08);
+   const bBack=new THREE.Mesh(new THREE.BoxGeometry(5.4,2.6,.16),new THREE.MeshStandardMaterial({color:0x22262c,roughness:.85}));
+   bBack.position.copy(b.position);bBack.quaternion.copy(b.quaternion);bBack.translateZ(-.10);
+   world.add(bBack,b);
    // Two wooden legs either end, straight into the ground.
    for(const so of[1,-1]){
     const leg=new THREE.Mesh(new THREE.CylinderGeometry(0.09,0.11,1.6,6),woodLegMat);
@@ -2625,10 +2748,12 @@ function buildWorld(idx){
     const j=(i-dist+N)%N,sj=samples[j];
     const bx=sj.p.x+sj.n.x*(T.latLimit+2.8)*sg,bz=sj.p.z+sj.n.z*(T.latLimit+2.8)*sg;
     const by=terrainHeightAt(bx,bz);
-    const p=new THREE.Mesh(new THREE.PlaneGeometry(2.8*big,2.1*big),new THREE.MeshStandardMaterial({map:txtTex,roughness:0.8,side:THREE.DoubleSide}));
+    const p=new THREE.Mesh(new THREE.PlaneGeometry(2.8*big,2.1*big),new THREE.MeshStandardMaterial({map:txtTex,roughness:0.8,side:THREE.FrontSide}));
     p.position.set(bx,by+1.15*big,bz);
-    p.lookAt(bx-sj.n.x*sg*4,by+1.15*big,bz-sj.n.z*sg*4);
-    world.add(p);
+    p.lookAt(bx-sj.n.x*sg*4,by+1.15*big,bz-sj.n.z*sg*4);p.rotateY(Math.PI);p.translateZ(.07);
+    const pBack=new THREE.Mesh(new THREE.BoxGeometry(2.8*big,2.1*big,.14),new THREE.MeshStandardMaterial({color:0x30343a,roughness:.86}));
+    pBack.position.copy(p.position);pBack.quaternion.copy(p.quaternion);pBack.translateZ(-.09);
+    world.add(pBack,p);
     // Wooden signposts holding the board up.
     for(const so of[1,-1]){
      const leg=new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.08,1.3*big,6),woodLegMat);
@@ -2646,7 +2771,7 @@ function buildWorld(idx){
  //     Two crossed planes per tuft, one draw call for the whole circuit, so
  //     even thousands of tufts cost next to nothing.
  {
-  const nTuft=Math.round((groundStyle==='grass'?(def.theme==='forest'?1500:1250):0)*propDensity);
+  const nTuft=Math.round((groundStyle==='grass'?(def.theme==='forest'?2200:def.theme==='park'?1800:1500):0)*propDensity);
   if(nTuft>8){
    const bladeG=new THREE.PlaneGeometry(0.9,0.55,1,1);
    bladeG.translate(0,0.24,0);
@@ -2687,7 +2812,7 @@ function buildWorld(idx){
  // (conifer / round broadleaf / slender poplar) mixed by theme, instead of
  // one repeated cone, so the scenery doesn't look so uniform.
  {
-  const nT=Math.round((groundStyle==='grass'?(def.theme==='forest'?640:def.theme==='park'?320:90):0)*propDensity);
+  const nT=Math.round((groundStyle==='grass'?(def.theme==='forest'?900:def.theme==='park'?520:180):0)*propDensity);
   const weights=def.theme==='forest'?[0.55,0.3,0.15]:[0.2,0.55,0.25];
   const species=[
    {canopyGeo:new THREE.ConeGeometry(2.1,5.2,7),canopyY:2.5,canopyScaleY:1,trunkH:2.3,trunkR0:0.32,trunkR1:0.48,trunkColor:0x6b4a2f,hue:[0.26,0.36],sat:[0.4,0.62],light:[0.22,0.36]},
@@ -2738,6 +2863,68 @@ function buildWorld(idx){
    if(canopy.instanceColor)canopy.instanceColor.needsUpdate=true;
    canopy.userData.base=canopy.instanceColor?Float32Array.from(canopy.instanceColor.array):null;
    T.canopyMats.push(canopy);world.add(canopy,trunk);
+  }
+ }
+
+ // 10a. Layered undergrowth and plantation pockets. The old verge scattered
+ // one scale of tree; this adds readable foreground shrubs, fern clumps,
+ // flowering ground dots and deliberate young-tree rows so passing scenery has
+ // depth and rhythm instead of a sparse random wall.
+ {
+  const isGrass=groundStyle==='grass';
+  const shrubN=Math.round((isGrass?(def.theme==='forest'?1450:def.theme==='park'?1050:700):0)*propDensity);
+  if(shrubN>8){
+   const shrubGeo=new THREE.IcosahedronGeometry(0.42,0);
+   const fernGeo=new THREE.ConeGeometry(0.28,0.9,5);
+   const flowerGeo=new THREE.SphereGeometry(0.075,5,4);
+   const shrub=new THREE.InstancedMesh(shrubGeo,new THREE.MeshStandardMaterial({color:0xffffff,roughness:1}),shrubN);
+   const fern=new THREE.InstancedMesh(fernGeo,new THREE.MeshStandardMaterial({color:0xffffff,roughness:1}),shrubN);
+   const flower=new THREE.InstancedMesh(flowerGeo,new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.9}),shrubN);
+   const uDummy=new THREE.Object3D(),uCol=new THREE.Color(),fCol=new THREE.Color();
+   let placed=0,tries=0;
+   while(placed<shrubN&&tries<shrubN*5){
+    tries++;
+    // Pick a parent verge point, then jitter around it: clustered planting
+    // reads as a hedge/woodland edge rather than uniform procedural noise.
+    const parent=samples[Math.floor(Math.random()*N)],side=Math.random()<0.5?1:-1;
+    const lat=rand(T.latLimit+2.5,T.latLimit+34),along=rand(-8,8);
+    const x=parent.p.x+parent.n.x*lat*side+parent.t.x*along;
+    const z=parent.p.z+parent.n.z*lat*side+parent.t.z*along;
+    if(minTrackDist(x,z)<T.latLimit+3.2)continue;
+    const y=terrainHeightAt(x,z),sc=rand(.55,1.55);
+    uDummy.position.set(x,y+0.22*sc,z);uDummy.rotation.set(0,rand(0,6),0);uDummy.scale.set(sc,sc*rand(.7,1.25),sc);uDummy.updateMatrix();
+    shrub.setMatrixAt(placed,uDummy.matrix);
+    uCol.setHSL(rand(.22,.38),rand(.42,.72),rand(.18,.36));shrub.setColorAt(placed,uCol);
+    uDummy.position.set(x+rand(-.28,.28),y+0.45*sc,z+rand(-.28,.28));uDummy.rotation.set(0,rand(0,6),rand(-.12,.12));uDummy.scale.set(sc*.8,sc*rand(.65,1.2),sc*.8);uDummy.updateMatrix();
+    fern.setMatrixAt(placed,uDummy.matrix);uCol.setHSL(rand(.24,.42),rand(.38,.68),rand(.22,.42));fern.setColorAt(placed,uCol);
+    uDummy.position.set(x+rand(-.34,.34),y+rand(.18,.48),z+rand(-.34,.34));uDummy.rotation.set(0,rand(0,6),0);uDummy.scale.setScalar(rand(.7,1.5));uDummy.updateMatrix();
+    flower.setMatrixAt(placed,uDummy.matrix);fCol.setHSL(pick([.03,.10,.56,.76]),.82,.62);flower.setColorAt(placed,fCol);
+    placed++;
+   }
+   shrub.count=fern.count=flower.count=placed;
+   for(const m of[shrub,fern,flower]){m.instanceMatrix.needsUpdate=true;if(m.instanceColor)m.instanceColor.needsUpdate=true;m.castShadow=true;world.add(m);}
+  }
+  // Young trees in rows make a few venues feel planted rather than merely
+  // decorated. Their count is modest and follows the existing prop budget.
+  const sapN=Math.round((isGrass?(def.theme==='forest'?300:def.theme==='park'?180:90):0)*propDensity);
+  if(sapN>6){
+   const sapGeo=new THREE.ConeGeometry(.62,2.4,6),sapTrunkGeo=new THREE.CylinderGeometry(.09,.14,1.2,5);
+   const sap=new THREE.InstancedMesh(sapGeo,new THREE.MeshStandardMaterial({color:0xffffff,roughness:1}),sapN);
+   const sapTrunk=new THREE.InstancedMesh(sapTrunkGeo,new THREE.MeshStandardMaterial({color:0x65442c,roughness:1}),sapN);
+   const sd=new THREE.Object3D(),sc=new THREE.Color();let placed=0,tries=0;
+   while(placed<sapN&&tries<sapN*6){
+    tries++;const base=samples[Math.floor(Math.random()*N)],side=Math.random()<.5?1:-1;
+    const row=placed%3,along=(Math.floor(placed/3)%10-4.5)*4.2;
+    const lat=T.latLimit+rand(24,44)+row*3.2;
+    const x=base.p.x+base.n.x*lat*side+base.t.x*along,z=base.p.z+base.n.z*lat*side+base.t.z*along;
+    if(minTrackDist(x,z)<T.latLimit+15)continue;
+    const y=terrainHeightAt(x,z),h=rand(.75,1.25);
+    sd.position.set(x,y+1.2*h,z);sd.rotation.set(0,rand(0,6),0);sd.scale.set(h,h,h);sd.updateMatrix();sap.setMatrixAt(placed,sd.matrix);
+    sc.setHSL(rand(.23,.34),rand(.45,.7),rand(.22,.38));sap.setColorAt(placed,sc);
+    sd.position.set(x,y+.6*h,z);sd.scale.set(h,h,h);sd.updateMatrix();sapTrunk.setMatrixAt(placed,sd.matrix);placed++;
+   }
+   sap.count=sapTrunk.count=placed;sap.instanceMatrix.needsUpdate=sapTrunk.instanceMatrix.needsUpdate=true;
+   if(sap.instanceColor)sap.instanceColor.needsUpdate=true;sap.castShadow=true;sapTrunk.castShadow=true;world.add(sap,sapTrunk);
   }
  }
 
@@ -2807,8 +2994,8 @@ function buildWorld(idx){
    const roof=new THREE.Mesh(new THREE.BoxGeometry(16,0.8,5.6),new THREE.MeshStandardMaterial({color:roofColor,roughness:0.5}));
    roof.position.set(bx,by+8.4,bz);roof.rotation.y=yaw;roof.castShadow=true;world.add(roof);
    const[cn,cx]=mkCanvas(512,96);cx.fillStyle='#15171b';cx.fillRect(0,0,512,96);cx.fillStyle='#f5eee0';cx.font='700 48px sans-serif';cx.textAlign='center';cx.textBaseline='middle';cx.fillText(text,256,50);
-   const signMat=new THREE.MeshStandardMaterial({map:ctex(cn,false),emissive:0x171717,emissiveIntensity:0.35,side:THREE.DoubleSide});
-   const sign=new THREE.Mesh(new THREE.PlaneGeometry(12,2.25),signMat);sign.position.set(bx,by+4.4,bz);sign.lookAt(_sv.x,by+4.4,_sv.z);sign.translateZ(2.56);world.add(sign);
+   const signMat=new THREE.MeshStandardMaterial({map:ctex(cn,false),emissive:0x171717,emissiveIntensity:0.35,side:THREE.FrontSide});
+   const sign=new THREE.Mesh(new THREE.PlaneGeometry(12,2.25),signMat);sign.position.set(bx,by+4.4,bz);sign.lookAt(_sv.x,by+4.4,_sv.z);sign.rotateY(Math.PI);sign.translateZ(2.56);world.add(sign);
   };
   if(def.name==='Monaco'){
    landmarkSign('CASINO DE MONTE-CARLO',0.23,1,0xd2bd9a,0x8f2636);
@@ -2852,8 +3039,8 @@ function buildWorld(idx){
    const roof=new THREE.Mesh(new THREE.BoxGeometry(16,0.8,5.6),mat(roofColor,0.5));
    roof.position.set(s.x,s.y+8.4,s.z);roof.rotation.y=s.yaw;roof.castShadow=true;world.add(roof);
    const[cn,cx]=mkCanvas(512,96);cx.fillStyle='#15171b';cx.fillRect(0,0,512,96);cx.fillStyle='#f5eee0';cx.font='700 48px sans-serif';cx.textAlign='center';cx.textBaseline='middle';cx.fillText(text,256,50);
-   const signMat=new THREE.MeshStandardMaterial({map:ctex(cn,false),emissive:0x171717,emissiveIntensity:0.35,side:THREE.DoubleSide});
-   const sign=new THREE.Mesh(new THREE.PlaneGeometry(12,2.25),signMat);sign.position.set(s.x,s.y+4.4,s.z);sign.lookAt(s.cx,s.y+4.4,s.cz);sign.translateZ(2.56);world.add(sign);
+   const signMat=new THREE.MeshStandardMaterial({map:ctex(cn,false),emissive:0x171717,emissiveIntensity:0.35,side:THREE.FrontSide});
+   const sign=new THREE.Mesh(new THREE.PlaneGeometry(12,2.25),signMat);sign.position.set(s.x,s.y+4.4,s.z);sign.lookAt(s.cx,s.y+4.4,s.cz);sign.rotateY(Math.PI);sign.translateZ(2.56);world.add(sign);
   };
   const mat=(color,rough=0.78,emissive=0,ei=0)=>new THREE.MeshStandardMaterial({color,roughness:rough,emissive,emissiveIntensity:ei});
   const block=(s,w,h,d,color,roofColor=color)=>{
@@ -3133,11 +3320,16 @@ function buildWorld(idx){
 
  buildMinimapPath();
  clearSkids();
+ resetAnimals();
 }
 
 /* ============ cars — true heading-based physics, zero auto-steer ============ */
 let cars=[],player=null;
 const PH={top:79,eng:20,brk:26,drag:0.00115};
+const GEAR_COUNT=8;
+// Eight forward automatic ratios. The final upshift is reachable before the
+// 284 km/h top speed; the last 294 km/h value is only the redline ceiling.
+const GEAR_BANDS_KMH=[0,46,78,108,138,170,204,240,294];
 function makeCar(d,isPlayer){
  const mesh=makeCarMesh(d);scene.add(mesh.g);
  return{d,isPlayer,mesh,x:0,z:0,hdg:0,vx:0,vz:0,vF:0,ti:0,f:0,_pf:0,lat:0,
@@ -3147,6 +3339,11 @@ function makeCar(d,isPlayer){
   offT:false,onCurb:false,_pv:0,stuck:0,pDiff:0,recT:0,recPhase:0,recSteer:0,
   crash:0,crashMax:0,crashSpark:0,
   onGravel:false,inTunnel:false,gravelT:0,
+  // Optional race-control state. Penalties are time-added at the flag; the
+  // cooldown maps prevent one long excursion from spamming violations.
+  penalties:[],penaltySec:0,ruleCooldowns:{},trackLimitWarnings:0,offPrev:false,
+  pitLane:false,pitRequest:false,pitLimiter:false,pitDist:0,vscDelta:0,
+  jumpStart:false,lastBrakeMove:0,
   phase:rand(0,9),pos:1,near:null,shiftT:0,hitT:0,reactT:0,dustT:0,exT:0};
 }
 function setupGrid(gridSize){
@@ -3180,6 +3377,8 @@ function gridPlace(){
   c.f=T.N-14-i*3.6;c._pf=c.f;c.lat=(i%2?3:-3)*0.95;
   c.lap=0;c.best=null;c.finished=false;c.finishTime=null;c.wheelspin=0;c.drsOpen=false;
   c.lapStart=0;c.stuck=0;c.hitT=0;c.recT=0;c.crash=0;c.crashMax=0;c.wrecked=false;c.steer=0;c.pDiff=0;c.slipstream=false;
+  c.penalties=[];c.penaltySec=0;c.ruleCooldowns={};c.trackLimitWarnings=0;c.offPrev=false;
+  c.pitLane=false;c.pitRequest=false;c.pitLimiter=false;c.pitDist=0;c.vscDelta=0;c.jumpStart=false;c.lastBrakeMove=0;
   placeCar(c);
   c.key=c.lap*T.N+c.f;
   c.mesh.g.updateMatrixWorld();
@@ -3400,6 +3599,8 @@ function aiThink(c,dt){
  const tvLim=Math.min(Math.sqrt(46*Math.max(cur.grip,0.3)/Math.max(cmax,1e-4)),vAhead);
  let tv=tvLim*(0.88+c.d.skill*0.05)*state.diffMul;
  tv=Math.min(tv,PH.top*(0.86+c.d.skill*0.13));
+ if(raceControl.vsc>0)tv=Math.min(tv,VSC_SPEED);
+ else if(raceControl.yellow>0)tv=Math.min(tv,PH.top*0.72);
  if(ah&&ah.dist<20)tv=Math.min(tv,Math.min(ah.c.vF*1.02,ah.c.vF+(ah.dist-9)));
  const dv=tv-vF;
  c.throttle=dv>0.5?1:dv<-1.5?0:0.45;
@@ -3409,18 +3610,87 @@ function aiThink(c,dt){
 /* Slow-motion cinematic trigger for the player's big hits — a brief time
    dilation plus a tightened lens so a shunt lands with real drama. */
 let slowMo=0,slowMoDur=0.8;
+const PIT_SPEED=22.22; // 80 km/h, the standard F1 pit-lane limit
+const VSC_SPEED=27.78; // 100 km/h target used by this compact VSC model
+const raceControl={vsc:0,yellow:0,reason:'',blueWarn:0};
+function issuePenalty(c,code,seconds,reason,cooldown=5){
+ if(!c||state.mode==='title'||state.mode==='finished')return;
+ const now=raceT;
+ if((c.ruleCooldowns[code]||-99)>now)return;
+ c.ruleCooldowns[code]=now+cooldown;
+ c.penalties.push({code,seconds,reason,lap:c.lap,time:now});
+ c.penaltySec+=seconds;
+ if(c.isPlayer){
+  showMsg('PENALTY',seconds+'s · '+reason.toUpperCase(),'red',3.2);
+  Speech.say(pick(LINES.penalty).replace('{r}',reason),true,{rate:1.08,pitch:1.06});
+ }
+}
+function deployVSC(reason='INCIDENT',duration=9){
+ if(!rulesOn('vsc')||raceControl.vsc>0||state.mode!=='race')return;
+ raceControl.vsc=duration;raceControl.yellow=Math.max(raceControl.yellow,duration+3);raceControl.reason=reason;
+ showMsg('VIRTUAL SAFETY CAR','HOLD DELTA · NO OVERTAKING', 'yellow',duration);
+ Speech.say(pick(LINES.vsc),true,{rate:1.02,pitch:1.02});
+}
+function pitEntryWindow(c){
+ const f=((c.f%T.N)+T.N)%T.N;
+ return f>T.N-105||f<105;
+}
+function togglePitLimiter(){
+ if(!player||!rulesOn('pitLane')){showMsg('PIT LANE','ENABLE SPORTING OR FULL RULES','purple',2.2);return;}
+ player.pitLimiter=!player.pitLimiter;
+ player.pitRequest=true;
+ if(player.pitLane)showMsg('PIT LIMITER',player.pitLimiter?'ON · 80 KM/H':'OFF · SPEEDING RISK','yellow',1.6);
+ else showMsg('PIT ENTRY','P TO ARM · USE OUTER LANE','yellow',2.0);
+}
+function updatePitLane(c,dt){
+ if(!rulesOn('pitLane')||!c.isPlayer)return;
+ if(c.pitRequest&&pitEntryWindow(c)){c.pitLane=true;c.pitRequest=false;c.pitDist=0;showMsg('PIT LANE',c.pitLimiter?'LIMITER ON · 80 KM/H':'LIMITER OFF','yellow',2.2);}
+ if(!c.pitLane)return;
+ c.pitDist+=Math.abs(c.vF)*dt;
+ if(Math.abs(c.vF)>PIT_SPEED+1.1)issuePenalty(c,'pitSpeed',5,'pit-lane speeding',5);
+ if(c.pitLimiter&&c.vF>PIT_SPEED){const scale=PIT_SPEED/Math.max(c.vF,0.01);c.vx*=scale;c.vz*=scale;c.vF=PIT_SPEED;}
+ if(c.pitDist>190){c.pitLane=false;c.pitLimiter=false;showMsg('PIT EXIT','MERGE SAFELY','white',1.2);}
+}
+function updateTrackRuleState(c){
+ if(!rulesOn('trackLimits')&&!rulesOn('unsafeRejoin')){c.offPrev=c.offT;return;}
+ const justLeft=c.offT&&!c.offPrev;
+ const justReturned=!c.offT&&c.offPrev;
+ if(justLeft&&Math.abs(c.vF)>8){
+  c.trackLimitWarnings++;
+  if(c.isPlayer&&c.trackLimitWarnings<3)showMsg('TRACK LIMITS',c.trackLimitWarnings+'/3 WARNING','yellow',1.5);
+  if(c.trackLimitWarnings>=3&&rulesOn('trackLimits'))issuePenalty(c,'trackLimits',5,'track limits',8);
+ }
+ if(justReturned&&rulesOn('unsafeRejoin')){
+  const close=cars.find(o=>o!==c&&!o.wrecked&&Math.hypot(o.x-c.x,o.z-c.z)<5.5);
+  if(close)issuePenalty(c,'unsafeRejoin',5,'unsafe rejoin',6);
+ }
+ c.offPrev=c.offT;
+}
+function updateVSCProximity(c){
+ if(!c.isPlayer||raceControl.vsc<=0)return;
+ if(Math.abs(c.vF)>VSC_SPEED+2)issuePenalty(c,'vscSpeed',5,'VSC delta exceeded',5);
+ const ahead=nearestAhead(c);
+ if(ahead&&ahead.dist<6.5&&Math.abs(c.vF)>8)issuePenalty(c,'vscGap',5,'following too closely under VSC',6);
+ c.vscDelta=clamp((c.vscDelta||0)+(VSC_SPEED-Math.abs(c.vF))*dtGlobal,-50,50);
+}
 /* Damage / "get the energy back" recovery. A severe hit (or being slammed
    into another car) flips a car into a limping repair phase: it can still be
    steered (otherwise you'd just spin out), but it's slower and a spanner +
    countdown ring floats above it until the energy comes back in. */
 function wreckCar(c){
  if(c.wrecked)return;c.wrecked=true;c.throttle=0;c.brake=1;c.drsOpen=false;
- shedCarParts(c);sparkBurst(c.x,c.y+.35,c.z,4.5);
+ c.vx*=0.42;c.vz*=0.42;
+ shedCarParts(c);sparkBurst(c.x,c.y+.35,c.z,7.5);
+ for(let i=0;i<9;i++)smk(c.x+rand(-.8,.8),c.y+rand(.25,1.1),c.z+rand(-.8,.8),rand(-1.5,1.5),rand(1.2,3.4),rand(-1.5,1.5),rand(1.4,2.6),rand(1.2,2.5),0.18,0.18,0.20,0.5);
  if(c.isPlayer){
+  beginCrashCamera(c);
   state.mode='gameover';slowMo=1.2;slowMoDur=1.2;cam.shake=Math.max(cam.shake,.75);
-  showMsg('CRASHED OUT','TERMINAL DAMAGE','red',4);Speech.say('Heavy impact! The car is out of the race.',true,{rate:1.08,pitch:.96});
-  setTimeout(()=>{if(state.mode==='gameover')showResults();},2600);
+  showMsg('CRASHED OUT','TERMINAL DAMAGE · DRIVER EJECTED','red',4);Speech.say('Heavy impact! The car is out of the race.',true,{rate:1.08,pitch:.96});
+  setTimeout(()=>{if(state.mode==='gameover')showResults();},4500);
+ }else if(player&&Math.hypot(player.x-c.x,player.z-c.z)<95){
+  Speech.say(pick(LINES.crash),false,{rate:1.04,pitch:1.02});
  }
+ if(!c.isPlayer)deployVSC('WRECK',8);
 }
 function triggerDamage(c,sev){
   if(c.wrecked)return;
@@ -3444,6 +3714,10 @@ function wallHit(c,sgn,imp){
   const s=T.samples[c.ti];
   sparkBurst(c.x+s.n.x*sgn*1.1,0.5,c.z+s.n.z*sgn*1.1,1+Math.min(imp*0.1,3));
   if(imp>5.5)triggerDamage(c,imp*0.5);
+  if(!c.isPlayer&&imp>7&&player&&Math.hypot(player.x-c.x,player.z-c.z)<120&&timeSec-(wallHit.lastRadio||-99)>3.5){
+   wallHit.lastRadio=timeSec;
+   Speech.say(pick(imp>12?LINES.terminal:LINES.crash),false,{rate:1.02,pitch:1.0});
+  }
   if(c.isPlayer){
    cam.shake=Math.max(cam.shake,Math.min(0.7,imp*0.06));
    AudioSys.thump(Math.min(imp*0.09,0.9)+0.1);
@@ -3533,6 +3807,10 @@ function updCar(c,dt){
   if(c.crash<=0){
    c.crash=0;
    if(c.isPlayer&&state.mode==='race'){showMsg('REPAIRED','FULL ENERGY','green',1.6);AudioSys.beep(680,0.14);}
+   if(timeSec-(updCar.lastRecovery||-99)>3.5){
+    updCar.lastRecovery=timeSec;
+    Speech.say(pick(LINES.recovery),false,{rate:1.0,pitch:1.04});
+   }
   }
  }
  const dmg=c.crash>0?(1-0.42*Math.min(c.crash/c.crashMax,1)):1;
@@ -3575,6 +3853,7 @@ function updCar(c,dt){
  c.x+=c.vx*dt;c.z+=c.vz*dt;
  /* project onto track, walls */
  projectCar(c);
+ updateTrackRuleState(c);
  if(Math.abs(c.lat)>T.collideLat){
   const sgn=Math.sign(c.lat);
   const over=Math.abs(c.lat)-T.collideLat;
@@ -3602,8 +3881,8 @@ function updCar(c,dt){
  // the car's own 284 km/h top speed, so it could never be reached and the
  // box behaved like a 6/7-speed. Respaced so 8th engages at 240 km/h and
  // the rev band tops out just past vmax: every gear actually gets used.
- const bands=[0,46,78,108,138,170,204,240,294];
- let g=1;for(let b=1;b<8;b++)if(kmh>=bands[b])g=b+1;
+ const bands=GEAR_BANDS_KMH;
+ let g=1;for(let b=1;b<GEAR_COUNT;b++)if(kmh>=bands[b])g=b+1;
  if(g!==c.gear&&c.isPlayer&&kmh>8){AudioSys.shift();c.shiftT=0.09;}
  c.gear=g;
  let rpm=clamp((kmh-bands[g-1])/(bands[g]-bands[g-1]),0.12,1);
@@ -3618,11 +3897,14 @@ function updCar(c,dt){
   const ah=nearestAhead(c);
   if(ah&&ah.dist<Math.abs(vF)*1.15){c.drsOpen=true;if(ah.dist<22)c.slipstream=true;}
  }
+ if(raceControl.vsc>0||raceControl.yellow>0){c.drsOpen=false;c.slipstream=false;}
  if(c.isPlayer){
   if(c.offT&&Math.abs(vF)>14)cam.shake=Math.max(cam.shake,0.05);
   else if(c.onCurb&&Math.abs(vF)>22)cam.shake=Math.max(cam.shake,0.03);
  }
  c.vF=vF;
+ updatePitLane(c,dt);
+ updateVSCProximity(c);
 }
 /* clean world-space car-to-car contact (two circles per car, mild restitution) */
 function carCollisions(){
@@ -3631,6 +3913,7 @@ function carCollisions(){
   const A=cars[a];
   for(let b=a+1;b<cars.length;b++){
    const B=cars[b];
+   if(A.wrecked||B.wrecked)continue;
    // World-space proximity alone isn't enough: a track that loops back near
    // itself (a hairpin, or two straights running close in opposite
    // directions) can put cars a full lap-fraction apart right next to each
@@ -3664,12 +3947,24 @@ function carCollisions(){
        // just the player's — the midfield clatters like a real GP.
        sparkBurst((ax+bx)/2,0.55,(az+bz)/2,1+Math.min(imp*0.12,2));
        AudioSys.clank(Math.min(imp*0.09,0.55));
+       if(rulesOn('contact')&&(A.isPlayer||B.isPlayer)&&imp>7)
+        issuePenalty(A.isPlayer?A:B,'contact',5,'avoidable contact',8);
+       // Keep the broadcast alive for AI-to-AI racing too: a small nudge is
+       // commentary, not an automatic terminal crash.
+       if(imp<9&&timeSec-(carCollisions.lastRadio||-99)>2.8){
+        carCollisions.lastRadio=timeSec;
+        Speech.say(pick(LINES.contact),false,{rate:1.0,pitch:1.03});
+       }
        // Suspension jounce so a hit visibly rocks both cars.
        A.bounceVel=(A.bounceVel||0)-Math.min(imp*0.05,0.28);
        B.bounceVel=(B.bounceVel||0)-Math.min(imp*0.05,0.28);
        // A real shunt flips both cars into a brief limp-home recovery — you
        // can still steer (crash avoidance!) but the spanner is out.
        if(imp>4.6){triggerDamage(A,imp*0.5);triggerDamage(B,imp*0.5);}
+       // Very high closing speed is a terminal shunt even when there is no
+       // wall: preserve light AI contact, but let a genuine pack accident
+       // create the same debris/ejection spectacle as a barrier impact.
+       if(imp>12){triggerDamage(A,imp*0.62);triggerDamage(B,imp*0.62);}
        const nearPlayer=(A.isPlayer||B.isPlayer)||(player&&Math.hypot(player.x-(ax+bx)/2,player.z-(az+bz)/2)<24);
        if(nearPlayer){
         cam.shake=Math.max(cam.shake,Math.min(0.55,imp*0.05));
@@ -3976,23 +4271,46 @@ const AudioSys={started:false,
   const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;
   const ctx=this.ctx=new AC();
   this.master=ctx.createGain();this.master.gain.value=0.9;
-  const comp=ctx.createDynamicsCompressor();this.master.connect(comp);comp.connect(ctx.destination);
+  const comp=ctx.createDynamicsCompressor();comp.threshold.value=-18;comp.knee.value=18;comp.ratio.value=5.5;comp.attack.value=0.003;comp.release.value=0.16;this.master.connect(comp);comp.connect(ctx.destination);
   const nb=ctx.createBuffer(1,ctx.sampleRate*2,ctx.sampleRate);
   const d=nb.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;this.noiseBuf=nb;
   const eg=this.eg=ctx.createGain();eg.gain.value=0;
   const dist=ctx.createWaveShaper();const cv=new Float32Array(256);
   for(let i=0;i<256;i++){const x=i/128-1;cv[i]=Math.tanh(2.2*x);}dist.curve=cv;
-  const flt=this.eflt=ctx.createBiquadFilter();flt.type='lowpass';flt.frequency.value=800;flt.Q.value=1.1;
+  const flt=this.eflt=ctx.createBiquadFilter();flt.type='lowpass';flt.frequency.value=1450;flt.Q.value=0.82;
   eg.connect(dist);dist.connect(flt);flt.connect(this.master);
   const mk=(type,g)=>{const o=ctx.createOscillator();o.type=type;const og=ctx.createGain();og.gain.value=g;
    o.connect(og);og.connect(eg);o.start();return o;};
-  // Layered combustion tone: strong firing fundamental, smoother intake
-  // harmonic, subdued exhaust pulse and a fine high-frequency mechanical edge.
-  this.o1=mk('sawtooth',0.42);this.o2=mk('triangle',0.30);this.o3=mk('square',0.12);this.o4=mk('sawtooth',0.09);
+  // Layered V6 combustion tone: a clipped firing fundamental, a smoother
+  // second harmonic, a sine-like crank pulse and a restrained mechanical edge.
+  // Keeping the square wave out of the main mix avoids the toy-keyboard sound
+  // the previous engine produced at low revs.
+  this.o1=mk('sawtooth',0.34);this.o2=mk('triangle',0.25);this.o3=mk('sine',0.15);this.o4=mk('sawtooth',0.055);
   const en=ctx.createBufferSource();en.buffer=nb;en.loop=true;
   const ef=ctx.createBiquadFilter();ef.type='bandpass';ef.frequency.value=180;
   this.eng=ctx.createGain();this.eng.gain.value=0;
   en.connect(ef);ef.connect(this.eng);this.eng.connect(this.master);en.start();
+  // Separate intake roar and low firing pulses give the engine body under the
+  // harmonic whine. They are shaped continuously, not made from clicky one-
+  // shot samples, so throttle changes sound like load changes.
+  const intake=ctx.createBufferSource();intake.buffer=nb;intake.loop=true;
+  this.intakeF=ctx.createBiquadFilter();this.intakeF.type='bandpass';this.intakeF.frequency.value=1100;this.intakeF.Q.value=1.1;
+  this.intakeG=ctx.createGain();this.intakeG.gain.value=0;
+  intake.connect(this.intakeF);this.intakeF.connect(this.intakeG);this.intakeG.connect(this.master);intake.start();
+  // Dark exhaust pulses remain audible on throttle lift while intake noise
+  // falls away, giving load changes a physical tail.
+  const exn=ctx.createBufferSource();exn.buffer=nb;exn.loop=true;
+  this.exhaustF=ctx.createBiquadFilter();this.exhaustF.type='bandpass';this.exhaustF.frequency.value=185;this.exhaustF.Q.value=.72;
+  this.exhaustG=ctx.createGain();this.exhaustG.gain.value=0;
+  exn.connect(this.exhaustF);this.exhaustF.connect(this.exhaustG);this.exhaustG.connect(this.master);exn.start();
+  // Restrained turbo/gear whine rises with engine speed and selected ratio.
+  this.whineO=ctx.createOscillator();this.whineO.type='sine';
+  this.whineG=ctx.createGain();this.whineG.gain.value=0;
+  this.whineO.connect(this.whineG);this.whineG.connect(this.master);this.whineO.start();
+  this.pulseO=ctx.createOscillator();this.pulseO.type='sine';
+  this.pulseF=ctx.createBiquadFilter();this.pulseF.type='bandpass';this.pulseF.frequency.value=150;this.pulseF.Q.value=1.5;
+  this.pulseG=ctx.createGain();this.pulseG.gain.value=0;
+  this.pulseO.connect(this.pulseF);this.pulseF.connect(this.pulseG);this.pulseG.connect(this.master);this.pulseO.start();
   const sk=ctx.createBufferSource();sk.buffer=nb;sk.loop=true;
   this.skf=ctx.createBiquadFilter();this.skf.type='bandpass';this.skf.frequency.value=820;this.skf.Q.value=1.4;
   this.skg=ctx.createGain();this.skg.gain.value=0;
@@ -4031,8 +4349,8 @@ const AudioSys={started:false,
   // A stable pitched layer carries the start-line mass. Keep the noise bed
   // nearly inaudible; a filtered triangle gives the pack a musical low rumble
   // without the crackle that used to dominate the lights sequence.
-  this.gridToneO=ctx.createOscillator();this.gridToneO.type='triangle';
-  this.gridToneF=ctx.createBiquadFilter();this.gridToneF.type='lowpass';this.gridToneF.frequency.value=620;this.gridToneF.Q.value=0.65;
+  this.gridToneO=ctx.createOscillator();this.gridToneO.type='sawtooth';
+  this.gridToneF=ctx.createBiquadFilter();this.gridToneF.type='lowpass';this.gridToneF.frequency.value=480;this.gridToneF.Q.value=0.7;
   this.gridToneG=ctx.createGain();this.gridToneG.gain.value=0;
   this.gridToneO.connect(this.gridToneF);this.gridToneF.connect(this.gridToneG);this.gridToneG.connect(this.master);this.gridToneO.start();
   // Tunnel reverb — a short feedback-delay send tapped off the engine bus.
@@ -4047,7 +4365,7 @@ const AudioSys={started:false,
   this.tdBuf.connect(this.tdFb);this.tdFb.connect(this.tdBuf);
   this.tdFb.connect(this.tdGain);this.tdGain.connect(this.master);
   this.started=true;},
- shift(){if(!this.started)return;const t=this.ctx.currentTime;
+ shift(){if(!this.started||state.mode==='title')return;const t=this.ctx.currentTime;
   this.eg.gain.cancelScheduledValues(t);
   this.eg.gain.setValueAtTime(this.eg.gain.value,t);
   this.eg.gain.linearRampToValueAtTime(0.04,t+0.05);
@@ -4056,6 +4374,27 @@ const AudioSys={started:false,
   const g=this.ctx.createGain();g.gain.setValueAtTime(0.13,t);g.gain.exponentialRampToValueAtTime(0.001,t+0.12);
   const f=this.ctx.createBiquadFilter();f.type='highpass';f.frequency.value=1400;
   n.connect(f);f.connect(g);g.connect(this.master);n.start(t);n.stop(t+0.14);},
+  // Short UI bongs are deliberately separate from the engine bus: menus can
+  // acknowledge a choice without waking the race sound while the title music
+  // is playing.
+  click(){if(!this.started)return;const t=this.ctx.currentTime,ctx=this.ctx;
+   const o=ctx.createOscillator();o.type='sine';o.frequency.setValueAtTime(620,t);o.frequency.exponentialRampToValueAtTime(470,t+0.16);
+   const g=ctx.createGain();g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(0.075,t+0.008);g.gain.exponentialRampToValueAtTime(0.0001,t+0.24);
+   o.connect(g);g.connect(this.master);o.start(t);o.stop(t+0.26);
+   const hi=ctx.createOscillator();hi.type='triangle';hi.frequency.value=1240;
+   const hg=ctx.createGain();hg.gain.setValueAtTime(0.0001,t);hg.gain.exponentialRampToValueAtTime(0.028,t+0.006);hg.gain.exponentialRampToValueAtTime(0.0001,t+0.12);
+   hi.connect(hg);hg.connect(this.master);hi.start(t);hi.stop(t+0.14);},
+  // A single tactile V6 blip on START is the only engine sound the title
+  // screen is allowed to trigger. It hands off to the live engine mix during
+  // the countdown rather than leaving a menu car idling underneath the music.
+  startRev(){if(!this.started)return;const t=this.ctx.currentTime,ctx=this.ctx;
+   const o=ctx.createOscillator();o.type='sawtooth';o.frequency.setValueAtTime(96,t);o.frequency.exponentialRampToValueAtTime(520,t+0.28);o.frequency.exponentialRampToValueAtTime(220,t+0.62);
+   const f=ctx.createBiquadFilter();f.type='lowpass';f.frequency.setValueAtTime(780,t);f.frequency.exponentialRampToValueAtTime(2400,t+0.25);f.frequency.exponentialRampToValueAtTime(1100,t+0.62);f.Q.value=0.8;
+   const g=ctx.createGain();g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(0.2,t+0.035);g.gain.exponentialRampToValueAtTime(0.0001,t+0.68);
+   o.connect(f);f.connect(g);g.connect(this.master);o.start(t);o.stop(t+0.72);
+   const n=ctx.createBufferSource();n.buffer=this.noiseBuf;const nf=ctx.createBiquadFilter();nf.type='bandpass';nf.frequency.value=1250;nf.Q.value=0.8;
+   const ng=ctx.createGain();ng.gain.setValueAtTime(0.0001,t);ng.gain.exponentialRampToValueAtTime(0.045,t+0.12);ng.gain.exponentialRampToValueAtTime(0.0001,t+0.52);
+   n.connect(nf);nf.connect(ng);ng.connect(this.master);n.start(t);n.stop(t+0.55);},
   // Clean sine cues keep UI and race-start sounds musical instead of the
   // brittle square-wave clicks used previously.
   beep(freq,vol){if(!this.started)return;const t=this.ctx.currentTime;
@@ -4078,14 +4417,14 @@ const AudioSys={started:false,
    this.beep(784,0.12);},
   // A short undertray scrape: tonal metal, no broadband burst, so a bump
   // supports the visual sparks without reintroducing the old noisy start mix.
-  bump(v){if(!this.started)return;const t=this.ctx.currentTime,ctx=this.ctx;
+  bump(v){if(!this.started||state.mode==='title')return;const t=this.ctx.currentTime,ctx=this.ctx;
    const o=ctx.createOscillator();o.type='triangle';o.frequency.setValueAtTime(1450,t);
    o.frequency.exponentialRampToValueAtTime(420,t+0.12);
    const g=ctx.createGain();g.gain.setValueAtTime(0.0001,t);
    g.gain.exponentialRampToValueAtTime(0.018+v*0.035,t+0.006);
    g.gain.exponentialRampToValueAtTime(0.0001,t+0.14);
    o.connect(g);g.connect(this.master);o.start(t);o.stop(t+0.16);},
-  thump(v){if(!this.started)return;const t=this.ctx.currentTime;
+  thump(v){if(!this.started||state.mode==='title')return;const t=this.ctx.currentTime;
   const o=this.ctx.createOscillator();o.type='sine';
   o.frequency.setValueAtTime(120,t);o.frequency.exponentialRampToValueAtTime(38,t+0.18);
   const g=this.ctx.createGain();g.gain.setValueAtTime(Math.min(0.5,0.1+v*0.25),t);
@@ -4093,14 +4432,14 @@ const AudioSys={started:false,
   o.connect(g);g.connect(this.master);o.start(t);o.stop(t+0.24);},
  // Metal-on-metal "clank" for car-to-car contact — a short, bright tonal
  // blip that decays fast, so wheel-to-wheel touches read audibly.
-  clank(v){if(!this.started)return;const t=this.ctx.currentTime;
+  clank(v){if(!this.started||state.mode==='title')return;const t=this.ctx.currentTime;
    const o=this.ctx.createOscillator();o.type='triangle';
    o.frequency.setValueAtTime(260,t);o.frequency.exponentialRampToValueAtTime(72,t+0.09);
    const g=this.ctx.createGain();
    g.gain.setValueAtTime(Math.min(0.18,0.025+v*0.10),t);
    g.gain.exponentialRampToValueAtTime(0.001,t+0.13);
    o.connect(g);g.connect(this.master);o.start(t);o.stop(t+0.14);},
- thunder(strength){if(!this.started)return;const t=this.ctx.currentTime;
+ thunder(strength){if(!this.started||state.mode==='title')return;const t=this.ctx.currentTime;
   strength=clamp(strength,0.1,1);
   const o=this.ctx.createOscillator();o.type='sine';
   o.frequency.setValueAtTime(58,t);o.frequency.exponentialRampToValueAtTime(16,t+1.3);
@@ -4113,14 +4452,31 @@ const AudioSys={started:false,
   const ng=this.ctx.createGain();ng.gain.setValueAtTime(Math.min(0.6,0.2+strength*0.5),t);
   ng.gain.exponentialRampToValueAtTime(0.001,t+0.35);
   n.connect(f);f.connect(ng);ng.connect(this.master);n.start(t);n.stop(t+0.4);},
- jetFlyby(){if(!this.started)return;const t=this.ctx.currentTime;
+ jetFlyby(strength=1){if(!this.started||state.mode==='title')return;const t=this.ctx.currentTime;
+  // Layered near-field roar and low turbine rumble sell an aircraft crossing
+  // ahead as a real fly-over instead of a short UI whoosh.
   const n=this.ctx.createBufferSource();n.buffer=this.noiseBuf;n.loop=true;
-  const f=this.ctx.createBiquadFilter();f.type='bandpass';f.frequency.setValueAtTime(520,t);f.frequency.exponentialRampToValueAtTime(1450,t+3.1);f.frequency.exponentialRampToValueAtTime(380,t+7.2);f.Q.value=.65;
-  const g=this.ctx.createGain();g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.08,t+.8);g.gain.exponentialRampToValueAtTime(.42,t+3.1);g.gain.exponentialRampToValueAtTime(.0001,t+7.5);
-  const o=this.ctx.createOscillator();o.type='sawtooth';o.frequency.setValueAtTime(72,t);o.frequency.exponentialRampToValueAtTime(135,t+3.1);o.frequency.exponentialRampToValueAtTime(48,t+7.3);
-  const og=this.ctx.createGain();og.gain.value=.10;o.connect(og);og.connect(g);n.connect(f);f.connect(g);g.connect(this.master);n.start(t);o.start(t);n.stop(t+7.6);o.stop(t+7.6);},
- update(){if(!this.started||!player)return;
-  const t=this.ctx.currentTime,p=player;
+  const f=this.ctx.createBiquadFilter();f.type='bandpass';f.frequency.setValueAtTime(420,t);f.frequency.exponentialRampToValueAtTime(1750,t+2.7);f.frequency.exponentialRampToValueAtTime(310,t+7.2);f.Q.value=.58;
+  const g=this.ctx.createGain();g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.12*strength,t+.75);g.gain.exponentialRampToValueAtTime(.58*strength,t+2.8);g.gain.exponentialRampToValueAtTime(.0001,t+7.5);
+  const o=this.ctx.createOscillator();o.type='sawtooth';o.frequency.setValueAtTime(58,t);o.frequency.exponentialRampToValueAtTime(152,t+2.8);o.frequency.exponentialRampToValueAtTime(42,t+7.3);
+  const og=this.ctx.createGain();og.gain.value=.13*strength;
+  const low=this.ctx.createOscillator();low.type='sine';low.frequency.setValueAtTime(31,t);low.frequency.exponentialRampToValueAtTime(86,t+2.8);low.frequency.exponentialRampToValueAtTime(24,t+7.3);
+  const lg=this.ctx.createGain();lg.gain.value=.18*strength;
+  o.connect(og);og.connect(g);low.connect(lg);lg.connect(g);n.connect(f);f.connect(g);g.connect(this.master);
+  n.start(t);o.start(t);low.start(t);n.stop(t+7.6);o.stop(t+7.6);low.stop(t+7.6);},
+ update(){if(!this.started)return;
+  const t=this.ctx.currentTime;
+  // The title screen is music-only. Fade every race bus, including rival
+  // engines and road effects, then return before any player/grid processing.
+  // This also silences a gear-change or collision event generated by the
+  // attract-mode cars on the same frame as a menu transition.
+  if(state.mode==='title'){
+   for(const bus of[this.eg,this.eng,this.intakeG,this.exhaustG,this.whineG,this.pulseG,this.gridg,this.gridToneG,this.wsg,this.skg,this.wfg,this.tdGain])if(bus)bus.gain.setTargetAtTime(0,t,0.035);
+   for(const ch of this.rivals)ch.g.gain.setTargetAtTime(0,t,0.035);
+   return;
+  }
+  if(!player)return;
+  const p=player;
   const run=(state.mode==='race'||state.mode==='countdown'||state.mode==='finished')&&!state.paused;
   // Aggregate the rest of the grid's audioRpm into one broadband bed so the
   // start actually sounds like ~20 F1 engines, not just your own idling one.
@@ -4139,7 +4495,10 @@ const AudioSys={started:false,
   // oscillator. Gear/load add small independent movement between harmonics;
   // the soft rev limiter flutters only at the very top of the range.
   const limiter=p.audioRpm>.975?(0.985+Math.sin(timeSec*210)*.015):1;
-  const load=.92+p.throttle*.08, f=(82+p.audioRpm*760)*limiter;
+  // The fundamental rises through a real V6-like rev band; the intake and
+  // pulse layers below supply the physical body so this is not a single toy
+  // oscillator sweeping up and down.
+  const load=.90+p.throttle*.10, f=(74+p.audioRpm*920)*limiter;
   this.o1.frequency.setTargetAtTime(f*load,t,0.018);
   this.o2.frequency.setTargetAtTime(f*1.5,t,0.022);
   this.o3.frequency.setTargetAtTime(f*.75,t,0.026);
@@ -4148,11 +4507,21 @@ const AudioSys={started:false,
   // a feedback delay for an enclosed, echoing rumble — the signature Monaco
   // tunnel sound.
   const tun=player.inTunnel?1:0;
-  this.eflt.frequency.setTargetAtTime((260+p.throttle*2300+p.audioRpm*1400)*(1-tun*0.5),t,0.03);
+  this.eflt.frequency.setTargetAtTime((430+p.throttle*3200+p.audioRpm*2200)*(1-tun*0.42),t,0.03);
   this.tdFb.gain.setTargetAtTime(tun*0.45,t,0.07);
   this.tdGain.gain.setTargetAtTime(tun?0.55:0,t,0.07);
-  this.eg.gain.setTargetAtTime(run?0.18+p.throttle*0.22+p.audioRpm*0.08:0,t,0.05);
-  this.eng.gain.setTargetAtTime(run?0.035+p.throttle*0.075:0,t,0.05);
+  this.eg.gain.setTargetAtTime(run?0.18+p.throttle*0.24+p.audioRpm*0.10:0,t,0.05);
+  this.eng.gain.setTargetAtTime(run?0.025+p.throttle*0.09+p.audioRpm*0.035:0,t,0.05);
+  this.intakeF.frequency.setTargetAtTime(720+p.throttle*2100+p.audioRpm*1750,t,0.04);
+  this.intakeG.gain.setTargetAtTime(run?0.003+p.throttle*0.105+p.audioRpm*0.030:0,t,0.06);
+  this.exhaustF.frequency.setTargetAtTime(120+p.audioRpm*210+p.throttle*85,t,0.05);
+  const exhaustLoad=clamp((1-p.throttle)*0.52+p.audioRpm*0.34+p.brake*0.18,0,1);
+  this.exhaustG.gain.setTargetAtTime(run?0.012+exhaustLoad*0.075:0,t,0.07);
+  this.whineO.frequency.setTargetAtTime(320+p.audioRpm*1850+(p.gear||1)*58,t,0.035);
+  this.whineG.gain.setTargetAtTime(run?0.004+p.throttle*0.010+p.audioRpm*0.018:0,t,0.06);
+  this.pulseF.frequency.setTargetAtTime(105+p.audioRpm*280,t,0.04);
+  this.pulseO.frequency.setTargetAtTime(f*.5,t,0.03);
+  this.pulseG.gain.setTargetAtTime(run?0.018+p.audioRpm*0.045+p.throttle*0.018:0,t,0.05);
   this.wso.frequency.setTargetAtTime(f*5.2,t,0.02);
   this.wsg.gain.setTargetAtTime(run?p.wheelspin*0.08:0,t,0.03);
   this.skg.gain.setTargetAtTime(run?p.skidAmt*0.16:0,t,0.04);
@@ -4174,9 +4543,9 @@ const AudioSys={started:false,
     // Inverse-distance-like rolloff with enough near-field level to make a
     // side-by-side pack properly loud, and a smooth tail out to 125 metres.
     const near=1/(1+hit.d*.055),far=clamp(1-hit.d/125,0,1);
-    ch.g.gain.setTargetAtTime((.025+rp*.075)*near*far,t,.055);
-    ch.o.frequency.setTargetAtTime(72+rp*760,t,.035);
-    ch.f.frequency.setTargetAtTime(700+rp*2600,t,.06);
+    ch.g.gain.setTargetAtTime((.04+rp*.11)*near*far,t,.055);
+    ch.o.frequency.setTargetAtTime(74+rp*920,t,.035);
+    ch.f.frequency.setTargetAtTime(720+rp*2900,t,.06);
     if(ch.pan){const rx=Math.cos(p.hdg),rz=-Math.sin(p.hdg);const side=((hit.c.x-p.x)*rx+(hit.c.z-p.z)*rz)/Math.max(hit.d,1);ch.pan.pan.setTargetAtTime(clamp(side,-1,1),t,.08);}
    }else ch.g.gain.setTargetAtTime(0,t,.12);
   }},
@@ -4293,8 +4662,12 @@ const TitleTheme={
   }
  }
 };
-/* ============ cameras (5 modes incl. top-down, active one always labelled) ============ */
+/* ============ cameras (7 modes incl. immersive + true helmet + top-down) ============ */
 const cam={pos:V3(0,20,0),shake:0,orbA:0,smHdg:0,heliU:0,heliPos:null};
+// A terminal impact temporarily takes over whichever live camera was active.
+// It starts from the current view, then cranes back to a wide, readable wreck
+// reveal so the car, ejected helmet and settled debris all stay in frame.
+const crashCam={active:false,timer:0,duration:4.2,target:null,from:null,fromLook:null};
 // Title-screen "director": cuts between a helicopter establishing shot, a
 // close chase cam, a trackside TV angle and a slow orbit — like a real
 // broadcast director cutting live between cameras on the leading pack —
@@ -4338,7 +4711,35 @@ function carLookY(c,lift=1.0){
  const p=c.mesh.g.position;
  return Math.max(p.y+lift,cameraSurfaceY(c.x,c.z)+lift*0.72);
 }
+function beginCrashCamera(c){
+ crashCam.active=true;crashCam.timer=0;crashCam.target=c;
+ crashCam.from=camera.position.clone();
+ const dir=new THREE.Vector3();camera.getWorldDirection(dir);
+ crashCam.fromLook=camera.position.clone().add(dir.multiplyScalar(40));
+}
+function updCrashCamera(dt){
+ const c=crashCam.target;
+ if(!c||!c.mesh){crashCam.active=false;return;}
+ crashCam.timer+=dt;
+ const t=clamp(crashCam.timer/crashCam.duration,0,1);
+ const ease=t<0.7?1-Math.pow(1-t/0.7,3):1;
+ const yaw=c.hdg,fx=Math.sin(yaw),fz=Math.cos(yaw);
+ const side=Math.sin(crashCam.timer*0.42)*5.5;
+ const back=13+Math.sin(Math.min(t,1)*Math.PI)*5.5;
+ const desired=new THREE.Vector3(c.x-fx*back+Math.cos(yaw)*side,
+  c.y+4.8+Math.sin(Math.min(t,1)*Math.PI)*2.4,
+  c.z-fz*back-Math.sin(yaw)*side);
+ const floor=cameraSurfaceY(desired.x,desired.z);
+ desired.y=Math.max(desired.y,floor+1.2);
+ camera.position.lerpVectors(crashCam.from,desired,ease);
+ clampCameraToSurface(0.55);
+ const look=new THREE.Vector3(c.x,c.y+0.78,c.z);
+ camera.lookAt(look);
+ camera.fov=damp(camera.fov,46,4,dt);camera.updateProjectionMatrix();
+ if(crashCam.timer>=crashCam.duration)crashCam.active=false;
+}
 function updCamera(dt){
+ if(crashCam.active){updCrashCamera(dt);return;}
  camera.up.set(0,1,0);
  if(!player||state.mode==='title'||demoOn){
   director.timer-=dt;
@@ -4459,9 +4860,9 @@ function updCamera(dt){
   camera.rotateZ((swooping?Math.sin(swoopT*Math.PI)*0.14:0)+Math.sin(timeSec*0.35)*0.03);
   camera.fov=damp(camera.fov,swooping?54:50,4,dt);camera.updateProjectionMatrix();return;}
  const p=player,pp=p.mesh.g.position;
- // The driver stays rendered in every camera — the helmet cam in particular
- // NEEDS the helmet in shot (that's the whole point of the view).
- if(p.mesh.driverGroup)p.mesh.driverGroup.visible=true;
+ // The liked helmet-like view keeps the driver in shot. The true eye-level
+ // camera hides the driver mesh so the shell cannot occlude the sightline.
+ if(p.mesh.driverGroup)p.mesh.driverGroup.visible=state.camMode!==3;
  const sp=Math.abs(p.vF);
  let tf=62;
  if(state.camMode===0){
@@ -4475,7 +4876,7 @@ function updCamera(dt){
   camera.lookAt(pp.x+fx*6,Math.max(pp.y+1.2,cameraSurfaceY(p.x,p.z)+0.8),pp.z+fz*6);
   tf=clamp(60+sp*0.24,60,80);
  }else if(state.camMode===2){
-  /* Helmet cam — a small onboard camera perched just behind and above the
+  /* IMMERSIVE CAM — a small onboard camera perched just behind and above the
      driver's helmet, like the modern F1 "driver's eye"/head-cam composite:
      the crown of the helmet fills the bottom of the frame and you look OVER
      it at the road. It still inherits the head spring's motion (rolls under
@@ -4527,7 +4928,31 @@ function updCamera(dt){
   // Wider FOV and gentle speed ramp create excitement without the severe
   // close-in zoom that made the mode hard to drive.
   tf=clamp(74+sp*0.22,74,92);
- }else if(state.camMode===1){
+ }else if(state.camMode===3){
+  /* HELMET CAM — true eye-level sightline. The camera is mounted at the
+     driver's visor rather than above/behind the shell: the road, kerbs and
+     braking boards are what the driver actually sees. */
+  const yaw=p.hdg,fx=Math.sin(yaw),fz=Math.cos(yaw);
+  const hg=p.mesh.helmetGroup;
+  const headWorld=hg?hg.getWorldPosition(_camHead):_camHead.copy(pp).add(V3(0,0.93,0));
+  const lean=hg?hg.rotation.z*0.82:0;
+  const nod=hg?hg.rotation.x*0.62:0;
+  const roadHere=getRoadHAtCoords(pp.x,pp.z)+0.94;
+  const eyeX=headWorld.x+fx*0.13,eyeZ=headWorld.z+fz*0.13;
+  const eyeY=Math.max(headWorld.y+0.10,roadHere);
+  const sp01=clamp(sp/PH.top,0,1);
+  const buzz=(0.0006+sp01*0.0045)*(p.onCurb?2.2:1);
+  camera.position.set(eyeX+Math.sin(timeSec*49.7+p.phase)*buzz,
+   Math.max(eyeY+Math.cos(timeSec*61.3+p.phase)*buzz*0.65,roadHere),eyeZ);
+  clampCameraToSurface(0.12);
+  const ahead=55+sp*0.62,fyaw=yaw+(hg?hg.rotation.y*0.30:0);
+  const lx=pp.x+Math.sin(fyaw)*ahead,lz=pp.z+Math.cos(fyaw)*ahead;
+  const roadAhead=getRoadHAtCoords(lx,lz);
+  camera.up.set(0,1,0);
+  camera.lookAt(lx,roadAhead+1.05+nod*ahead*0.20,lz);
+  camera.rotateZ(lean*0.34);
+  tf=clamp(78+sp*0.20,78,94);
+}else if(state.camMode===1){
   // "T-cam": mounted near the airbox/halo, behind the front axle, like the
   // real onboard camera — not out ahead of the front wheels. Putting the
   // camera forward of the axle (as before) meant a close, wide-FOV view
@@ -4539,12 +4964,12 @@ function updCamera(dt){
   clampCameraToSurface(0.55);
   camera.lookAt(pp.x+fx*40,Math.max(pp.y+1.05,cameraSurfaceY(p.x,p.z)+0.75),pp.z+fz*40);
   tf=58+sp*0.06;
- }else if(state.camMode===3){
+ }else if(state.camMode===4){
   let best=T.tvCams[0],bd=1e18;
   for(const c of T.tvCams){const d=(c.x-pp.x)**2+(c.z-pp.z)**2;if(d<bd){bd=d;best=c;}}
   camera.position.copy(best);clampCameraToSurface(0.5);camera.lookAt(pp.x,carLookY(p),pp.z);
   tf=clamp(3200/(Math.sqrt(bd)+30),22,55);
- }else if(state.camMode===4){
+ }else if(state.camMode===5){
   cam.orbA+=dt*0.4;
   camera.position.set(pp.x+Math.sin(cam.orbA)*13,pp.y+5.5,pp.z+Math.cos(cam.orbA)*13);
   clampCameraToSurface(0.5);camera.lookAt(pp.x,carLookY(p,0.8),pp.z);tf=58;
@@ -4560,11 +4985,11 @@ function updCamera(dt){
  }
  // Final guard for every race camera, including a camera that has just
  // switched modes or is still damping from a previous view.
- clampCameraToSurface(state.camMode===2?0.18:0.32);
+ clampCameraToSurface(state.camMode===2?0.18:state.camMode===3?0.12:0.32);
  // Cinematic: pull in closer/tighter to the crash while slow-mo runs.
  // Keep helmet view wide and driveable during impacts; the external cameras
  // may punch in for the cinematic slow-motion shot.
- if(slowMo>0&&state.camMode!==2)tf=Math.min(tf,46);
+ if(slowMo>0&&state.camMode!==2&&state.camMode!==3)tf=Math.min(tf,46);
  if(cam.shake>0){cam.shake=Math.max(0,cam.shake-dt*1.6);
   camera.position.x+=rand(-1,1)*cam.shake*0.35;camera.position.y+=rand(-1,1)*cam.shake*0.3;}
  camera.fov=damp(camera.fov,tf,8,dt);camera.updateProjectionMatrix();
@@ -4690,6 +5115,8 @@ function updHUD(dt){
  $('hBest').textContent=fmtT(p.best);
  const ah=cars.find(c=>c.key>p.key&&!c.isPlayer);
  $('hGap').textContent=ah&&Math.abs(p.vF)>8?fmtG((ah.key-p.key)*T.segLen/Math.abs(p.vF)):(p.pos===1?'LEADER':'—');
+ const ruleChip=$('hRuleChip');if(ruleChip)ruleChip.textContent=state.ruleset==='full'?'FULL FIA':state.ruleset.toUpperCase();
+ const penaltyChip=$('hPenaltyChip');if(penaltyChip)penaltyChip.textContent=p.penaltySec?'PEN '+p.penaltySec+'s':'PEN 0s';
  $('hGear').textContent=p.vF<-0.5?'R':(Math.abs(p.vF)<0.5&&p.throttle===0?'N':p.gear);
  $('hGear').className=p.rpm>0.95?'hot':'';
  $('hSpeed').textContent=Math.round(Math.abs(p.vF)*3.6);
@@ -4724,6 +5151,7 @@ function beginRace(){
  snapWeather(state.wx);
  setupGrid(state.grid);
  raceT=0;cdT=0;cdGo=0;cdLastOn=0;resultsShown=false;wwT=0;hypeLineT=-10;
+ raceControl.vsc=0;raceControl.yellow=0;raceControl.reason='';raceControl.blueWarn=0;
  gbActive=0;gbCar=null;crossSign.clear();gbCool.clear();
  if(towerRows){towerRows.clear();}
  const timingTowerEl=$('timingTower');if(timingTowerEl)timingTowerEl.innerHTML='';
@@ -4775,6 +5203,9 @@ function updCountdown(dt){
   // deliberate instead of letting a random interval sound like a glitch.
   if(nOn===5&&!cdGo)cdGo=cdT+0.95;
  player.throttle=keys.up?1:0;player.brake=0;player.steer=0;
+ if(rulesOn('jumpStart')&&keys.up&&cdT>0.7&&nOn<5&&!player.jumpStart){
+  player.jumpStart=true;issuePenalty(player,'jumpStart',5,'jump start',99);
+ }
  for(const c of cars){
   placeCar(c);
   c.audioRpm=c.isPlayer?clamp(0.12+player.throttle*0.85,0.12,0.97)
@@ -4799,7 +5230,7 @@ function updCountdown(dt){
 function onLap(c){
  if(state.mode!=='race'){return;} // attract-mode cars just loop forever — gridPlace() resets laps before a real race
  if(c.lap>state.laps&&!c.finished){
-  c.finished=true;c.finishTime=raceT;
+  c.finished=true;c.finishTime=raceT+c.penaltySec;
   if(c.isPlayer)finishRace();
   return;
  }
@@ -4836,7 +5267,11 @@ function finishRace(){
 }
 function showResults(){
  if(resultsShown)return;resultsShown=true;
- const sorted=[...cars].sort((a,b)=>b.key-a.key);
+ const sorted=[...cars].sort((a,b)=>{
+  if(a.finished&&b.finished)return (a.finishTime??1e9)-(b.finishTime??1e9);
+  if(a.finished!==b.finished)return a.finished?-1:1;
+  return b.key-a.key;
+ });
  const leader=sorted[0];
  $('rTitle').textContent=player.wrecked?'CRASHED OUT':(player.pos===1?'VICTORY':'CHEQUERED FLAG');
  $('rSub').textContent=TRACKS[state.trackIdx].name.toUpperCase()+' · '+WX[state.wx].label+' · '+state.laps+' LAPS';
@@ -4848,7 +5283,7 @@ function showResults(){
   const bl=c.best?fmtT(c.best):'—';
   html+=`<div class="rrow${c.isPlayer?' me':''}"><span class="rp">${i+1}</span>
    <span class="sw" style="background:${c.d.colB}"></span>
-   <span class="rn">${c.d.name}<small>${c.d.team}</small></span>
+   <span class="rn">${c.d.name}<small>${c.d.team}${c.penaltySec?` · PEN ${c.penaltySec}s`:''}</small></span>
    <span class="rt">${bl}</span><span class="rb">${gap}</span></div>`;
  });
  $('rTable').innerHTML=html;
@@ -4881,8 +5316,25 @@ function resetPlayer(){
  p.y=getRoadHAtCoords(p.x,p.z);p.vy=0;p.airborne=false;p.pitch=0;p.bounceOff=0;p.bounceVel=0;
  placeCar(p);
 }
+function updateBlueFlags(dt){
+ if(!rulesOn('blueFlags')||!player||player.finished)return;
+ let threat=null,dist=1e9;
+ for(const c of cars){
+  if(c===player||c.wrecked||c.lap<=player.lap)continue;
+  const d=Math.hypot(c.x-player.x,c.z-player.z);
+  if(d<dist){dist=d;threat=c;}
+ }
+ if(threat&&dist<120){
+  player.blueT=(player.blueT||0)+dt;
+  if(player.blueT<0.2)Speech.say(pick(LINES.blue),false,{rate:1.08,pitch:1.08});
+  if(player.blueT>7)issuePenalty(player,'blueFlag',5,'ignoring blue flags',10);
+ }else player.blueT=0;
+}
 function updRace(dt){
  raceT+=dt;
+ if(raceControl.vsc>0){raceControl.vsc=Math.max(0,raceControl.vsc-dt);if(raceControl.vsc===0)showMsg('VSC ENDED','GREEN FLAG','green',1.4);}
+ if(raceControl.yellow>0)raceControl.yellow=Math.max(0,raceControl.yellow-dt);
+
  // Commentator excitement meter: fast, on the limit, side-by-side or in
  // the rain → the voice gets faster, higher and more emotional.
  {
@@ -4902,12 +5354,15 @@ function updRace(dt){
   hypeLineT=raceT;
   Speech.say(pick(RACE_HYPE_LINES),false,{rate:1.10+exCur*.16,pitch:1.04+exCur*.08});
  }
+ const previousPlayerLat=player.lat;
  for(const c of cars){
   if(c.isPlayer){if(!c.finished&&!demoOn)playerControl();else aiThink(c,dt);}
   else aiThink(c,dt);
   if(c.finished){c.throttle=Math.min(c.throttle,0.35);c.brake=0;}
   updCar(c,dt);
  }
+ player.latChange=Math.abs(player.lat-previousPlayerLat)/Math.max(dt,0.001);
+ updateBlueFlags(dt);
  // Demo-mode broadcast: keep the sun tracking the race leader so shadow
  // coverage follows the director's cameras.
  if(demoOn){
@@ -4937,10 +5392,16 @@ function updRace(dt){
    const ps=crossSign.get(k);
    const cs=Math.sign(player.key-o.key);
    if(ps==null){crossSign.set(k,cs);continue;}
-   if(ps<=0&&cs>0&&gbActive<=0&&player.offT){
+   if(ps<=0&&cs>0&&gbActive<=0&&player.offT&&rulesOn('trackLimits')){
     const now=nowT();
     if(now-(gbCool.get(k)||-9)>8){gbCool.set(k,now);givePlaceBack(o);}
    }
+   if(ps<=0&&cs>0&&rulesOn('movingBraking')&&player.brake>0.28&&Math.abs(player.vF)>15&&player.latChange>2.5)
+    issuePenalty(player,'movingBraking',5,'moving under braking',8);
+   if(ps<=0&&cs>0&&raceControl.vsc>0&&rulesOn('vsc'))
+    issuePenalty(player,'vscOvertake',5,'overtaking under VSC',8);
+   if(ps<=0&&cs>0&&raceControl.yellow>0&&rulesOn('flags'))
+    issuePenalty(player,'yellowOvertake',5,'overtaking under yellow flags',8);
    crossSign.set(k,cs);
   }
  }
@@ -4962,7 +5423,7 @@ function updRace(dt){
      gapText = 'LAP ' + clamp(c.lap, 1, state.laps);
     } else {
      const gapVal = (leader.key - c.key) * T.segLen / Math.max(Math.abs(c.vF), 15);
-     gapText = '+' + gapVal.toFixed(1) + 's';
+     gapText = Number.isFinite(gapVal) ? '+' + safeFixed(gapVal, 1, '0.0') + 's' : '—';
     }
     const headshotUrl = getDriverHeadshot(c.d);
     const driverCode = c.d.code || c.d.name.split(' ').pop().substring(0, 3).toUpperCase();
@@ -5085,7 +5546,7 @@ function updTitle(dt){
    let gap='';
    if(sorted.length>1&&lead){
     const g=(lead.key-sorted[1].key)*T.segLen/Math.max(Math.abs(sorted[1].vF),15);
-    gap=' · P2 +'+g.toFixed(1)+'s';
+    gap=' · P2 +'+safeFixed(g,1,'0.0')+'s';
    }
    el.innerHTML='<i class="live-dot"></i>LIVE&nbsp;&nbsp;'+TRACKS[state.trackIdx].name.toUpperCase()
     +' · LAP '+Math.max(1,Math.round(lead?lead.lap:0))
@@ -5196,6 +5657,7 @@ addEventListener('keydown',e=>{
  if(k==='Equal'||k==='NumpadAdd')state.zoom=Math.max(20,state.zoom-5);
  if(k==='Minus'||k==='NumpadSubtract')state.zoom=Math.min(150,state.zoom+5);
  if(k==='KeyR')resetPlayer();
+ if(k==='KeyP')togglePitLimiter();
  if(k==='KeyM'){state.muted=!state.muted;AudioSys.setMute(state.muted);}
  if(k==='Escape')togglePause();
  if(AudioSys.started&&AudioSys.ctx.state==='suspended')AudioSys.ctx.resume();
@@ -5209,7 +5671,7 @@ addEventListener('keyup',e=>{
  if(k==='Space')keys.space=false;
 });
 addEventListener('wheel', e => {
-  if (state.camMode === 5) { // Only zoom in top down view
+  if (state.camMode === 6) { // Only zoom in top down view
     state.zoom += Math.sign(e.deltaY) * 5;
     state.zoom = Math.max(20, Math.min(150, state.zoom));
   }
@@ -5362,7 +5824,7 @@ function seg(container,items,cur,cb){
  const el=$(container);if(!el)return;el.innerHTML='';
  items.forEach((it,i)=>{const b=document.createElement('button');
   b.innerHTML=it;b.className=i===cur?'sel':'';
-  b.onclick=()=>{[...el.children].forEach(x=>x.className='');b.className='sel';cb(i);};
+  b.onclick=()=>{AudioSys.start();AudioSys.click();[...el.children].forEach(x=>x.className='');b.className='sel';cb(i);};
   el.appendChild(b);});
 }
 function drawTrackPreview(cv,t){
@@ -5468,7 +5930,7 @@ function buildMenu(){
   const info=document.createElement('div');
   info.innerHTML=`<div class="cn">${TRACK_FLAGS[t.name]||''} ${t.name}</div><div class="cm">${t.loc} — ${t.desc}</div>`;
   card.append(cv,info);
-  card.onclick=()=>{[...list.children].forEach(x=>x.classList.remove('sel'));card.classList.add('sel');
+  card.onclick=()=>{AudioSys.start();AudioSys.click();[...list.children].forEach(x=>x.classList.remove('sel'));card.classList.add('sel');
    selectTrack(i,true);closeList();};
   list.appendChild(card);
  });
@@ -5489,6 +5951,11 @@ function buildMenu(){
  seg('tLaps',['3 LAPS','5 LAPS','8 LAPS'],0,i=>state.laps=[3,5,8][i]);
  seg('tGrid',['10 CARS','14 CARS','20 CARS'],2,i=>state.grid=[10,14,20][i]);
  seg('tDiff',['RELAXED','NORMAL','PRO'],1,i=>state.diffMul=[0.88,0.97,1.05][i]);
+ seg('tRules',['BASIC','SPORTING','FULL FIA'],0,i=>{
+   state.ruleset=['basic','sporting','full'][i];
+   const hint=$('tRulesHint');if(hint)hint.textContent=RULE_HINTS[state.ruleset];
+ });
+ const initialRuleHint=$('tRulesHint');if(initialRuleHint)initialRuleHint.textContent=RULE_HINTS[state.ruleset];
  
  const qModes=['AUTO','ULTRA','HIGH','MED','LOW'];
  seg('tQuality',qModes.map(m=>m==='AUTO'?'⚡AUTO':m),0,i=>{
@@ -5503,7 +5970,7 @@ function buildMenu(){
    if(qualityMgr){qualityMgr.current='AUTO';qualityMgr.autoLevel=null;qualityMgr.apply(state.quality);postfx.apply(effQuality());resize();}
  });
 
- $('tSpeech').onclick=()=>{const b=$('tSpeech');b.classList.toggle('on');
+ $('tSpeech').onclick=()=>{AudioSys.start();AudioSys.click();const b=$('tSpeech');b.classList.toggle('on');
   b.textContent=b.classList.contains('on')?'VOICE ON':'VOICE OFF';};
  // Restore the locally persisted PWA driver identity and allow either the
  // front camera (`capture=user`) or photo library. Images are resized before
@@ -5549,6 +6016,7 @@ function buildMenu(){
  $('tName').onkeydown=e=>{if(e.key==='Enter')$('tName').blur();};
  $('tStart').onclick=()=>{AudioSys.start();
   if(AudioSys.ctx&&AudioSys.ctx.state==='suspended')AudioSys.ctx.resume();
+  AudioSys.startRev();
   beginRace();};
  $('tInst').onclick=()=>{$('instructions').classList.remove('hidden');};
  if($('iClose'))$('iClose').onclick=()=>{$('instructions').classList.add('hidden');};
@@ -5598,6 +6066,7 @@ function tick(){
    updLens(dtGlobal);
    updClouds(dtGlobal);
    updBirds(dtGlobal);
+   updAnimals(dtGlobal);
    updFlybyPlane(dtGlobal);
    updLightning(dtGlobal);
   }
@@ -5667,6 +6136,7 @@ buildMenu();
 buildWorld(0);
 makeClouds();
 makeBirds();
+makeAnimals();
 snapWeather('sun');
 setupGrid(20);
 loadOpenF1Drivers().then(() => {

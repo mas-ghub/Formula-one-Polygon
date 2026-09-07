@@ -667,6 +667,12 @@ document.addEventListener('DOMContentLoaded', function() {
         <div id="tQuality" class="seg"></div>
       </div>
     </div>
+
+    <div class="sec">
+      <label>RACE CONTROL</label>
+      <div id="tRules" class="seg"></div>
+      <div id="tRulesHint" style="margin-top:6px;color:var(--muted);font-size:10px;letter-spacing:.08em;line-height:1.35;">ARCADE · NO STEWARD PENALTIES</div>
+    </div>
     
     <div class="row2">
       <div class="sec">
@@ -709,11 +715,11 @@ document.addEventListener('DOMContentLoaded', function() {
       <button id="tInst" class="btn-mini" style="flex:1;">HOW TO PLAY</button>
       <button id="tFs" class="btn-mini" style="flex:1;">⛶ FULLSCREEN</button>
     </div>
-    <p class="hint">WASD / ARROWS / TILT — drive · SPACE / DRIFT — power slide<br>C — camera (5 views) · R — reset · M — mute · ESC — pause</p>
+    <p class="hint">WASD / ARROWS / TILT — drive · SPACE / DRIFT — power slide<br>C — camera (7 views) · P — pit limiter · R — reset · M — mute · ESC — pause</p>
   </div>
   
   <div id="tFoot">
-    <span>FULLSCREEN &amp; AUDIO READY · <b id="appVersion">v0.9.9 · BUILD 20260907.5</b></span>
+    <span>FULLSCREEN &amp; AUDIO READY · <b id="appVersion">v0.9.9 · BUILD 20260907.8</b></span>
     <button id="tFootFs" class="btn-mini">⛶ FULLSCREEN</button>
   </div>
   
@@ -751,6 +757,8 @@ document.addEventListener('DOMContentLoaded', function() {
     <button class="chip" id="hQualityChip">HIGH</button>
     <button class="chip tilt-chip" id="hTiltChip">GYRO OFF</button>
     <button class="chip" id="hTowerChip" title="Toggle timing tower">TOWER ON</button>
+    <button class="chip" id="hRuleChip">BASIC</button>
+    <button class="chip" id="hPenaltyChip">PEN 0s</button>
     <button class="chip drs" id="hDrs">DRS</button>
     <button class="chip" id="hFsChip" title="Toggle Fullscreen">⛶</button>
     <button class="chip" id="hPauseChip" title="Pause Game">⏸</button>
@@ -1010,7 +1018,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <script>
 (function(){
-  const APP_VERSION='v0.9.9 · BUILD 20260907.5';
+  const APP_VERSION='v0.9.9 · BUILD 20260907.8';
   window.POLYGON_GP_VERSION=APP_VERSION;
   const panel=document.getElementById('runtimeErrorPanel');
   const output=document.getElementById('runtimeErrorText');
