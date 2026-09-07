@@ -13,7 +13,7 @@ export const QUALITY_PRESETS = {
     label: 'ULTRA',
     // ULTRA spends its budget on scene detail, not a dangerously oversized
     // framebuffer. Retina already supplies ample native resolution.
-    pixelRatio: 1.0,
+    pixelRatio: 1.25,
     shadows: true,
     shadowSize: 2048,
     shadowType: 'soft',           // PCFSoftShadowMap — buttery, filmic shadow edges
@@ -117,7 +117,7 @@ export class QualityManager {
     // Keep the main canvas itself within a conservative pixel budget as well
     // as probing framebuffer completeness. This prevents ULTRA from producing
     // a white/context-lost screen on high-DPI displays.
-    const pixelBudget=mode==='ULTRA'?5200000:mode==='HIGH'?4000000:mode==='MED'?3000000:2000000;
+    const pixelBudget=mode==='ULTRA'?9000000:mode==='HIGH'?4000000:mode==='MED'?3000000:2000000;
     ratio=Math.min(ratio,Math.sqrt(pixelBudget/Math.max(1,innerWidth*innerHeight)));
     // Test the requested allocation, then walk down until this GPU confirms a
     // complete colour/depth target. LOW is the final universally safe floor.

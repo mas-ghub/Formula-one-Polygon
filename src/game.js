@@ -1067,13 +1067,13 @@ function updWeatherFX(dt){
 
 /* rain on the camera lens (2D canvas) */
 const dropCv=$('drops'),dropCx=dropCv.getContext('2d');
-const RAIN_RENDER_REV='20260907.8-rain-04';
+const RAIN_RENDER_REV='20260907.8-rain-05';
 let lensDrops=[];
 function sizeDrops(){dropCv.width=innerWidth;dropCv.height=innerHeight;dropCv.dataset.renderRevision=RAIN_RENDER_REV;}
 function newLensDrop(){return{
  x:Math.random()*dropCv.width,y:Math.random()*dropCv.height,
  r:rand(1.4,5.8),life:rand(2.5,5.8),vy:rand(10,30),vx:rand(-2.5,2.5),
- trail:rand(4,22),phase:rand(0,6.28)
+ trail:rand(3,18),hasTrail:Math.random()<0.48,phase:rand(0,6.28)
 };}
 function updLens(dt){
  dropCx.clearRect(0,0,dropCv.width,dropCv.height);
@@ -1093,18 +1093,27 @@ function updLens(dt){
   if(d.life<=0||d.y>dropCv.height+30||d.x<-30||d.x>dropCv.width+30){lensDrops.splice(i,1);continue;}
   const fade=clamp(Math.min(d.life,1.2)/1.2,0,1)*(0.72+amt*0.28);
   const stretch=d.trail*(0.65+spd*0.018);
-  // Thin blue-grey water trails and a bright upper rim read as wet glass,
-  // while avoiding the opaque white blobs of the earlier fallback.
-  dropCx.globalAlpha=fade*0.42;
-  dropCx.strokeStyle='rgb(159,199,218)';dropCx.lineWidth=Math.max(0.55,d.r*0.22);
-  dropCx.lineCap='round';dropCx.beginPath();
-  dropCx.moveTo(d.x,d.y-stretch);dropCx.lineTo(d.x,d.y);dropCx.stroke();
-  dropCx.globalAlpha=fade*0.72;
-  dropCx.strokeStyle='rgb(205,232,241)';dropCx.lineWidth=Math.max(0.75,d.r*0.28);
-  dropCx.beginPath();dropCx.ellipse(d.x,d.y,d.r,d.r*1.25,0,Math.PI*1.04,Math.PI*2.72);dropCx.stroke();
-  dropCx.globalAlpha=fade*0.52;
-  dropCx.strokeStyle='rgb(245,252,255)';dropCx.lineWidth=Math.max(0.45,d.r*0.16);
-  dropCx.beginPath();dropCx.arc(d.x-d.r*.22,d.y-d.r*.3,d.r*.58,Math.PI*1.05,Math.PI*1.78);dropCx.stroke();
+  // Only some beads leave a trail. The trail is a soft, slightly wandering
+  // taper rather than the old hard straight line attached to every blob.
+  if(d.hasTrail&&stretch>1.5){
+   const trailGrad=dropCx.createLinearGradient(d.x,d.y-stretch,d.x,d.y);
+   trailGrad.addColorStop(0,'rgba(159,199,218,0)');
+   trailGrad.addColorStop(0.55,'rgba(159,199,218,.16)');
+   trailGrad.addColorStop(1,'rgba(188,222,235,.34)');
+   dropCx.globalAlpha=fade*0.72;dropCx.strokeStyle=trailGrad;
+   dropCx.lineWidth=Math.max(0.65,d.r*0.30);dropCx.lineCap='round';dropCx.beginPath();
+   const sway=Math.sin(timeSec*1.7+d.phase)*Math.min(3.5,d.r*.75);
+   dropCx.moveTo(d.x-sway*.35,d.y-stretch);
+   dropCx.quadraticCurveTo(d.x+sway,d.y-stretch*.48,d.x,d.y);dropCx.stroke();
+  }
+  // A low-alpha rim and a small upper glint read as water without making the
+  // edge opaque or drawing a bright "tail" from every droplet.
+  dropCx.globalAlpha=fade*0.40;
+  dropCx.strokeStyle='rgb(205,232,241)';dropCx.lineWidth=Math.max(0.65,d.r*0.22);
+  dropCx.lineCap='round';dropCx.beginPath();dropCx.ellipse(d.x,d.y,d.r,d.r*1.25,0,0,Math.PI*2);dropCx.stroke();
+  dropCx.globalAlpha=fade*0.28;
+  dropCx.strokeStyle='rgb(245,252,255)';dropCx.lineWidth=Math.max(0.4,d.r*0.14);
+  dropCx.beginPath();dropCx.arc(d.x-d.r*.22,d.y-d.r*.3,d.r*.55,Math.PI*1.05,Math.PI*1.78);dropCx.stroke();
  }
  dropCx.globalAlpha=1;dropCx.lineCap='butt';
 }

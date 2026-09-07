@@ -192,7 +192,7 @@ void main() {
   vec3 refractedScene = blurScene(clamp(UV + n, 0.0, 1.0), wetGlass);
   // Keep the windshield optically transparent: only the droplet itself gets
   // the refracted/softened treatment, never the whole race image.
-  float dropletAlpha=clamp(c.x*0.58+c.y*0.18,0.0,0.52);
+  float dropletAlpha=clamp(c.x*0.38+c.y*0.12,0.0,0.34);
   vec3 col=mix(originalScene,refractedScene,dropletAlpha);
 
   // Fresnel rim and bright pin highlight make droplets read as water rather
@@ -201,10 +201,10 @@ void main() {
   float glint = pow(clamp(1.0 - length(n) * 18.0, 0.0, 1.0), 18.0) * c.x;
   // Lightning is kept separate from the rain density. The game supplies a
   // short strike envelope, so wet glass never becomes a full-screen white veil.
-  col+=vec3(0.48,0.68,0.82)*edge*0.18*rainAmount;
-  col+=vec3(0.95,0.99,1.0)*glint*0.42*rainAmount;
+  col+=vec3(0.48,0.68,0.82)*edge*0.11*rainAmount;
+  col+=vec3(0.95,0.99,1.0)*glint*0.28*rainAmount;
   // A restrained trail sheen is the readable part of the moving bead path.
-  col+=vec3(0.42,0.62,0.76)*c.y*0.16*rainAmount;
+  col+=vec3(0.42,0.62,0.76)*c.y*0.10*rainAmount;
   col=mix(col,col*vec3(0.82,0.91,1.03),clamp(c.y*0.12,0.0,0.12));
 
   // The matching Shadertoy Heartfelt effect is a glass/rain shader; lightning
@@ -272,7 +272,7 @@ export class RainShaderPass {
     // Never allocate an unbounded full-resolution windshield target. On a
     // Retina/4K display ULTRA used to request an enormous second RGBA buffer;
     // some drivers responded with a white canvas instead of a clean failure.
-    const budget=this.quality==='ULTRA'?5200000:this.quality==='HIGH'?4000000:this.quality==='MED'?3000000:2000000;
+    const budget=this.quality==='ULTRA'?9000000:this.quality==='HIGH'?4000000:this.quality==='MED'?3000000:2000000;
     const safe=Math.min(scale,2560/baseW,Math.sqrt(budget/(baseW*baseH)));
     return {w:Math.max(2,Math.floor(baseW*safe)),h:Math.max(2,Math.floor(baseH*safe))};
   }
