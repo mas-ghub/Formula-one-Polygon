@@ -1574,56 +1574,11 @@ function buildWorld(idx){
   }
   return{dist:Math.sqrt(bestD2),y:bankedY(),far:false};
  };
- // --- Hairpin loop verification: after the hash is built, test a set of
- //     points near high-curvature sections (hairpins) and confirm that
- //     nearestTrackY returns a segment that actually belongs to the same
- //     loop portion of the circuit — not a different section that happens
- //     to be nearby in world space because the track doubled back on
- //     itself. If a discrepancy is found, fall back to a stricter full-scan
- //     for that region and log a warning.
- {
-  const hairpinTests = [
-   {label: 'Monaco hairpin apex', point: {x: 110, z: 0}, maxDist: 6},
-   {label: 'Monaco hairpin approach', point: {x: 130, z: -20}, maxDist: 8},
-   {label: 'Spa Eau Rouge base', point: {x: -210, z: 20}, maxDist: 10},
-   {label: 'Spa hairpin exit', point: {x: 250, z: 25}, maxDist: 10},
-   {label: 'Interlagos loop', point: {x: 60, z: -140}, maxDist: 8},
-  ];
-  const verifyNearestHairpin = (pt, label, maxAllowedDist) => {
-   const r = nearestTrackY(pt.x, pt.z);
-   // A hairpin loop can put two separate stretches of road very close in
-   // x/z but far apart along the track (f). Verify the closest segment by
-   // world distance is also close along the racing line — if it isn't, the
-   // world-space nearest point is likely the wrong loop segment.
-   if (r.far) return { ok: false, reason: 'provably far from all segments', label };
-   // Check that the closest segment index isn't wildly different from the
-   // point's expected loop region: a hairpin loops back, so a nearby point
-   // should share a nearby f index (modulo N, wrapped).
-   const fApprox = Math.round(r.dist); // rough proxy; actual f from sample isn't returned
-   // The real safeguard: compare against a stricter full-scan nearest point
-   // for the same coordinate, and ensure both agree within a tolerance.
-   return { ok: r.dist <= maxAllowedDist, dist: r.dist, label, y: r.y };
-  };
-  let hairpinIssues = 0;
-  if (window.console && console.info) {
-   console.info('[hairpin verify] nearestTrackY hash/cell verification:');
-  }
-  for (const test of hairpinTests) {
-   const result = verifyNearestHairpin(test.point, test.label, test.maxDist);
-   if (window.console && console.info) {
-    console.info(`  ${test.label}: dist=${result.dist.toFixed(2)} m, y=${result.y.toFixed(2)}, ok=${result.ok}`);
-   }
-   if (!result.ok && result.dist > test.maxDist) hairpinIssues++;
-  }
-  if (hairpinIssues > 0 && window.console && console.warn) {
-   console.warn(`[hairpin verify] ${hairpinIssues} hairpin points exceeded expected distance — ` +
-    `hash/cell lookup may be snapping to wrong loop segment. Full-scan fallback is active for these regions.`);
-  }
-  // If any hairpin region fails, set a flag so nearestTrackY can use a stricter
-  // (full-scan) mode for points in this circuit's hairpin zones rather than
-  // relying solely on the hash.
-  T.hairpinStrict = hairpinIssues > 0;
- }
+ // Keep the distance helper local to the world build. Several scenery passes
+ // use it to keep props clear of the entire circuit, including sections that
+ // run close together in a hairpin. This declaration must remain immediately
+ // after nearestTrackY: it is a runtime dependency of those passes.
+ const minTrackDist=(x,z)=>nearestTrackY(x,z).dist;
  let cx=0,cz=0;for(const s of samples){cx+=s.p.x;cz+=s.p.z;}cx/=N;cz/=N;
  T.center={x:cx,z:cz};
  let rad=0;for(const s of samples)rad=Math.max(rad,Math.hypot(s.p.x-cx,s.p.z-cz));rad+=180;
