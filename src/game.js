@@ -2443,7 +2443,7 @@ function buildWorld(idx){
    const slab=new THREE.Mesh(new THREE.BoxGeometry(12.5,3.1,0.24),new THREE.MeshStandardMaterial({color:0x15171b,roughness:.7}));
    slab.position.set(bx,by+2.35,bz);slab.rotation.y=yaw+Math.PI/2;slab.castShadow=true;world.add(slab);
    const w=new THREE.Mesh(new THREE.PlaneGeometry(12.2,2.8),am);
-   w.position.set(bx,by+2.35,bz);w.lookAt(_sv.x,by+2.35,_sv.z);w.rotateY(Math.PI);w.translateZ(.14);w.renderOrder=2;world.add(w);
+   w.position.set(bx,by+2.35,bz);w.lookAt(_sv.x,by+2.35,_sv.z);w.translateZ(.14);w.renderOrder=2;world.add(w);
    // Wooden legs at either end along the track direction.
    const lx=_st.x,lz=_st.z;
    for(const s of[1,-1]){
@@ -2716,7 +2716,7 @@ function buildWorld(idx){
    const by=terrainHeightAt(bx,bz);
    const b=new THREE.Mesh(new THREE.PlaneGeometry(5.4,2.6),drsMat);
    b.position.set(bx,by+1.6,bz);
-   b.lookAt(bx-s.n.x*sg*6,by+1.6,bz-s.n.z*sg*6);b.rotateY(Math.PI);b.translateZ(.08);
+   b.lookAt(bx-s.n.x*sg*6,by+1.6,bz-s.n.z*sg*6);b.translateZ(.08);
    const bBack=new THREE.Mesh(new THREE.BoxGeometry(5.4,2.6,.16),new THREE.MeshStandardMaterial({color:0x22262c,roughness:.85}));
    bBack.position.copy(b.position);bBack.quaternion.copy(b.quaternion);bBack.translateZ(-.10);
    world.add(bBack,b);
@@ -2750,7 +2750,7 @@ function buildWorld(idx){
     const by=terrainHeightAt(bx,bz);
     const p=new THREE.Mesh(new THREE.PlaneGeometry(2.8*big,2.1*big),new THREE.MeshStandardMaterial({map:txtTex,roughness:0.8,side:THREE.FrontSide}));
     p.position.set(bx,by+1.15*big,bz);
-    p.lookAt(bx-sj.n.x*sg*4,by+1.15*big,bz-sj.n.z*sg*4);p.rotateY(Math.PI);p.translateZ(.07);
+    p.lookAt(bx-sj.n.x*sg*4,by+1.15*big,bz-sj.n.z*sg*4);p.translateZ(.07);
     const pBack=new THREE.Mesh(new THREE.BoxGeometry(2.8*big,2.1*big,.14),new THREE.MeshStandardMaterial({color:0x30343a,roughness:.86}));
     pBack.position.copy(p.position);pBack.quaternion.copy(p.quaternion);pBack.translateZ(-.09);
     world.add(pBack,p);
@@ -2995,7 +2995,7 @@ function buildWorld(idx){
    roof.position.set(bx,by+8.4,bz);roof.rotation.y=yaw;roof.castShadow=true;world.add(roof);
    const[cn,cx]=mkCanvas(512,96);cx.fillStyle='#15171b';cx.fillRect(0,0,512,96);cx.fillStyle='#f5eee0';cx.font='700 48px sans-serif';cx.textAlign='center';cx.textBaseline='middle';cx.fillText(text,256,50);
    const signMat=new THREE.MeshStandardMaterial({map:ctex(cn,false),emissive:0x171717,emissiveIntensity:0.35,side:THREE.FrontSide});
-   const sign=new THREE.Mesh(new THREE.PlaneGeometry(12,2.25),signMat);sign.position.set(bx,by+4.4,bz);sign.lookAt(_sv.x,by+4.4,_sv.z);sign.rotateY(Math.PI);sign.translateZ(2.56);world.add(sign);
+   const sign=new THREE.Mesh(new THREE.PlaneGeometry(12,2.25),signMat);sign.position.set(bx,by+4.4,bz);sign.lookAt(_sv.x,by+4.4,_sv.z);sign.translateZ(2.56);world.add(sign);
   };
   if(def.name==='Monaco'){
    landmarkSign('CASINO DE MONTE-CARLO',0.23,1,0xd2bd9a,0x8f2636);
@@ -3040,7 +3040,7 @@ function buildWorld(idx){
    roof.position.set(s.x,s.y+8.4,s.z);roof.rotation.y=s.yaw;roof.castShadow=true;world.add(roof);
    const[cn,cx]=mkCanvas(512,96);cx.fillStyle='#15171b';cx.fillRect(0,0,512,96);cx.fillStyle='#f5eee0';cx.font='700 48px sans-serif';cx.textAlign='center';cx.textBaseline='middle';cx.fillText(text,256,50);
    const signMat=new THREE.MeshStandardMaterial({map:ctex(cn,false),emissive:0x171717,emissiveIntensity:0.35,side:THREE.FrontSide});
-   const sign=new THREE.Mesh(new THREE.PlaneGeometry(12,2.25),signMat);sign.position.set(s.x,s.y+4.4,s.z);sign.lookAt(s.cx,s.y+4.4,s.cz);sign.rotateY(Math.PI);sign.translateZ(2.56);world.add(sign);
+   const sign=new THREE.Mesh(new THREE.PlaneGeometry(12,2.25),signMat);sign.position.set(s.x,s.y+4.4,s.z);sign.lookAt(s.cx,s.y+4.4,s.cz);sign.translateZ(2.56);world.add(sign);
   };
   const mat=(color,rough=0.78,emissive=0,ei=0)=>new THREE.MeshStandardMaterial({color,roughness:rough,emissive,emissiveIntensity:ei});
   const block=(s,w,h,d,color,roofColor=color)=>{
@@ -3374,7 +3374,7 @@ function setupGrid(gridSize){
 }
 function gridPlace(){
  cars.forEach((c,i)=>{
-  c.f=T.N-14-i*3.6;c._pf=c.f;c.lat=(i%2?3:-3)*0.95;
+  c.f=T.N-14-i*3.6;c._pf=c.f;c.lat=(i%2?3:-3)*0.95;c.pos=i+1;
   c.lap=0;c.best=null;c.finished=false;c.finishTime=null;c.wheelspin=0;c.drsOpen=false;
   c.lapStart=0;c.stuck=0;c.hitT=0;c.recT=0;c.crash=0;c.crashMax=0;c.wrecked=false;c.steer=0;c.pDiff=0;c.slipstream=false;
   c.penalties=[];c.penaltySec=0;c.ruleCooldowns={};c.trackLimitWarnings=0;c.offPrev=false;
@@ -5137,7 +5137,24 @@ function applyTowerVisibility(){
  const el=$('timingTower');if(el)el.style.display=towerHidden?'none':'';
  const ch=$('hTowerChip');if(ch)ch.textContent=towerHidden?'TOWER OFF':'TOWER ON';
 }
+function resetRaceSession(){
+ // A restart is a new event, not a continuation of the last classification.
+ // Clear every transient race-control, cinematic, timing and visual state
+ // before the fresh grid is created.
+ slowMo=0;crashCam.active=false;crashCam.timer=0;crashCam.target=null;cam.shake=0;
+ raceControl.vsc=0;raceControl.yellow=0;raceControl.reason='';raceControl.blueWarn=0;
+ gbActive=0;gbCar=null;crossSign.clear();gbCool.clear();angerByDriver.clear();
+ raceT=0;cdT=0;cdGo=0;cdLastOn=0;posTimer=0;lastPos=0;resultsShown=false;wwT=0;hypeLineT=-10;
+ glassBead=0;clearSkids();
+ for(const d of debris){scene.remove(d.m);if(d.dispose!==false)disposeDebrisObject(d.m);}
+ debris.length=0;
+ const msg=$('hMsg');if(msg)msg.classList.remove('show');
+ const gb=$('giveBack');if(gb)gb.classList.remove('show');
+ const wrong=$('hWrong');if(wrong)wrong.classList.add('hidden');
+ const slip=$('slipTag');if(slip)slip.classList.remove('on');
+}
 function beginRace(){
+ resetRaceSession();
  state.name=$('tName').value.trim()||'YOU';
  saveDriverProfile();
  Speech.enabled=$('tSpeech').classList.contains('on');
@@ -5150,6 +5167,12 @@ function beginRace(){
  $('hCam').textContent=CAM_NAMES[state.camMode];
  snapWeather(state.wx);
  setupGrid(state.grid);
+ // Paint a clean pre-race classification immediately; countdown frames do
+ // not run the live timing update loop, so stale P/lap/time values must not
+ // survive from the previous race.
+ $('hPos').textContent='P'+player.pos;$('hPosT').textContent=' / '+cars.length;
+ $('hLap').textContent='1';$('hTime').textContent='0:00.000';$('hBest').textContent='—';$('hGap').textContent='—';
+ $('hGear').textContent='N';$('hSpeed').textContent='0';
  raceT=0;cdT=0;cdGo=0;cdLastOn=0;resultsShown=false;wwT=0;hypeLineT=-10;
  raceControl.vsc=0;raceControl.yellow=0;raceControl.reason='';raceControl.blueWarn=0;
  gbActive=0;gbCar=null;crossSign.clear();gbCool.clear();
