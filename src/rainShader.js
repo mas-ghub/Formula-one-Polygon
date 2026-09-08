@@ -92,7 +92,7 @@ vec2 Drops(vec2 uv, float t, float l0, float l1, float l2) {
   vec2 m1 = DropLayer2(uv, t)*l1;
   vec2 m2 = DropLayer2(uv*1.85, t)*l2;
   float c = s+m1.x+m2.x;
-  c = S(.3, 1., c);
+  c = S(.55, 1.15, c);
   return vec2(c, max(m1.y*l0, m2.y*l1));
 }
 
@@ -157,12 +157,10 @@ void main() {
   // Keep the authored Heartfelt layer weights: the drop field itself must be
   // dense enough to see. Transparency is controlled at the composite stage,
   // not by starving the field until it becomes invisible.
-  float layer3 = S(.62, .95, rainAmount)*0.42;
-  // Denser fine droplets — closer to the authored Heartfelt preview, which
-  // has a visibly busy field of small static beads between the runners.
-  float staticDrops = S(-.5, 1., rainAmount)*1.7;
-  float layer1 = S(.25, .75, rainAmount)*0.94;
-  float layer2 = S(.0, .5, rainAmount)*0.78;
+  float layer3 = S(.70, .98, rainAmount)*0.18;
+  float staticDrops = S(.0, 1., rainAmount)*0.55;
+  float layer1 = S(.30, .80, rainAmount)*0.50;
+  float layer2 = S(.15, .70, rainAmount)*0.38;
   float speedFactor = clamp(uCarSpeed / 200.0, 0.0, 1.2); // speed-driven streak elongation
 
   vec2 c = Drops(uv, t, staticDrops, layer1, layer2);
@@ -194,15 +192,10 @@ void main() {
   // the background blur modest preserves braking markers for gameplay.
   // Speed-driven streak elongation applied to the blur amount: faster cars
   // stretch the drop trails horizontally as the relative wind pulls them out.
-  float wetGlass = (0.00004 + rainAmount * 0.00012) * (1.0 - c.x * 0.78);
-  wetGlass += c.y * 0.00012;
-  wetGlass *= trailElong; // speed-stretched glass distortion
+  float wetGlass = 0.0;
   vec3 originalScene = texture2D(uScene, UV).rgb;
-  vec3 refractedScene = blurScene(clamp(UV + n, 0.0, 1.0), wetGlass);
-  // The bead itself needs to be clearly VISIBLE like the Shadertoy original:
-  // a higher refracted mix inside each drop, still capped well under 0.5 so
-  // the circuit never vanishes behind the water.
-  float dropletAlpha=clamp(c.x*0.22+c.y*0.08,0.0,0.20);
+  vec3 refractedScene = texture2D(uScene, clamp(UV + n * 0.65, 0.0, 1.0)).rgb;
+  float dropletAlpha=clamp(c.x*0.14+c.y*0.05,0.0,0.12);
   vec3 col=mix(originalScene,refractedScene,dropletAlpha);
 
   // Fresnel rim and bright pin highlight make droplets read as water rather
@@ -213,10 +206,9 @@ void main() {
   // short strike envelope, so wet glass never becomes a full-screen white veil.
   // Kept soft on purpose: a stronger rim/glint reads as an opaque outline
   // around every bead instead of wet glass.
-  col+=vec3(0.48,0.68,0.82)*edge*0.035*rainAmount;
-  col+=vec3(0.95,0.99,1.0)*glint*0.10*rainAmount;
-  col+=vec3(0.42,0.62,0.76)*c.y*0.05*rainAmount;
-  col=mix(col,col*vec3(0.88,0.94,1.02),clamp(c.y*0.06,0.0,0.06));
+  col+=vec3(0.55,0.72,0.85)*edge*0.02*rainAmount;
+  col+=vec3(0.95,0.99,1.0)*glint*0.06*rainAmount;
+  col+=vec3(0.42,0.62,0.76)*c.y*0.025*rainAmount;
 
   // The matching Shadertoy Heartfelt effect is a glass/rain shader; lightning
   // is layered separately so it can be spectacular without making rain itself

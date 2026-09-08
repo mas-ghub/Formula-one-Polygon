@@ -128,9 +128,9 @@ export class PostFX {
     if (!this.ok) return;
     const m = this.mood;
     const rain = m.rain || 0, night = m.night ? 1 : 0, wet = m.wet || 0;
-    this.bloom.strength = 0.22 + rain * 0.26 + night * 0.5 + wet * 0.12;
-    this.bloom.radius = 0.55 + rain * 0.32 + night * 0.16;
-    this.bloom.threshold = 0.94 - rain * 0.2 - night * 0.22;
+    this.bloom.strength = 0.22 + rain * 0.08 + night * 0.5 + wet * 0.06;
+    this.bloom.radius = 0.55 + rain * 0.10 + night * 0.16;
+    this.bloom.threshold = 0.94 - rain * 0.06 - night * 0.22;
     const u = this.grade.uniforms;
     u.uExposure.value = m.exposure != null ? m.exposure : 1.1;
     u.uSat.value = 1.1 - rain * 0.16;                  // wet days are greyer

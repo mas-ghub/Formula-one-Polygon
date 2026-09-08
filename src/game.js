@@ -941,10 +941,10 @@ function makePointsSys(n,blending){
   vx:new Float32Array(n),vy:new Float32Array(n),vz:new Float32Array(n),
   life:new Float32Array(n),dec:new Float32Array(n),s0:new Float32Array(n),grav:new Float32Array(n)};
 }
-const smoke=makePointsSys(700,THREE.NormalBlending);smoke.pts.renderOrder=3;
-// Big spark budget — sparks are the universal language of an F1 game, so the
-// point cloud needs real headroom for a wall of them on a big shunt.
+const smoke=makePointsSys(900,THREE.NormalBlending);smoke.pts.renderOrder=3;
 const sparks=makePointsSys(600,THREE.AdditiveBlending);
+const fire=makePointsSys(420,THREE.AdditiveBlending);fire.pts.renderOrder=4;
+const flm=(...a)=>puff(fire,...a);
 const debris=[];
 function ejectDriverHelmet(c){
  // The visual is a detached helmet/head assembly, not a raw sphere: at speed
@@ -1131,7 +1131,7 @@ function updWeatherFX(dt){
  // When the visor shader is running, world-space rain lines stack on top
  // and read as an opaque curtain (especially on ULTRA). Keep them as a
  // fallback only.
- rainMesh.visible=cur.rain>0.03&&!windshieldOn;
+ rainMesh.visible=false;
  /* Snow uses the same particle system as rain (it is the only one built) but
     it must not look like rain: the flakes fall at a fifth of the speed, drift
     sideways on the wind and stop being drawn as streaks. */
@@ -3936,10 +3936,55 @@ function updateVSCProximity(c){
    into another car) flips a car into a limping repair phase: it can still be
    steered (otherwise you'd just spin out), but it's slower and a spanner +
    countdown ring floats above it until the energy comes back in. */
+function sampleSkullSmoke(){
+ // Monte-carlo a skull volume: cranium + jaw, with eye and nose cavities.
+ for(let k=0;k<10;k++){
+  const x=rand(-1,1),y=rand(-0.85,1.15),z=rand(-0.75,0.75);
+  const cran=(x*x)/0.82+((y-0.42)*(y-0.42))/0.95+(z*z)/0.62;
+  const jaw=(x*x)/0.48+((y+0.38)*(y+0.38))/0.32+(z*z)/0.36;
+  const inHead=cran<1||(y<0.08&&jaw<1&&Math.abs(x)<0.52);
+  const eyeL=((x+0.28)**2)/0.11+((y-0.48)**2)/0.09+((z-0.32)**2)/0.07;
+  const eyeR=((x-0.28)**2)/0.11+((y-0.48)**2)/0.09+((z-0.32)**2)/0.07;
+  const nose=(x*x)/0.035+((y-0.12)**2)/0.11+((z-0.38)**2)/0.045;
+  if(inHead&&eyeL>1&&eyeR>1&&nose>1)return {x,y,z};
+ }
+ return {x:rand(-0.25,0.25),y:rand(0.1,0.7),z:rand(-0.2,0.2)};
+}
+function updWreckFire(c,dt){
+ if(!c.onFire)return;
+ c.fireLife=(c.fireLife||0)-dt;
+ if(c.fireLife<=0){c.onFire=false;return;}
+ const hi=(QUALITY_PRESETS[effQuality()]||{}).cockpitDetail;
+ const nFire=hi?16:8,nSkull=hi?14:7;
+ for(let i=0;i<nFire;i++){
+  flm(c.x+rand(-0.7,0.7),c.y+rand(0.05,0.7),c.z+rand(-1.0,0.8),
+   rand(-0.5,0.5),rand(2.8,8.5),rand(-0.5,0.5),
+   rand(0.4,1.05),rand(0.22,0.48),
+   1.0,rand(0.22,0.62),0.03,-1.8);
+ }
+ c._skullT=(c._skullT||0)+dt;
+ const rise=1.35+c._skullT*1.2,sc=1.4+Math.min(c._skullT*0.28,1.2);
+ const dx=camera.position.x-c.x,dz=camera.position.z-c.z;
+ const ang=Math.atan2(dx,dz),ca=Math.cos(ang),sa=Math.sin(ang);
+ for(let i=0;i<nSkull;i++){
+  const s=sampleSkullSmoke();
+  const wx=s.x*ca+s.z*sa,wz=-s.x*sa+s.z*ca;
+  smk(c.x+wx*sc,c.y+rise+s.y*sc,c.z+wz*sc,
+   rand(-0.12,0.12),rand(0.35,1.1),rand(-0.12,0.12),
+   rand(1.15,2.0),rand(1.7,2.9),
+   0.10,0.10,0.11,0.12);
+ }
+}
 function wreckCar(c){
  if(c.wrecked)return;c.wrecked=true;c.throttle=0;c.brake=1;c.drsOpen=false;
- c.vx*=0.42;c.vz*=0.42;
- shedCarParts(c);sparkBurst(c.x,c.y+.35,c.z,7.5);
+ c.vx*=0.42;c.vz*=0.42;c.onFire=true;c.fireLife=11;c._skullT=0;
+ shedCarParts(c);sparkBurst(c.x,c.y+.35,c.z,16);
+ for(let i=0;i<55;i++){
+  flm(c.x+rand(-1.1,1.1),c.y+rand(0.1,1.2),c.z+rand(-1.4,1.4),
+   rand(-3,3),rand(4,14),rand(-3,3),
+   rand(0.5,1.4),rand(0.35,0.7),
+   1.0,rand(0.28,0.75),0.05,-4);
+ }
  // Crumple the monocoque: squashed tub, drooped nose — the wreck must look
  // wrecked in the pan-out, not just parked with bits missing.
  if(c.mesh.body){c.mesh.body.scale.set(0.97,0.84,0.90);c.mesh.body.rotation.x=-0.045;}
@@ -3994,7 +4039,7 @@ function wallHit(c,sgn,imp){
 function updCar(c,dt){
  const groundY = getRoadHAtCoords(c.x, c.z);
  if (c.y === undefined) { c.y = groundY; c.vy = 0; c.airborne = false; c.pitch = 0; c.bounceOff = 0; c.bounceVel = 0; }
- if(c.wrecked){c.vx*=Math.exp(-3.2*dt);c.vz*=Math.exp(-3.2*dt);c.vF*=Math.exp(-3.2*dt);c.x+=c.vx*dt;c.z+=c.vz*dt;c.y=groundY;return;}
+ if(c.wrecked){c.vx*=Math.exp(-3.2*dt);c.vz*=Math.exp(-3.2*dt);c.vF*=Math.exp(-3.2*dt);c.x+=c.vx*dt;c.z+=c.vz*dt;c.y=groundY;updWreckFire(c,dt);return;}
 
  const stepAhead = 1.0;
  const groundYAhead = getRoadHAtCoords(c.x + Math.sin(c.hdg)*stepAhead, c.z + Math.cos(c.hdg)*stepAhead);
@@ -5222,8 +5267,16 @@ function updCamera(dt){
  if(p.mesh.driverGroup)p.mesh.driverGroup.visible=true;
  const suit=p.mesh.driverGroup&&p.mesh.driverGroup.userData.suit;
  if(suit)suit.visible=state.camMode!==3;
- if(p.mesh.steering&&state.camMode!==3)p.mesh.steering.visible=true;
- if(helmOverlay)helmOverlay.visible=state.camMode===3;
+ const helm=state.camMode===3;
+ if(p.mesh.steering&&!helm)p.mesh.steering.visible=true;
+ if(p.mesh.halo)p.mesh.halo.visible=!helm;
+ if(p.mesh.body)p.mesh.body.visible=!helm;
+ if(p.mesh.driverGroup)p.mesh.driverGroup.visible=!helm;
+ if(p.mesh.drs)p.mesh.drs.visible=!helm;
+ if(p.mesh.brakes)p.mesh.brakes.visible=!helm;
+ if(p.mesh.brakeLight)p.mesh.brakeLight.visible=!helm;
+ if(p.mesh.tailGlow)p.mesh.tailGlow.visible=!helm;
+ if(helmOverlay)helmOverlay.visible=helm;
  const sp=Math.abs(p.vF);
  let tf=62;
  if(state.camMode!==3&&camera.near!==0.08){camera.near=0.08;}
@@ -5277,7 +5330,8 @@ function updCamera(dt){
   // Wide and widening with speed — the objective "very fast" dial.
   tf=clamp(72+sp01*26,72,98);
  }else if(state.camMode===3){
-  /* HELMET CAM — THROUGH the halo, not over it. */
+  /* HELMET CAM — visor under the hoop, road filling the opening.
+     Camera-space halo is the real curved FIA rails, not boxes. */
   const yaw=p.hdg,fx=Math.sin(yaw),fz=Math.cos(yaw);
   const hg=p.mesh.helmetGroup;
   const lean=hg?hg.rotation.z*0.7:0;
@@ -5285,20 +5339,33 @@ function updCamera(dt){
   const sp01=clamp(sp/PH.top,0,1);
   const buzz=(0.0003+sp01*0.0022)*(p.onCurb?2.0:1);
   camera.near=0.05;
-  camera.position.set(pp.x+fx*0.32+Math.sin(timeSec*49.7+p.phase)*buzz,pp.y+0.80,pp.z+fz*0.32);
-  const ahead=12+sp01*5;
-  const fyaw=yaw+(hg?hg.rotation.y*0.18:0)+p.steer*0.025;
+  camera.position.set(pp.x+fx*0.10+Math.sin(timeSec*49.7+p.phase)*buzz,pp.y+0.66,pp.z+fz*0.10);
+  const ahead=24+sp01*8;
+  const fyaw=yaw+(hg?hg.rotation.y*0.16:0)+p.steer*0.02;
+  const lx=pp.x+Math.sin(fyaw)*ahead,lz=pp.z+Math.cos(fyaw)*ahead;
   camera.up.set(0,1,0);
-  camera.lookAt(pp.x+Math.sin(fyaw)*ahead,pp.y+0.70+nod*2,pp.z+Math.cos(fyaw)*ahead);
-  camera.rotateZ(lean*0.32+p.steer*0.04);
-  tf=68;
+  camera.lookAt(lx,getRoadHAtCoords(lx,lz)+1.15+nod*1.2,lz);
+  camera.rotateZ(lean*0.28+p.steer*0.035);
+  tf=74;
   if(p.mesh.steering)p.mesh.steering.visible=false;
+  if(p.mesh.halo)p.mesh.halo.visible=false;
+  if(p.mesh.body)p.mesh.body.visible=false;
+  if(helmOverlay&&helmOverlay.userData.v!==4){camera.remove(helmOverlay);helmOverlay=null;helmWheel=null;}
   if(!helmOverlay){
-   helmOverlay=new THREE.Group();
+   helmOverlay=new THREE.Group();helmOverlay.userData.v=4;
+   const hMat=new THREE.MeshStandardMaterial({color:0x171a1f,roughness:0.38,metalness:0.22,side:THREE.DoubleSide});
+   const tube=(pts,r)=>{
+    const curve=new THREE.CatmullRomCurve3(pts.map(v=>new THREE.Vector3(v[0],v[1],v[2])),false,'centripetal',0.34);
+    const m=new THREE.Mesh(new THREE.TubeGeometry(curve,24,r,6,false),hMat);
+    m.frustumCulled=false;m.renderOrder=18;helmOverlay.add(m);
+   };
+   tube([[-0.52,0.22,-1.02],[-0.34,0.40,-1.12],[-0.14,0.48,-1.16],[0.00,0.50,-1.18]],0.020);
+   tube([[ 0.52,0.22,-1.02],[ 0.34,0.40,-1.12],[ 0.14,0.48,-1.16],[0.00,0.50,-1.18]],0.020);
+   tube([[0.00,0.50,-1.18],[0.00,0.38,-1.34],[0.00,0.24,-1.52]],0.022);
    helmWheel=p.mesh.steering?p.mesh.steering.clone(true):new THREE.Group();
-   helmWheel.position.set(0,-0.16,-0.42);
-   helmWheel.rotation.set(0.15,0,0);
-   helmWheel.scale.set(1.2,1.2,1.2);
+   helmWheel.position.set(0,-0.34,-0.62);
+   helmWheel.rotation.set(0.30,0,0);
+   helmWheel.scale.set(0.78,0.78,0.78);
    helmWheel.visible=true;
    helmWheel.traverse(o=>{if(o.isMesh){o.frustumCulled=false;o.renderOrder=20;}});
    if(p.mesh.steering)helmWheel.userData=p.mesh.steering.userData;
@@ -6340,6 +6407,12 @@ function drawTrackPreview(cv,t){
  }
  // start/finish line
  const st=pv[0],st2=pv[Math.min(2,pv.length-1)];
+ const dx=X(st2)-X(sTo(-4,-4.5);c.lineTo(-4,4.5);c.closePath();c.fill();
+   c.restore();
+  }
+ }
+ // start/finish line
+ const st=pv[0],st2=pv[Math.min(2,pv.length-1)];
  const dx=X(st2)-X(st),dy=Y(st2)-Y(st);
  const d=Math.hypot(dx,dy)||1;
  const nx=-dy/d,ny=dx/d;
@@ -6688,7 +6761,3 @@ addEventListener('pointerdown',()=>{
  if(demoArmed>0){demoArmed=0;const b=$('demoBanner');if(b)b.classList.add('hidden');}
  if(demoOn&&state.mode!=='title')toTitle();
 });
-
-state.mode!=='title')toTitle();
-});
-
