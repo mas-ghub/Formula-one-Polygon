@@ -32,7 +32,7 @@ function noseGeo(wB,hB,wF,hF,len,drop){
 }
 const bodyCache=new Map();
 export function getBodyGeo(colA,colB){
- const key=colA+colB;if(bodyCache.has(key))return bodyCache.get(key);
+ const key=colA+colB+':openTub';if(bodyCache.has(key))return bodyCache.get(key);
  const P=[];const B=(w,h,d,c,x,y,z,rx=0,ry=0,rz=0)=>P.push(part(new THREE.BoxGeometry(w,h,d),c,x,y,z,rx,ry,rz));
  const C=(rt,rb,h,seg,c,x,y,z,rx=0)=>P.push(part(new THREE.CylinderGeometry(rt,rb,h,seg),c,x,y,z,rx));
  B(1.55,0.07,3.6,'#15161a',0,0.14,0.15);
@@ -52,9 +52,9 @@ export function getBodyGeo(colA,colB){
  B(0.04,0.30,0.52,colB,-0.83,0.17,2.72);                // left endplate
  B(0.09,0.12,0.09,'#202226',0.17,0.26,2.50);            // centre pylons
  B(0.09,0.12,0.09,'#202226',-0.17,0.26,2.50);
- // Nose cover stays FORWARD of the cockpit so the tub is open for helmet-cam.
- B(0.78,0.16,0.70,colA,0,0.52,1.22);
- B(0.50,0.08,0.55,'#101114',0,0.58,1.18);
+ // Low nose deck — sits below the visor so helmet-cam looks OVER it, not into it.
+ B(0.70,0.12,0.85,colA,0,0.38,1.35);
+ B(0.48,0.06,0.50,'#101114',0,0.46,1.28);
  // Halo protection structure — modelled after the real open FIA halo: two
  // side rails, two chassis feet, a front crown and one central forward pillar.
  // It is deliberately not a closed hoop; the driver sits inside the open gap
@@ -68,9 +68,10 @@ export function getBodyGeo(colA,colB){
  // Cockpit surround: rim the driver sits inside, mirror stalks and the dashboard
  // under the nose of the halo, so the opening is a cockpit and not a gap.
  for (const sx of [1, -1]) {
-  B(0.07, 0.16, 1.10, colA, sx * 0.50, 0.66, 0.30);
-  C(0.018, 0.018, 0.20, 5, '#101114', sx * 0.55, 0.74, 0.58, 0, 0, sx * 1.1);
-  B(0.13, 0.06, 0.03, '#0b0d10', sx * 0.66, 0.76, 0.60);   // mirror faces
+  // Low, short cockpit lips — not visor-height walls.
+  B(0.08, 0.10, 0.55, colA, sx * 0.58, 0.50, 0.18);
+  C(0.018, 0.018, 0.20, 5, '#101114', sx * 0.62, 0.62, 0.42, 0, 0, sx * 1.1);
+  B(0.13, 0.06, 0.03, '#0b0d10', sx * 0.72, 0.64, 0.44);
  }
  B(0.58, 0.04, 0.16, '#101114', 0, 0.64, 0.62);            // thin dash lip under the wheel
  

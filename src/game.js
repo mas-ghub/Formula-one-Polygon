@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { getBodyGeo, makeDriverMesh, getAxleGeo, getBrakeGeo, updateSteeringHUD } from './carGeometry.js';
 let helmOverlay=null,helmWheel=null;
+let wingMirrors=null;
 import { TRACKS } from './tracks.js';
 import { loadRealCircuits } from './circuitData.js';
 import { RainShaderPass } from './rainShader.js';
@@ -943,7 +944,7 @@ function makePointsSys(n,blending){
 }
 const smoke=makePointsSys(900,THREE.NormalBlending);smoke.pts.renderOrder=3;
 const sparks=makePointsSys(600,THREE.AdditiveBlending);
-const fire=makePointsSys(420,THREE.AdditiveBlending);fire.pts.renderOrder=4;
+const fire=makePointsSys(900,THREE.AdditiveBlending);fire.pts.renderOrder=5;
 const flm=(...a)=>puff(fire,...a);
 const debris=[];
 function ejectDriverHelmet(c){
@@ -3954,13 +3955,13 @@ function updWreckFire(c,dt){
  if(!c.onFire)return;
  c.fireLife=(c.fireLife||0)-dt;
  if(c.fireLife<=0){c.onFire=false;return;}
- const hi=(QUALITY_PRESETS[effQuality()]||{}).cockpitDetail;
- const nFire=hi?16:8,nSkull=hi?14:7;
+ const nFire=28,nSkull=16;
  for(let i=0;i<nFire;i++){
-  flm(c.x+rand(-0.7,0.7),c.y+rand(0.05,0.7),c.z+rand(-1.0,0.8),
-   rand(-0.5,0.5),rand(2.8,8.5),rand(-0.5,0.5),
-   rand(0.4,1.05),rand(0.22,0.48),
-   1.0,rand(0.22,0.62),0.03,-1.8);
+  const hot=Math.random();
+  flm(c.x+rand(-1.2,1.2),c.y+rand(0.05,1.4),c.z+rand(-1.6,1.2),
+   rand(-1.2,1.2),rand(3.5,12),rand(-1.2,1.2),
+   rand(2.8,7.5),rand(0.35,0.7),
+   1.0,hot>0.45?0.28:0.72,hot>0.7?0.02:0.12,-2.2);
  }
  c._skullT=(c._skullT||0)+dt;
  const rise=1.35+c._skullT*1.2,sc=1.4+Math.min(c._skullT*0.28,1.2);
@@ -3991,7 +3992,7 @@ function wreckCar(c){
  for(let i=0;i<9;i++)smk(c.x+rand(-.8,.8),c.y+rand(.25,1.1),c.z+rand(-.8,.8),rand(-1.5,1.5),rand(1.2,3.4),rand(-1.5,1.5),rand(1.4,2.6),rand(1.2,2.5),0.18,0.18,0.20,0.5);
  if(c.isPlayer){
   beginCrashCamera(c);
-  state.mode='gameover';slowMo=1.2;slowMoDur=1.2;cam.shake=Math.max(cam.shake,.75);
+  state.mode='gameover';slowMo=1.2;slowMoDur=1.2;cam.shake=Math.max(cam.shake,1.4);
   showMsg('CRASHED OUT','TERMINAL DAMAGE · DRIVER EJECTED','red',4);
   if(!driverRadio(c,'crash'))Speech.say('Heavy impact! The car is out of the race.',true,{rate:1.08,pitch:.96});
   // As the camera drops toward the helmet, the co-presenter delivers the
@@ -4008,7 +4009,7 @@ function triggerDamage(c,sev){
   // Severe impacts are terminal; lighter contact produces a fixed, readable
   // five-second power-loss period with the animated spanner already attached
   // to every car.
-  if(sev>=6.5){wreckCar(c);return;}
+  if(sev>=4.8){wreckCar(c);return;}
   if(c.crash>0.2)return;
   c.crashMax=5;c.crash=5;
   // Player-only cinematic & commentary while actually racing.
@@ -5117,6 +5118,26 @@ function cockpitFrame(speed){
   fov:clamp(94+narrow*12-wide*8,86,108)
  };
 }
+function renderWingMirrors(){
+ if(!wingMirrors||state.camMode!==3||!player||effQuality()!=='ULTRA')return;
+ const p=player,pp=p.mesh.g.position,yaw=p.hdg;
+ const fx=Math.sin(yaw),fz=Math.cos(yaw),rx=-fz,rz=fx;
+ const was=helmOverlay&&helmOverlay.visible;
+ if(helmOverlay)helmOverlay.visible=false;
+ const sh=renderer.shadowMap.enabled;renderer.shadowMap.enabled=false;
+ const prev=renderer.getRenderTarget();
+ for(const m of wingMirrors){
+  const side=m.sx;
+  m.cam.position.set(pp.x+rx*side*0.85-fx*0.55,pp.y+0.92,pp.z+rz*side*0.85-fz*0.55);
+  m.cam.up.set(0,1,0);
+  m.cam.lookAt(pp.x-fx*28+rx*side*2.2,pp.y+0.6,pp.z-fz*28+rz*side*2.2);
+  renderer.setRenderTarget(m.rt);
+  renderer.render(scene,m.cam);
+ }
+ renderer.setRenderTarget(prev);
+ renderer.shadowMap.enabled=sh;
+ if(helmOverlay)helmOverlay.visible=was!==false;
+}
 function updCamera(dt){
  if(crashCam.active){updCrashCamera(dt);return;}
  camera.up.set(0,1,0);
@@ -5269,12 +5290,12 @@ function updCamera(dt){
  if(suit)suit.visible=state.camMode!==3;
  const helm=state.camMode===3;
  if(p.mesh.steering&&!helm)p.mesh.steering.visible=true;
- if(p.mesh.halo)p.mesh.halo.visible=!helm;
- if(p.mesh.body)p.mesh.body.visible=!helm;
+ if(p.mesh.halo)p.mesh.halo.visible=true;
+ if(p.mesh.body)p.mesh.body.visible=true;
  if(p.mesh.driverGroup)p.mesh.driverGroup.visible=!helm;
- if(p.mesh.drs)p.mesh.drs.visible=!helm;
- if(p.mesh.brakes)p.mesh.brakes.visible=!helm;
- if(p.mesh.brakeLight)p.mesh.brakeLight.visible=!helm;
+ if(p.mesh.drs)p.mesh.drs.visible=true;
+ if(p.mesh.brakes)p.mesh.brakes.visible=true;
+ if(p.mesh.brakeLight)p.mesh.brakeLight.visible=true;
  if(p.mesh.tailGlow)p.mesh.tailGlow.visible=!helm;
  if(helmOverlay)helmOverlay.visible=helm;
  const sp=Math.abs(p.vF);
@@ -5330,46 +5351,56 @@ function updCamera(dt){
   // Wide and widening with speed — the objective "very fast" dial.
   tf=clamp(72+sp01*26,72,98);
  }else if(state.camMode===3){
-  /* HELMET CAM — visor under the hoop, road filling the opening.
-     Camera-space halo is the real curved FIA rails, not boxes. */
+  /* HELMET CAM — sit in the real cockpit. World halo + body + nose stay;
+     only the wheel (and ULTRA mirrors) are camera-parented. */
   const yaw=p.hdg,fx=Math.sin(yaw),fz=Math.cos(yaw);
   const hg=p.mesh.helmetGroup;
-  const lean=hg?hg.rotation.z*0.7:0;
-  const nod=hg?hg.rotation.x*0.45:0;
+  const lean=hg?hg.rotation.z*0.55:0;
+  const nod=hg?hg.rotation.x*0.4:0;
   const sp01=clamp(sp/PH.top,0,1);
-  const buzz=(0.0003+sp01*0.0022)*(p.onCurb?2.0:1);
-  camera.near=0.05;
-  camera.position.set(pp.x+fx*0.10+Math.sin(timeSec*49.7+p.phase)*buzz,pp.y+0.66,pp.z+fz*0.10);
-  const ahead=24+sp01*8;
-  const fyaw=yaw+(hg?hg.rotation.y*0.16:0)+p.steer*0.02;
-  const lx=pp.x+Math.sin(fyaw)*ahead,lz=pp.z+Math.cos(fyaw)*ahead;
+  const buzz=(0.00025+sp01*0.0018)*(p.onCurb?2.0:1);
+  camera.near=0.08;
+  p.mesh.g.updateMatrixWorld(true);
+  // Eye in car space: above the dash, under the halo crown, looking down the nose.
+  const eye=new THREE.Vector3(0,0.84,0.20).applyMatrix4(p.mesh.g.matrixWorld);
+  const look=new THREE.Vector3(p.steer*0.15,0.42+nod*0.4,8.5).applyMatrix4(p.mesh.g.matrixWorld);
+  camera.position.set(eye.x+Math.sin(timeSec*49.7+p.phase)*buzz,eye.y,eye.z);
   camera.up.set(0,1,0);
-  camera.lookAt(lx,getRoadHAtCoords(lx,lz)+1.15+nod*1.2,lz);
-  camera.rotateZ(lean*0.28+p.steer*0.035);
-  tf=74;
+  camera.lookAt(look.x,look.y,look.z);
+  camera.rotateZ(lean*0.28+p.steer*0.04);
+  tf=68;
   if(p.mesh.steering)p.mesh.steering.visible=false;
-  if(p.mesh.halo)p.mesh.halo.visible=false;
-  if(p.mesh.body)p.mesh.body.visible=false;
-  if(helmOverlay&&helmOverlay.userData.v!==4){camera.remove(helmOverlay);helmOverlay=null;helmWheel=null;}
+  if(p.mesh.halo)p.mesh.halo.visible=true;
+  if(p.mesh.body)p.mesh.body.visible=true;
+  if(helmOverlay&&helmOverlay.userData.v!==7){camera.remove(helmOverlay);helmOverlay=null;helmWheel=null;wingMirrors=null;}
   if(!helmOverlay){
-   helmOverlay=new THREE.Group();helmOverlay.userData.v=4;
+   helmOverlay=new THREE.Group();helmOverlay.userData.v=7;
    const hMat=new THREE.MeshStandardMaterial({color:0x171a1f,roughness:0.38,metalness:0.22,side:THREE.DoubleSide});
-   const tube=(pts,r)=>{
-    const curve=new THREE.CatmullRomCurve3(pts.map(v=>new THREE.Vector3(v[0],v[1],v[2])),false,'centripetal',0.34);
-    const m=new THREE.Mesh(new THREE.TubeGeometry(curve,24,r,6,false),hMat);
-    m.frustumCulled=false;m.renderOrder=18;helmOverlay.add(m);
-   };
-   tube([[-0.52,0.22,-1.02],[-0.34,0.40,-1.12],[-0.14,0.48,-1.16],[0.00,0.50,-1.18]],0.020);
-   tube([[ 0.52,0.22,-1.02],[ 0.34,0.40,-1.12],[ 0.14,0.48,-1.16],[0.00,0.50,-1.18]],0.020);
-   tube([[0.00,0.50,-1.18],[0.00,0.38,-1.34],[0.00,0.24,-1.52]],0.022);
    helmWheel=p.mesh.steering?p.mesh.steering.clone(true):new THREE.Group();
-   helmWheel.position.set(0,-0.34,-0.62);
-   helmWheel.rotation.set(0.30,0,0);
-   helmWheel.scale.set(0.78,0.78,0.78);
+   helmWheel.position.set(0,-0.28,-0.55);
+   helmWheel.rotation.set(0.32,0,0);
+   helmWheel.scale.set(0.72,0.72,0.72);
    helmWheel.visible=true;
    helmWheel.traverse(o=>{if(o.isMesh){o.frustumCulled=false;o.renderOrder=20;}});
    if(p.mesh.steering)helmWheel.userData=p.mesh.steering.userData;
    helmOverlay.add(helmWheel);
+   const mkRt=()=>{
+    const rt=new THREE.WebGLRenderTarget(320,200,{minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter,format:THREE.RGBAFormat});
+    rt.texture.colorSpace=THREE.SRGBColorSpace;
+    return rt;
+   };
+   const mkGlass=(rt,sx)=>{
+    const housing=new THREE.Mesh(new THREE.BoxGeometry(0.24,0.14,0.025),hMat);
+    housing.position.set(sx*0.48,0.12,-0.78);
+    housing.frustumCulled=false;housing.renderOrder=19;
+    const glass=new THREE.Mesh(new THREE.PlaneGeometry(0.21,0.12),
+     new THREE.MeshBasicMaterial({map:rt.texture,side:THREE.DoubleSide}));
+    glass.position.z=0.016;housing.add(glass);
+    helmOverlay.add(housing);
+    const cam=new THREE.PerspectiveCamera(50,320/200,0.4,220);
+    return {rt,housing,glass,cam,sx};
+   };
+   wingMirrors=[mkGlass(mkRt(),-1),mkGlass(mkRt(),1)];
    camera.add(helmOverlay);
   }
   helmOverlay.visible=true;
@@ -6407,12 +6438,6 @@ function drawTrackPreview(cv,t){
  }
  // start/finish line
  const st=pv[0],st2=pv[Math.min(2,pv.length-1)];
- const dx=X(st2)-X(sTo(-4,-4.5);c.lineTo(-4,4.5);c.closePath();c.fill();
-   c.restore();
-  }
- }
- // start/finish line
- const st=pv[0],st2=pv[Math.min(2,pv.length-1)];
  const dx=X(st2)-X(st),dy=Y(st2)-Y(st);
  const d=Math.hypot(dx,dy)||1;
  const nx=-dy/d,ny=dx/d;
@@ -6624,6 +6649,7 @@ function tick(){
    if(state.mode!=='title')updAmbient(dtGlobal);
    updPoints(smoke,dtGlobal,2.2);
    updPoints(sparks,dtGlobal,0.12);
+   if(typeof fire!=='undefined')updPoints(fire,dtGlobal,1.4);
    updDebris(dtGlobal);
    updWXBlend(dtGlobal);
    updWeatherFX(dtGlobal);
@@ -6640,6 +6666,7 @@ function tick(){
    updLightning(dtGlobal);
   }
   updCamera(state.paused?0.0001:dtGlobal);
+  renderWingMirrors();
   updateGantryFace();
   AudioSys.update();
   TitleTheme.update();
