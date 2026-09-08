@@ -27,7 +27,33 @@ uniform float uRainAmount;
 uniform float uCarSpeed;
 uniform float uLightning;
 uniform float uLightningSeed;
+uniform float uExposure;
 varying vec2 vUv;
+
+// The scene texture is a raw LINEAR offscreen render: three.js only applies
+// ACESFilmic tone mapping and the sRGB output encode when it draws to the
+// canvas, and this pass draws to the canvas itself. Without doing the same
+// work here every rainy frame came out dark and flat (the "Day looks like
+// dusk in the rain" bug). Same curve as three's ACESFilmicToneMapping.
+vec3 rainRrtOdt(vec3 v){
+  vec3 a = v * (v + 0.0245786) - 0.000090537;
+  vec3 b = v * (0.983729 * v + 0.4329510) + 0.238081;
+  return a / b;
+}
+vec3 rainAces(vec3 color){
+  const mat3 ACESInputMat = mat3(
+    vec3(0.59719, 0.07600, 0.02840), vec3(0.35458, 0.90834, 0.13383), vec3(0.04823, 0.01566, 0.83777));
+  const mat3 ACESOutputMat = mat3(
+    vec3(1.60475, -0.10208, -0.00327), vec3(-0.53108, 1.10813, -0.07276), vec3(-0.07367, -0.00605, 1.07602));
+  color *= uExposure / 0.6;
+  color = ACESInputMat * color;
+  color = rainRrtOdt(color);
+  color = ACESOutputMat * color;
+  return clamp(color, 0.0, 1.0);
+}
+vec3 rainLin2srgb(vec3 c){
+  return mix(c * 12.92, 1.055 * pow(max(c, vec3(0.0)), vec3(1.0/2.4)) - 0.055, step(vec3(0.0031308), c));
+}
 
 #define S(a, b, t) smoothstep(a, b, t)
 
@@ -138,7 +164,7 @@ void main() {
   float rainAmount = clamp(uRainAmount, 0.0, 1.0);
 
   if (rainAmount <= 0.004 && uLightning <= 0.004) {
-    gl_FragColor = vec4(texture2D(uScene, UV).rgb, 1.0);
+    gl_FragColor = vec4(rainLin2srgb(rainAces(texture2D(uScene, UV).rgb)), 1.0);
     return;
   }
 
@@ -193,8 +219,10 @@ void main() {
   // Speed-driven streak elongation applied to the blur amount: faster cars
   // stretch the drop trails horizontally as the relative wind pulls them out.
   float wetGlass = 0.0;
-  vec3 originalScene = texture2D(uScene, UV).rgb;
-  vec3 refractedScene = texture2D(uScene, clamp(UV + n * 0.65, 0.0, 1.0)).rgb;
+  // Grade first, then put the water on top — the drops are a screen-space
+  // effect on already-lit glass, not something inside the exposure chain.
+  vec3 originalScene = rainAces(texture2D(uScene, UV).rgb);
+  vec3 refractedScene = rainAces(texture2D(uScene, clamp(UV + n * 0.65, 0.0, 1.0)).rgb);
   float dropletAlpha=clamp(c.x*0.42+c.y*0.16,0.0,0.40);
   vec3 col=mix(originalScene,refractedScene,dropletAlpha);
 
@@ -228,7 +256,7 @@ void main() {
   col = max(col,0.0);
   col += vec3(0.002, 0.003, 0.004)*rainAmount;
 
-  gl_FragColor = vec4(col, 1.0);
+  gl_FragColor = vec4(rainLin2srgb(clamp(col, 0.0, 1.0)), 1.0);
 }
 `;
 
@@ -253,6 +281,7 @@ export class RainShaderPass {
       uCarSpeed: { value: 0 },
       uLightning: { value: 0 },
       uLightningSeed: { value: 0 },
+      uExposure: { value: 1.0 },
     };
 
     const mat = new THREE.ShaderMaterial({
@@ -303,8 +332,9 @@ export class RainShaderPass {
   // Draws the windshield composite (refracted scene + drops) to whatever the
   // renderer's current target is — call after renderScene(), with the render
   // target reset to the screen.
-  composite(timeSec, rainAmount, carSpeed, lightning, seed = 0) {
+  composite(timeSec, rainAmount, carSpeed, lightning, seed = 0, exposure = 1.0) {
     if(this.failed)return;
+    this.uniforms.uExposure.value = exposure;
     this.uniforms.uTime.value = timeSec;
     this.uniforms.uRainAmount.value = rainAmount;
     this.uniforms.uCarSpeed.value = carSpeed;

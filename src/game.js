@@ -1100,16 +1100,16 @@ function clearSkids(){const z=new THREE.Matrix4().makeScale(0,0,0);
  for(let i=0;i<skidMax;i++)skidMesh.setMatrixAt(i,z);skidMesh.instanceMatrix.needsUpdate=true;skidI=0;}
 
 /* rain world FX */
-const RAIN_N=560;
+const RAIN_N=1600;
 const rainGeo=new THREE.BufferGeometry();
 rainGeo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(RAIN_N*6),3).setUsage(THREE.DynamicDrawUsage));
 // Darker, glassier streaks — the old near-white 0x9db4c8 at 0.45 opacity read
 // as a curtain of white noise; real rain is mostly transparent.
-const rainMat = new THREE.LineBasicMaterial({color:0x7892a4,transparent:true,opacity:0.045,depthWrite:false});
+const rainMat = new THREE.LineBasicMaterial({color:0xc9d8e4,transparent:true,opacity:0.30,depthWrite:false});
 const rainMesh=new THREE.LineSegments(rainGeo,rainMat);
 rainMesh.frustumCulled=false;scene.add(rainMesh);
 const rainP=new Float32Array(RAIN_N*3);
-for(let i=0;i<RAIN_N;i++){rainP[i*3]=rand(-30,30);rainP[i*3+1]=rand(0,26);rainP[i*3+2]=rand(-30,30);}
+for(let i=0;i<RAIN_N;i++){rainP[i*3]=rand(-22,22);rainP[i*3+1]=rand(0,20);rainP[i*3+2]=rand(-22,22);}
 
 function updWeatherFX(dt){
  // Snow builds up and melts back on a slow time constant — an inch of snow does
@@ -1133,18 +1133,20 @@ function updWeatherFX(dt){
  // When the visor shader is running, world-space rain lines stack on top
  // and read as an opaque curtain (especially on ULTRA). Keep them as a
  // fallback only.
- rainMesh.visible=cur.rain>0.12&&!flake;
  /* Snow uses the same particle system as rain (it is the only one built) but
     it must not look like rain: the flakes fall at a fifth of the speed, drift
     sideways on the wind and stop being drawn as streaks. */
  const flake=cur.snow>0.4, fall=flake?(4+cur.snow*5):(52+cur.rain*14);
+ // NOTE: `flake` must be declared BEFORE this line — referencing it earlier
+ // threw a TDZ ReferenceError every frame and silently killed all weather FX.
+ rainMesh.visible=cur.rain>0.12&&!flake;
  if(rainMesh.visible){
   for(let i=0;i<RAIN_N;i++){
    rainP[i*3+1]-=fall*dt;
    if(flake){rainP[i*3]+=Math.sin(timeSec*0.8+i)*dt*2.4;rainP[i*3+2]+=Math.cos(timeSec*0.6+i*0.7)*dt*2.4;}
-   if(rainP[i*3+1]<0){rainP[i*3+1]+=26;rainP[i*3]=rand(-30,30);rainP[i*3+2]=rand(-30,30);}
+   if(rainP[i*3+1]<0){rainP[i*3+1]+=20;rainP[i*3]=rand(-22,22);rainP[i*3+2]=rand(-22,22);}
    const x=cx+rainP[i*3],y=rainP[i*3+1],z=cz+rainP[i*3+2];
-   const streak=0.28+cur.rain*0.30;
+   const streak=0.45+cur.rain*0.55;
    rp[i*6]=x;rp[i*6+1]=y;rp[i*6+2]=z;rp[i*6+3]=x;rp[i*6+4]=y+streak;rp[i*6+5]=z;
   }
   rainGeo.attributes.position.needsUpdate=true;
@@ -1493,7 +1495,7 @@ function applyWeatherVisuals(){
  sunLight.intensity=sunBase;
  hemi.color.copy(cur.hS);hemi.groundColor.copy(cur.hG);hemi.intensity=cur.hI*tod.hMul;
  renderer.toneMappingExposure=cur.exp*tod.expMul;
- rainMesh.material.opacity=0.05+cur.rain*0.10;
+ rainMesh.material.opacity=0.10+cur.rain*0.26;
  if(cloudMat){const g=cur.rain;cloudMat.color.setRGB(1-g*0.45,1-g*0.43,1-g*0.40);}
  if(T){const wet=cur.wet;
   // A wet road is not merely a damp one: it goes darker, glassier and it
@@ -4388,7 +4390,15 @@ function updCarVisual(c,dt){
  // should shrink as speed rises, not stay fixed regardless of how fast
  // you're going.
  const steerVis=clamp(1-Math.abs(c.vF)/PH.top*0.75,0.22,1);
- c.mesh.axleF.rotation.y=c.steer*0.58*steerVis;
+ // Visual steer is a smoothed copy of the input: the AI's raw c.steer carries
+ // a derivative term that flickers frame to frame, which made the wheel on
+ // the attract screen twitch "randomly". Hands (and front wheels) follow the
+ // intent, not the noise.
+ c.steerVis=damp(c.steerVis||0,c.steer,state.mode==='title'||!c.isPlayer?5:11,dt);
+ // Local +x is the car's LEFT (right = (-cos hdg, sin hdg)), so a positive
+ // rotation.y points the tyres LEFT; negate so a right-hand steer input
+ // shows the wheels turned right.
+ c.mesh.axleF.rotation.y=-c.steerVis*0.58*steerVis;
  c.mesh.axleF.rotation.x=c.wheelRot;
  c.mesh.axleR.rotation.x=c.wheelRot;
  c.mesh.drs.rotation.x=c.drsOpen?-1.15:0;
@@ -4479,9 +4489,13 @@ function updCarVisual(c,dt){
   c.mesh.driverGroup.rotation.z=tr;
   // the wheel itself: hands turn it, and it kicks back over a kerb
   if(c.mesh.steering){
-   const lock=-c.steer*2.1*Math.max(0.25,1-sp01*0.72);
+   // The wheel group is Y-flipped (face toward the driver), so its local +x
+   // is the car's RIGHT; a positive rotation.z lifts the right grip, which
+   // from the seat is anticlockwise = a LEFT turn. Negate for a right steer.
+   // (Verified numerically: local (0.205,0,0) -> world x -0.20, lock +0.5 -> y +0.09.)
+   const lock=-(c.steerVis||0)*2.1*Math.max(0.25,1-sp01*0.72);
    const kick=state.mode==='title'?0:road*0.35;
-   c.mesh.steering.rotation.z=damp(c.mesh.steering.rotation.z,lock+kick,14,dt);
+   c.mesh.steering.rotation.z=damp(c.mesh.steering.rotation.z,lock+kick,18,dt);
   }
   if(c.mesh.brakes){
    c.brakeHeat=Math.max(0,(c.brakeHeat||0)-dt*0.42+(c.brake>0.02?dt*c.brake*1.9:0));
@@ -5017,8 +5031,14 @@ const SHOT_LABELS={heli:'HELICOPTER',chase:'CHASE CAM',tv:'TV CAM',orbit:'ORBIT 
 function setShotTag(txt){const el=$('shotTag');if(!el)return;el.textContent=txt;el.style.opacity=txt?'1':'0';}
 // Re-seat the driver's head if the previous attract shot hid it on board.
 function restoreDirectorDriver(){
- if(director._hidden&&director._hidden.mesh&&director._hidden.mesh.driverGroup)director._hidden.mesh.driverGroup.visible=true;
+ const h=director._hidden&&director._hidden.mesh;
+ if(h){
+  if(h.driverGroup)h.driverGroup.visible=true;
+  if(h.helmetGroup)h.helmetGroup.visible=true;
+  const su=h.driverGroup&&h.driverGroup.userData.suit;if(su)su.visible=true;
+ }
  director._hidden=null;
+ if(camera.near!==0.08){camera.near=0.08;camera.updateProjectionMatrix();}
 }
 function pickDirectorShot(){
  const sorted=[...cars].sort((a,b)=>b.key-a.key);
@@ -5128,10 +5148,27 @@ function cockpitFrame(speed){
   fov:clamp(94+narrow*12-wide*8,86,108)
  };
 }
+// Seat the two mirror housings just inside the frame edges whatever the
+// window's aspect ratio is. They used to sit at a fixed ±0.58 m, which at a
+// 58° lens is exactly the frame edge — on most screens they were clipped
+// clean off ("where are the mirrors?").
+function placeWingMirrors(fovDeg){
+ if(!wingMirrors)return;
+ const d=0.62,halfH=d*Math.tan((fovDeg||58)*Math.PI/360),halfW=halfH*camera.aspect;
+ for(const m of wingMirrors){
+  // Mid-height at the frame edges: clear of the HUD panels top-left/right
+  // and roughly where the real mirrors sit beside the halo.
+  // Inboard of the HUD panels (timing tower left, minimap right), level
+  // with the top of the wheel — where the real halo-mounted mirrors sit.
+  m.housing.position.set(m.sx*(halfW-0.24),-halfH*0.16,-d);
+  m.housing.renderOrder=30;
+  m.housing.rotation.y=-m.sx*0.22;  // angled in toward the driver a touch
+ }
+}
 function renderWingMirrors(){
  if(!wingMirrors||!player||state.camMode!==3)return;
  const q=effQuality();
- if(q!=='ULTRA'&&q!=='HIGH'){
+ if(q==='LOW'){
   for(const m of wingMirrors)if(m.housing)m.housing.visible=false;
   return;
  }
@@ -5145,9 +5182,14 @@ function renderWingMirrors(){
  for(const m of wingMirrors){
   if(m.housing)m.housing.visible=true;
   const side=m.sx;
-  m.cam.position.set(pp.x-fx*5.5+rx*side*1.6,pp.y+1.8,pp.z-fz*5.5+rz*side*1.6);
+  // From the mirror itself (beside the halo), looking back down the car's
+  // flank — not from a boom 5 m behind, which cut off anything close.
+  // Outboard of the sidepod (car is ~1.9 m wide over the pods) and well
+  // above it, aimed back down the flank: a chasing car fills the glass
+  // instead of your own rear wing.
+  m.cam.position.set(pp.x+fx*0.6+rx*side*1.25,pp.y+1.05,pp.z+fz*0.6+rz*side*1.25);
   m.cam.up.set(0,1,0);
-  m.cam.lookAt(pp.x-fx*45+rx*side*0.8,pp.y+0.55,pp.z-fz*45+rz*side*0.8);
+  m.cam.lookAt(pp.x-fx*40+rx*side*7.5,pp.y+0.45,pp.z-fz*40+rz*side*7.5);
   renderer.setRenderTarget(m.rt);
   renderer.setClearColor(0x6a8aaa,1);
   try{renderer.render(scene,m.cam);}catch(e){}
@@ -5217,16 +5259,24 @@ function updCamera(dt){
    // Visor view from the target car's helmet position — the full onboard
    // preview, rain-on-visor included. The driver's own head is hidden for
    // the duration of the shot (restored at the next cut/race start).
-   const yaw=tc.hdg,fx=Math.sin(yaw),fz=Math.cos(yaw);
+   // Identical framing to the in-race HELMET camera: eye at visor height,
+   // wheel + gloves in the lower third, road over the top. Only the helmet
+   // and suit are hidden (not the wheel), otherwise the attract shot showed
+   // a wheel-less tub from the halo crown that read as "floating".
    const hg=tc.mesh.helmetGroup;
-   const head=hg?hg.getWorldPosition(_camHead):_camHead.copy(tc.mesh.g.position).add(V3(0,0.95,0));
-   if(tc.mesh.driverGroup){tc.mesh.driverGroup.visible=false;director._hidden=tc;}
-   const crownY2=tc.mesh.g.position.y+0.985+(tc.mesh.halo?tc.mesh.halo.position.y:0);
-   const eyeT=Math.max(head.y+0.10,crownY2+0.16);
-   camera.position.set(head.x+fx*0.12,eyeT,head.z+fz*0.12);
-   clampCameraToSurface(0.22);
-   camera.lookAt(head.x+fx*26,Math.max(head.y+0.55,cameraSurfaceY(tc.x,tc.z)+0.75),head.z+fz*26);
-   camera.fov=damp(camera.fov,zf(78),4,dt);camera.updateProjectionMatrix();return;
+   if(hg)hg.visible=false;
+   const suit2=tc.mesh.driverGroup&&tc.mesh.driverGroup.userData.suit;if(suit2)suit2.visible=false;
+   director._hidden=tc;
+   const lean=hg?hg.rotation.z*0.55:0,nod=hg?hg.rotation.x*0.4:0;
+   tc.mesh.g.updateMatrixWorld(true);
+   const eye=new THREE.Vector3(0,1.06,0.10).applyMatrix4(tc.mesh.g.matrixWorld);
+   const look=new THREE.Vector3((tc.steerVis||0)*0.18,0.78+nod*0.2,8.0).applyMatrix4(tc.mesh.g.matrixWorld);
+   camera.near=0.16;
+   camera.position.copy(eye);
+   camera.up.set(0,1,0);
+   camera.lookAt(look);
+   camera.rotateZ(lean*0.28+(tc.steerVis||0)*0.04);
+   camera.fov=damp(camera.fov,zf(66),4,dt);camera.updateProjectionMatrix();return;
   }
   // Helicopter establishing shot: sweep along the whole circuit from high
   // above. Positions are interpolated between track samples (via sampleF)
@@ -5378,13 +5428,19 @@ function updCamera(dt){
   const buzz=(0.00025+sp01*0.0018)*(p.onCurb?2.0:1);
   camera.near=0.16;
   p.mesh.g.updateMatrixWorld(true);
-  const eye=new THREE.Vector3(0,0.86,0.12).applyMatrix4(p.mesh.g.matrixWorld);
-  const look=new THREE.Vector3(p.steer*0.18,0.40+nod*0.2,8.0).applyMatrix4(p.mesh.g.matrixWorld);
+  // Eye sits at real visor height, ~55 cm behind the wheel: the wheel and
+  // the driver's hands fill the lower third of the frame and the road is
+  // over the top of it, instead of the LCD filling the whole screen.
+  // Eye just above the halo crown (0.985 - 0.06 offset = 0.925 world) so the
+  // road is seen OVER the front bar, and the look point dropped so the wheel
+  // sits in the bottom quarter of the frame rather than the middle.
+  const eye=new THREE.Vector3(0,1.06,0.10).applyMatrix4(p.mesh.g.matrixWorld);
+  const look=new THREE.Vector3(p.steer*0.18,0.78+nod*0.2,8.0).applyMatrix4(p.mesh.g.matrixWorld);
   camera.position.set(eye.x+Math.sin(timeSec*49.7+p.phase)*buzz,eye.y,eye.z);
   camera.up.set(0,1,0);
   camera.lookAt(look.x,look.y,look.z);
   camera.rotateZ(lean*0.28+p.steer*0.04);
-  tf=58;
+  tf=66;
   if(p.mesh.steering)p.mesh.steering.visible=true;
   if(p.mesh.halo)p.mesh.halo.visible=true;
   if(p.mesh.body)p.mesh.body.visible=true;
@@ -5395,24 +5451,31 @@ function updCamera(dt){
    helmWheel=p.mesh.steering||null;
    const mkRt=()=>{
     const rt=new THREE.WebGLRenderTarget(320,200,{minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter,format:THREE.RGBAFormat});
-    rt.texture.colorSpace=THREE.SRGBColorSpace;
+    // Off-screen renders are linear (no tone map / no sRGB encode), so tag
+    // the texture as linear; the screen pass then encodes it once.
+    rt.texture.colorSpace=THREE.LinearSRGBColorSpace;
     return rt;
    };
    const mkGlass=(rt,sx)=>{
-    const housing=new THREE.Mesh(new THREE.BoxGeometry(0.24,0.14,0.025),hMat);
-    housing.position.set(sx*0.58,0.18,-0.62);
+    const housing=new THREE.Mesh(new THREE.BoxGeometry(0.17,0.10,0.025),hMat);housing.material=hMat.clone();housing.material.depthTest=false;
+    housing.position.set(sx*0.44,0.12,-0.62);   // re-placed every frame by placeWingMirrors()
     housing.frustumCulled=false;housing.renderOrder=19;
-    const glass=new THREE.Mesh(new THREE.PlaneGeometry(0.21,0.12),
-     new THREE.MeshBasicMaterial({map:rt.texture,side:THREE.DoubleSide}));
+    const glass=new THREE.Mesh(new THREE.PlaneGeometry(0.15,0.085),
+     new THREE.MeshBasicMaterial({map:rt.texture,side:THREE.DoubleSide,toneMapped:false,depthTest:false}));glass.renderOrder=31;
+    // A mirror is a mirror: the offscreen camera looks backwards, so its
+    // image must be flipped left-right or a car on your left shows on the
+    // right of the glass.
+    glass.scale.x=-1;
     glass.position.z=0.016;housing.add(glass);
     helmOverlay.add(housing);
-    const cam=new THREE.PerspectiveCamera(50,320/200,0.4,220);
+    const cam=new THREE.PerspectiveCamera(40,320/200,0.4,260);
     return {rt,housing,glass,cam,sx};
    };
    wingMirrors=[mkGlass(mkRt(),-1),mkGlass(mkRt(),1)];
    camera.add(helmOverlay);
   }
   helmOverlay.visible=true;
+  placeWingMirrors(tf);
   if(p.mesh.steering){
    const rpm01=clamp(p.rpm!=null?p.rpm:sp01,0,1);
    const gearTxt=p.vF<-0.5?'R':(Math.abs(p.vF)<0.5&&p.throttle===0?'N':(p.gear||1));
@@ -6068,7 +6131,7 @@ function updTitle(dt){
  }
 
  // Demo mode: after a period of no input, count down and start the race.
- if(!demoOn){
+ if(!demoOn&&!(window.__pgp&&window.__pgp._nd)){
   const idle=nowT()-lastInput;
   if(idle>16&&demoArmed===0)demoArmed=nowT();
   if(demoArmed>0){
@@ -6696,13 +6759,13 @@ function tick(){
   const dCam=state.mode==='title'&&(director.shot==='hood'||director.shot==='halo')&&director.target&&cars.includes(director.target)?director.target:null;
   const speedKmh=player?Math.abs(player.vF)*3.6:(dCam?Math.abs(dCam.vF)*3.6:0);
   const speedFactor=clamp(speedKmh/300,0,1);
-  const beadTarget=cur.rain*lerp(1.0,0.55,Math.pow(speedFactor,0.8));
+  const beadTarget=cur.rain*lerp(1.0,0.70,Math.pow(speedFactor,0.8));
   // Asymmetric response: the wind blasts water off quickly (rate 3), but
   // the glass soaks in SLOWLY (rate 0.35) — the longer it rains the worse
   // the windshield gets, and braking for a corner lets it bead up again
   // over several seconds, like a real visor. The target never hits zero
   // at speed, so even flat-out there's still some water out there.
-  glassBead=damp(glassBead,beadTarget,beadTarget<glassBead?3.0:0.35,dt);
+  glassBead=damp(glassBead,beadTarget,beadTarget<glassBead?3.0:1.1,dt);
   const effRain=glassBead;
   // Not title-gated: the attract screen shows the picked weather — wet lens,
   // refraction and lightning included — so the menu is an honest preview.
@@ -6717,7 +6780,7 @@ function tick(){
    // Full effRain: the shader is authored for a 0..1 amount; the old 0.62
    // scale starved the drop field and was a big part of "title rain looks
    // weak" — the refraction was technically there but unreadably faint.
-   rainPass.composite(timeSec,Math.min(effRain,1),speedKmh,lightningFlash,lightningSeed);
+   rainPass.composite(timeSec,Math.min(effRain,1),speedKmh,lightningFlash,lightningSeed,renderer.toneMappingExposure);
    if(snowPass&&snowAccum>0.02)snowPass.composite(timeSec,snowAccum*(0.55+0.45*cur.snow),0.3+snowGust*0.7);
    }catch(e){
     rainPass.failed=true;
@@ -6799,6 +6862,7 @@ addEventListener('pointerdown',()=>{
  if(demoArmed>0){demoArmed=0;const b=$('demoBanner');if(b)b.classList.add('hidden');}
  if(demoOn&&state.mode!=='title')toTitle();
 });
-;if(b)b.classList.add('hidden');}
- if(demoOn&&state.mode!=='title')toTitle();
-});
+
+// Minimal debug hook for automated screenshots (tools/shot.mjs). Harmless in
+// production: nothing calls it unless a script does.
+window.__pgp={state,keys,cycleCam,get cars(){return cars;},get player(){return player;},get director(){return director;},get wingMirrors(){return wingMirrors;},noDemo(){lastInput=nowT();demoArmed=0;window.__pgp._nd=true;},go(){state.mode='race';raceT=99;for(const c of cars)c.reactT=0;},mirrorPix(){if(!wingMirrors)return null;const out=[];for(const m of wingMirrors){const b=new Uint8Array(320*200*4);renderer.readRenderTargetPixels(m.rt,0,0,320,200,b);let dark=0;for(let i=0;i<b.length;i+=4){if(b[i]+b[i+1]+b[i+2]<120)dark++;}out.push(dark);}return out;},shot(n){director.shot=n;director.timer=99;director.target=director.target||cars[0];},behind(){const p=player;if(!p)return;const fx=Math.sin(p.hdg),fz=Math.cos(p.hdg);let n=0;for(const c of cars){if(c===p)continue;n++;if(n>2)break;c.x=p.x-fx*(6+n*6)+(-fz)*(n===1?2.2:-2.2);c.z=p.z-fz*(6+n*6)+fx*(n===1?2.2:-2.2);c.hdg=p.hdg;c.vx=0;c.vz=0;c.vF=0;c.throttle=0;}},probe(){return{rain:cur.rain,bead:glassBead,shader:windshieldOn,failed:rainPass&&rainPass.failed,amt:rainPass&&rainPass.uniforms.uRainAmount.value,q:effQuality(),rainMesh:rainMesh.visible,exp:renderer.toneMappingExposure,tod:state.tod};}};

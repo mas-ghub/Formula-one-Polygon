@@ -118,7 +118,12 @@ export function makeDriverMesh(colA, helmetCol, material){
   // canvas texture updated only for the player in helmet-cam on HIGH/ULTRA.
   const steering = new THREE.Group();
   steering.position.set(0, 0.80, 0.62);
-  steering.rotation.x = 0.42;
+  // The detail (LCD, buttons, LEDs) is built on the group's +z face. The car
+  // drives along +z and the driver sits BEHIND the wheel at -z, so the face
+  // must be turned round to look at him — before this it faced the nose and
+  // the helmet cam only ever saw the plain back plate. Euler XYZ: the Y flip
+  // is applied first, then the X tilt leans the face up toward the visor.
+  steering.rotation.set(0.42, Math.PI, 0);
   const carbonMat = new THREE.MeshStandardMaterial({color:0x121417,roughness:0.42,metalness:0.28,flatShading:true});
   const gripMat = new THREE.MeshStandardMaterial({color:0x0a0b0d,roughness:0.72,metalness:0.08,flatShading:true});
   const addBox=(w,h,d,mat,x,y,z,rx=0,ry=0,rz=0)=>{
