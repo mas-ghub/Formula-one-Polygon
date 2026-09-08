@@ -36,7 +36,12 @@ export function getBodyGeo(colA,colB){
  const P=[];const B=(w,h,d,c,x,y,z,rx=0,ry=0,rz=0)=>P.push(part(new THREE.BoxGeometry(w,h,d),c,x,y,z,rx,ry,rz));
  const C=(rt,rb,h,seg,c,x,y,z,rx=0)=>P.push(part(new THREE.CylinderGeometry(rt,rb,h,seg),c,x,y,z,rx));
  B(1.55,0.07,3.6,'#15161a',0,0.14,0.15);
- B(0.72,0.34,2.2,colA,0,0.42,0.75);
+ // Split the monocoque so the cockpit is a real OPENING, not a solid slab.
+ // The old 2.2 m brick filled the tub and swallowed the steering wheel from
+ // helmet-cam (the "big black space"). Nose volume sits AHEAD of the wheel;
+ // the seat bulkhead sits BEHIND it.
+ B(0.72,0.26,1.05,colA,0,0.34,1.42);
+ B(0.72,0.22,0.85,colA,0,0.30,-0.18);
  // 2026-style drooping nose beak (replaces the old pointy cone).
  P.push(part(noseGeo(0.62,0.30,0.46,0.12,1.12,0.18),colA,0,0.46,2.13));
  // 2026 narrower, two-element active front wing + simplified endplates (the
@@ -47,7 +52,9 @@ export function getBodyGeo(colA,colB){
  B(0.04,0.30,0.52,colB,-0.83,0.17,2.72);                // left endplate
  B(0.09,0.12,0.09,'#202226',0.17,0.26,2.50);            // centre pylons
  B(0.09,0.12,0.09,'#202226',-0.17,0.26,2.50);
- B(0.78,0.2,1.0,colA,0,0.58,0.55);B(0.5,0.1,0.9,'#101114',0,0.66,0.55);
+ // Nose cover stays FORWARD of the cockpit so the tub is open for helmet-cam.
+ B(0.78,0.16,0.70,colA,0,0.52,1.22);
+ B(0.50,0.08,0.55,'#101114',0,0.58,1.18);
  // Halo protection structure — modelled after the real open FIA halo: two
  // side rails, two chassis feet, a front crown and one central forward pillar.
  // It is deliberately not a closed hoop; the driver sits inside the open gap
@@ -65,7 +72,7 @@ export function getBodyGeo(colA,colB){
   C(0.018, 0.018, 0.20, 5, '#101114', sx * 0.55, 0.74, 0.58, 0, 0, sx * 1.1);
   B(0.13, 0.06, 0.03, '#0b0d10', sx * 0.66, 0.76, 0.60);   // mirror faces
  }
- B(0.60, 0.06, 0.44, '#101114', 0, 0.63, 0.52);            // dash / cockpit floor lip
+ B(0.58, 0.04, 0.16, '#101114', 0, 0.64, 0.62);            // thin dash lip under the wheel
  
  // Engine cover & sidepods
  C(0.09,0.3,1.9,8,colA,0,0.5,-0.95,-Math.PI/2);
@@ -105,28 +112,83 @@ export function makeDriverMesh(colA, helmetCol, material){
   SB(0.1, 0.08, 0.1, '#17181c', -0.18, 0.52, 0.65);
   SB(0.1, 0.08, 0.1, '#17181c', 0.18, 0.52, 0.65);
 
-  // The steering wheel is its own mesh so it can actually turn — a yoke with
-  // a rim, three spokes and a lit display, angled back like the real thing.
-  const wheelParts = [];
-  const WB = (w,h,d,c,x,y,z,rx=0,ry=0,rz=0)=>wheelParts.push(part(new THREE.BoxGeometry(w,h,d),c,x,y,z,rx,ry,rz));
-  WB(0.30, 0.035, 0.03, '#101114', 0, 0.075, 0);              // top of the rim
-  WB(0.26, 0.035, 0.03, '#101114', 0, -0.065, 0, 0, 0, 0);   // bottom of the rim
-  WB(0.035, 0.10, 0.03, '#101114', -0.145, 0.005, 0);
-  WB(0.035, 0.10, 0.03, '#101114', 0.145, 0.005, 0);
-  WB(0.05, 0.11, 0.03, '#1a1d22', 0, 0.0, 0.005);             // centre spoke
-  WB(0.045, 0.055, 0.03, '#1a1d22', -0.10, -0.03, 0.005, 0, 0, 0.6);
-  WB(0.045, 0.055, 0.03, '#1a1d22', 0.10, -0.03, 0.005, 0, 0, -0.6);
-  WB(0.15, 0.075, 0.012, '#00f0ff', 0, 0.02, 0.03);           // lap-time display
-  WB(0.03, 0.028, 0.02, '#e10600', -0.075, 0.055, 0.02);
-  WB(0.03, 0.028, 0.02, '#ffd23f', 0.075, 0.055, 0.02);
-  const steering = new THREE.Mesh(mergeGeometries(wheelParts, false), driverMaterial);
-  steering.position.set(0, 0.52, 0.68); steering.rotation.x = 0.3;
+  // F1-style yoke: carbon rim, grips, coloured rotary knobs, LED shift lights
+  // and a live LCD. Geometry stays cheap (boxes); the screen is one 256×128
+  // canvas texture updated only for the player in helmet-cam on HIGH/ULTRA.
+  const steering = new THREE.Group();
+  steering.position.set(0, 0.50, 0.70);
+  steering.rotation.x = 0.42;
+  const carbonMat = new THREE.MeshStandardMaterial({color:0x121417,roughness:0.42,metalness:0.28,flatShading:true});
+  const gripMat = new THREE.MeshStandardMaterial({color:0x0a0b0d,roughness:0.72,metalness:0.08,flatShading:true});
+  const addBox=(w,h,d,mat,x,y,z,rx=0,ry=0,rz=0)=>{
+    const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);
+    m.position.set(x,y,z);m.rotation.set(rx,ry,rz);steering.add(m);return m;
+  };
+  // Main yoke body + lower clutch-paddle zone
+  addBox(0.34, 0.20, 0.045, carbonMat, 0, 0.01, 0);
+  addBox(0.22, 0.10, 0.04, carbonMat, 0, -0.12, 0.005);
+  addBox(0.08, 0.16, 0.04, carbonMat, -0.18, -0.02, 0);
+  addBox(0.08, 0.16, 0.04, carbonMat,  0.18, -0.02, 0);
+  // Rubberised side grips (the "Sparco" hands sit on these)
+  addBox(0.055, 0.22, 0.07, gripMat, -0.205, -0.01, 0.01, 0, 0, 0.12);
+  addBox(0.055, 0.22, 0.07, gripMat,  0.205, -0.01, 0.01, 0, 0,-0.12);
+  // Coloured top buttons (N / P / DRS / +/-)
+  const btn=(col,x,y)=>{
+    const m=new THREE.Mesh(new THREE.CylinderGeometry(0.016,0.016,0.012,8),
+      new THREE.MeshStandardMaterial({color:col,emissive:col,emissiveIntensity:0.35,roughness:0.4}));
+    m.rotation.x=Math.PI/2;m.position.set(x,y,0.028);steering.add(m);
+  };
+  btn(0x1ad15a,-0.11, 0.07);
+  btn(0x2a6bff,-0.07, 0.085);
+  btn(0xffd23f, 0.07, 0.085);
+  btn(0xe10600, 0.11, 0.07);
+  btn(0xf4f4f0,-0.14,-0.04);
+  btn(0x7a3cff, 0.14,-0.04);
+  // Rotary barrels on the lower rim
+  for(const sx of[-1,1]){
+    const rot=new THREE.Mesh(new THREE.CylinderGeometry(0.022,0.022,0.018,10),
+      new THREE.MeshStandardMaterial({color:0x1a3d22,emissive:0x145c28,emissiveIntensity:0.25,roughness:0.45}));
+    rot.rotation.x=Math.PI/2;rot.position.set(sx*0.08,-0.145,0.02);steering.add(rot);
+  }
+  // Shift-light bar across the top of the yoke (10 LEDs, RPM-driven)
+  const leds=[];
+  const LED_COLS=[0x1ad15a,0x1ad15a,0x1ad15a,0xffd23f,0xffd23f,0xffd23f,0xff7a00,0xff7a00,0xe10600,0xe10600];
+  for(let i=0;i<10;i++){
+    const col=LED_COLS[i];
+    const mat=new THREE.MeshStandardMaterial({color:col,emissive:col,emissiveIntensity:0.08,roughness:0.3});
+    const led=new THREE.Mesh(new THREE.BoxGeometry(0.018,0.012,0.008),mat);
+    led.position.set(-0.09+i*0.02, 0.108, 0.026);
+    steering.add(led);leds.push(mat);
+  }
+  // Live LCD — canvas texture, 256×128, cheap even when redrawn
+  const lcdC=document.createElement('canvas');lcdC.width=256;lcdC.height=128;
+  const lcdX=lcdC.getContext('2d');
+  lcdX.fillStyle='#05080c';lcdX.fillRect(0,0,256,128);
+  const lcdTex=new THREE.CanvasTexture(lcdC);
+  lcdTex.minFilter=THREE.LinearFilter;lcdTex.magFilter=THREE.LinearFilter;
+  const lcdMat=new THREE.MeshBasicMaterial({map:lcdTex,depthWrite:true,side:THREE.DoubleSide});
+  const lcd=new THREE.Mesh(new THREE.PlaneGeometry(0.20,0.10),lcdMat);
+  lcd.position.set(0,0.012,0.026);steering.add(lcd);
+  // Bezel around the screen
+  addBox(0.178, 0.094, 0.01, carbonMat, 0, 0.012, 0.018);
+
+  // Gloves parented to the wheel so they rotate with lock
+  const gloveMat=new THREE.MeshStandardMaterial({color:0x111318,roughness:0.7,flatShading:true});
+  for(const sx of[-1,1]){
+    const gl=new THREE.Mesh(new THREE.BoxGeometry(0.07,0.055,0.09),gloveMat);
+    gl.position.set(sx*0.21,-0.02,0.04);gl.rotation.z=sx*-0.25;steering.add(gl);
+  }
+
+  steering.userData.leds=leds;
+  steering.userData.lcd={canvas:lcdC,ctx:lcdX,tex:lcdTex};
+  steering.userData.detail=true;
   driverGroup.userData.steering = steering;
 
   const suitMesh = new THREE.Mesh(mergeGeometries(suitParts, false), driverMaterial);
   suitMesh.castShadow = true;
   driverGroup.add(suitMesh);
   driverGroup.add(steering);
+  driverGroup.userData.suit = suitMesh;
 
   // 2. Articulated Head & Aerodynamic Helmet — raised so the crown of the
   // helmet sits just under the halo arc and clearly shows above the cockpit
@@ -244,3 +306,47 @@ export function getAxleGeo(compound='medium'){if(axleGeoCache.has(compound))retu
  }
  return geo;}
 export function getBrakeGeo(){getAxleGeo();return brakeGeo;}
+
+/* Player-only LCD + LED update. Cheap 2-D canvas; skip when `detail` is false
+   (LOW/MED helmet cam keeps the static last frame). */
+export function updateSteeringHUD(steering, info){
+  if(!steering||!steering.userData)return;
+  const leds=steering.userData.leds;
+  const rpm01=info.rpm01||0;
+  if(leds){
+    const n=leds.length, lit=Math.round(rpm01*n);
+    for(let i=0;i<n;i++)leds[i].emissiveIntensity=i<lit?(i>=n-2?1.4:0.85):0.06;
+  }
+  const lcd=steering.userData.lcd;if(!lcd||!info.drawLcd)return;
+  const cx=lcd.ctx,w=256,h=128;
+  cx.fillStyle='#070b10';cx.fillRect(0,0,w,h);
+  // RPM ticks
+  cx.fillStyle='#1ad15a';
+  const ticks=12,litT=Math.round(rpm01*ticks);
+  for(let i=0;i<ticks;i++){
+    cx.fillStyle=i<litT?(i>8?'#e10600':i>5?'#ffd23f':'#1ad15a'):'#1a2228';
+    cx.fillRect(18+i*18,10,14,6);
+  }
+  cx.fillStyle='#8fa0aa';cx.font='700 11px sans-serif';cx.textAlign='left';
+  cx.fillText((info.speed|0)+' KPH',16,36);
+  cx.textAlign='right';cx.fillText(info.pos||'P–',240,36);
+  cx.fillStyle='#f4f4f0';cx.font='800 52px sans-serif';cx.textAlign='center';
+  cx.fillText(String(info.gear??'N'),128,86);
+  cx.fillStyle='#6a7880';cx.font='700 10px sans-serif';
+  cx.fillText('L'+(info.lap||1),48,86);
+  cx.fillStyle=info.drs?'#1ad15a':'#334048';
+  cx.fillText(info.drs?'DRS':'DRS',208,86);
+  // Tyre temps
+  cx.fillStyle='#e24a2a';cx.font='700 9px sans-serif';cx.textAlign='left';
+  cx.fillText((info.tyre||98)+'°C',16,112);
+  cx.textAlign='right';cx.fillText((info.tyre||98)+'°C',240,112);
+  // Energy bar
+  cx.fillStyle='#1a2228';cx.fillRect(48,104,160,12);
+  cx.fillStyle='#7adf3a';cx.fillRect(48,104,160*Math.max(0,Math.min(1,info.ers??1)),12);
+  cx.fillStyle='#070b10';cx.font='700 9px sans-serif';cx.textAlign='center';
+  cx.fillText(((info.ers??1)*100|0)+'%',128,114);
+  lcd.tex.needsUpdate=true;
+}
+ cx.fillText(((info.ers??1)*100|0)+'%',128,114);
+  lcd.tex.needsUpdate=true;
+}

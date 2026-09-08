@@ -21,7 +21,8 @@ export const QUALITY_PRESETS = {
     sparkParticles: 300,
     anisotropy: 16,
     rainShader: true,
-    propDensity: 1.5
+    propDensity: 1.5,
+    cockpitDetail: true
   },
   HIGH: {
     label: 'HIGH',
@@ -33,7 +34,8 @@ export const QUALITY_PRESETS = {
     sparkParticles: 120,
     anisotropy: 8,
     rainShader: true,
-    propDensity: 1.0
+    propDensity: 1.0,
+    cockpitDetail: true
   },
   MED: {
     label: 'MED',
@@ -45,7 +47,8 @@ export const QUALITY_PRESETS = {
     sparkParticles: 80,
     anisotropy: 4,
     rainShader: true,
-    propDensity: 0.75
+    propDensity: 0.75,
+    cockpitDetail: false
   },
   LOW: {
     label: 'LOW',

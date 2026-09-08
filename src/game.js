@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { getBodyGeo, makeDriverMesh, getAxleGeo, getBrakeGeo } from './carGeometry.js';
+import { getBodyGeo, makeDriverMesh, getAxleGeo, getBrakeGeo, updateSteeringHUD } from './carGeometry.js';
 import { TRACKS } from './tracks.js';
 import { loadRealCircuits } from './circuitData.js';
 import { RainShaderPass } from './rainShader.js';
@@ -5211,11 +5211,15 @@ function updCamera(dt){
   camera.rotateZ((swooping?Math.sin(swoopT*Math.PI)*0.14:0)+Math.sin(timeSec*0.35)*0.03);
   camera.fov=damp(camera.fov,zf(swooping?54:50),4,dt);camera.updateProjectionMatrix();return;}
  const p=player,pp=p.mesh.g.position;
- // Only the HELMET cam hides the driver now; the IMMERSIVE nose/shoulder cam
- // wants the driver in frame (a driverless cockpit looks wrong from up there).
- if(p.mesh.driverGroup)p.mesh.driverGroup.visible=state.camMode!==3;
+ // HELMET hides the helmet/head so it never clips the visor, but keeps the
+ // steering wheel, arms and cockpit surround in frame (onboard F1 look).
+ if(p.mesh.helmetGroup)p.mesh.helmetGroup.visible=state.camMode!==3;
+ if(p.mesh.driverGroup)p.mesh.driverGroup.visible=true;
+ const suit=p.mesh.driverGroup&&p.mesh.driverGroup.userData.suit;
+ if(suit)suit.visible=state.camMode!==3;
  const sp=Math.abs(p.vF);
  let tf=62;
+ if(state.camMode!==3&&camera.near!==0.08){camera.near=0.08;}
  if(state.camMode===0){
   const yaw=p.hdg,fx=Math.sin(yaw),fz=Math.cos(yaw);
   const back=8.4+sp*0.05,up=3.2+sp*0.014;
@@ -5266,41 +5270,40 @@ function updCamera(dt){
   // Wide and widening with speed — the objective "very fast" dial.
   tf=clamp(72+sp01*26,72,98);
  }else if(state.camMode===3){
-  /* HELMET CAM — true eye-level sightline. The lens sits at the visor,
-     slightly behind the halo's front hoop, with a lowered look target so the
-     front nose occupies the bottom of frame while the halo remains visible
-     above it. The driver mesh is hidden, but the halo is part of the car body
-     and remains in shot. */
+  /* HELMET CAM — onboard visor. Eye sits IN the cockpit so the halo pillar
+     frames the shot and the steering wheel occupies the lower third. */
   const yaw=p.hdg,fx=Math.sin(yaw),fz=Math.cos(yaw);
   const hg=p.mesh.helmetGroup;
-  const headWorld=hg?hg.getWorldPosition(_camHead):_camHead.copy(pp).add(V3(0,0.93,0));
   const lean=hg?hg.rotation.z*0.82:0;
-  const nod=hg?hg.rotation.x*0.62:0;
-  const roadHere=getRoadHAtCoords(pp.x,pp.z)+0.82;
-  const eyeX=headWorld.x+fx*0.18,eyeZ=headWorld.z+fz*0.18;
-  // Visor must sit CLEAR of the halo crown so the rim falls BELOW the road
-  // sightline — the F1-game "tall seat" cheat: the eye is guaranteed above
-  // the crown rather than squashing the halo assembly itself (dropping the
-  // assembly is what erased the gap entirely). The rim stays in frame at
-  // the top, the centre pillar falls away low, the road is open.
-  const crownY=pp.y+0.985+(p.mesh.halo?p.mesh.halo.position.y:0);
-  const eyeY=Math.max(headWorld.y+0.10,crownY+0.16,roadHere);
+  const nod=hg?hg.rotation.x*0.55:0;
+  const roadHere=getRoadHAtCoords(pp.x,pp.z);
+  const eyeY=pp.y+0.92;
+  const eyeX=pp.x+fx*0.22,eyeZ=pp.z+fz*0.22;
   const sp01=clamp(sp/PH.top,0,1);
-  const buzz=(0.0006+sp01*0.0045)*(p.onCurb?2.2:1);
+  const buzz=(0.0005+sp01*0.0038)*(p.onCurb?2.2:1);
   camera.position.set(eyeX+Math.sin(timeSec*49.7+p.phase)*buzz,
-   Math.max(eyeY+Math.cos(timeSec*61.3+p.phase)*buzz*0.65,roadHere),eyeZ);
-  clampCameraToSurface(0.12);
-  const frame=cockpitFrame(sp);
-  const ahead=frame.ahead,fyaw=yaw+(hg?hg.rotation.y*0.30:0);
+   Math.max(eyeY+Math.cos(timeSec*61.3+p.phase)*buzz*0.55,roadHere+0.55),eyeZ);
+  clampCameraToSurface(0.10);
+  const ahead=18+sp01*8;
+  const fyaw=yaw+(hg?hg.rotation.y*0.28:0)+p.steer*0.04;
   const lx=pp.x+Math.sin(fyaw)*ahead,lz=pp.z+Math.cos(fyaw)*ahead;
   const roadAhead=getRoadHAtCoords(lx,lz);
   camera.up.set(0,1,0);
-  // Slightly raised sightline: with the lowered halo assembly this keeps the
-  // aero screen visible at frame top without eating the road ahead.
-  camera.lookAt(lx,roadAhead+frame.lookDrop+0.22+nod*ahead*0.16,lz);
-  camera.rotateZ(lean*0.34);
-  tf=frame.fov;
-}else if(state.camMode===1){
+  camera.lookAt(lx,roadAhead+0.55+nod*ahead*0.12,lz);
+  camera.rotateZ(lean*0.42+p.steer*0.06);
+  tf=clamp(78+sp01*10,76,92);
+  const st=p.mesh.steering;
+  if(st){
+   const hi=(QUALITY_PRESETS[effQuality()]||{}).cockpitDetail;
+   const rpm01=clamp(p.rpm!=null?p.rpm:sp01,0,1);
+   const gearTxt=p.vF<-0.5?'R':(Math.abs(p.vF)<0.5&&p.throttle===0?'N':(p.gear||1));
+   updateSteeringHUD(st,{
+    rpm01,speed:sp*3.6,gear:gearTxt,
+    pos:'P'+(p.pos||1),lap:(p.lap||0)+1,drs:!!p.drsOpen,ers:1-clamp(sp01*0.15,0,0.4),
+    tyre:Math.round(92+(p.onCurb?8:0)+sp01*12),drawLcd:!!hi
+   });
+  }
+ }else if(state.camMode===1){
   // "T-cam": mounted near the airbox/halo, behind the front axle, like the
   // real onboard camera — not out ahead of the front wheels. Putting the
   // camera forward of the axle (as before) meant a close, wide-FOV view
@@ -6671,5 +6674,8 @@ addEventListener('pointerdown',()=>{
  lastInput=nowT();
  if(demoArmed>0){demoArmed=0;const b=$('demoBanner');if(b)b.classList.add('hidden');}
  if(demoOn&&state.mode!=='title')toTitle();
+});
+
+state.mode!=='title')toTitle();
 });
 
