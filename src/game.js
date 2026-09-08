@@ -3979,12 +3979,17 @@ function updWreckFire(c,dt){
 function wreckCar(c){
  if(c.wrecked)return;c.wrecked=true;c.throttle=0;c.brake=1;c.drsOpen=false;
  c.vx*=0.42;c.vz*=0.42;c.onFire=true;c.fireLife=11;c._skullT=0;
- shedCarParts(c);sparkBurst(c.x,c.y+.35,c.z,16);
- for(let i=0;i<55;i++){
-  flm(c.x+rand(-1.1,1.1),c.y+rand(0.1,1.2),c.z+rand(-1.4,1.4),
-   rand(-3,3),rand(4,14),rand(-3,3),
-   rand(0.5,1.4),rand(0.35,0.7),
-   1.0,rand(0.28,0.75),0.05,-4);
+ shedCarParts(c);sparkBurst(c.x,c.y+.4,c.z,32);
+ for(let i=0;i<220;i++){
+  const hot=Math.random();
+  flm(c.x+rand(-2.4,2.4),c.y+rand(0.05,2.8),c.z+rand(-2.8,2.8),
+   rand(-8,8),rand(8,28),rand(-8,8),
+   rand(5,16),rand(0.55,1.15),
+   1.0,hot>0.35?0.18:0.85,hot>0.7?0.02:0.16,-7);
+ }
+ for(let i=0;i<60;i++){
+  smk(c.x+rand(-2,2),c.y+rand(0.2,2),c.z+rand(-2,2),
+   rand(-3,3),rand(3,10),rand(-3,3),rand(3,6),rand(2.5,4.5),0.08,0.08,0.09,0.4);
  }
  // Crumple the monocoque: squashed tub, drooped nose — the wreck must look
  // wrecked in the pan-out, not just parked with bits missing.
@@ -5119,22 +5124,31 @@ function cockpitFrame(speed){
  };
 }
 function renderWingMirrors(){
- if(!wingMirrors||state.camMode!==3||!player||effQuality()!=='ULTRA')return;
+ if(!wingMirrors||!player||state.camMode!==3)return;
+ const q=effQuality();
+ if(q!=='ULTRA'&&q!=='HIGH'){
+  for(const m of wingMirrors)if(m.housing)m.housing.visible=false;
+  return;
+ }
  const p=player,pp=p.mesh.g.position,yaw=p.hdg;
  const fx=Math.sin(yaw),fz=Math.cos(yaw),rx=-fz,rz=fx;
  const was=helmOverlay&&helmOverlay.visible;
  if(helmOverlay)helmOverlay.visible=false;
  const sh=renderer.shadowMap.enabled;renderer.shadowMap.enabled=false;
- const prev=renderer.getRenderTarget();
+ const prevRT=renderer.getRenderTarget();
+ const prevAuto=renderer.autoClear;renderer.autoClear=true;
  for(const m of wingMirrors){
+  if(m.housing)m.housing.visible=true;
   const side=m.sx;
-  m.cam.position.set(pp.x+rx*side*0.85-fx*0.55,pp.y+0.92,pp.z+rz*side*0.85-fz*0.55);
+  m.cam.position.set(pp.x-fx*5.5+rx*side*1.6,pp.y+1.8,pp.z-fz*5.5+rz*side*1.6);
   m.cam.up.set(0,1,0);
-  m.cam.lookAt(pp.x-fx*28+rx*side*2.2,pp.y+0.6,pp.z-fz*28+rz*side*2.2);
+  m.cam.lookAt(pp.x-fx*45+rx*side*0.8,pp.y+0.55,pp.z-fz*45+rz*side*0.8);
   renderer.setRenderTarget(m.rt);
-  renderer.render(scene,m.cam);
+  renderer.setClearColor(0x6a8aaa,1);
+  try{renderer.render(scene,m.cam);}catch(e){}
  }
- renderer.setRenderTarget(prev);
+ renderer.setRenderTarget(prevRT);
+ renderer.autoClear=prevAuto;
  renderer.shadowMap.enabled=sh;
  if(helmOverlay)helmOverlay.visible=was!==false;
 }
@@ -5351,35 +5365,35 @@ function updCamera(dt){
   // Wide and widening with speed — the objective "very fast" dial.
   tf=clamp(72+sp01*26,72,98);
  }else if(state.camMode===3){
-  /* HELMET CAM — sit in the real cockpit. World halo + body + nose stay;
-     only the wheel (and ULTRA mirrors) are camera-parented. */
+  /* HELMET CAM — real world car only. Overlay is wheel + mirrors, nothing else. */
   const yaw=p.hdg,fx=Math.sin(yaw),fz=Math.cos(yaw);
   const hg=p.mesh.helmetGroup;
   const lean=hg?hg.rotation.z*0.55:0;
   const nod=hg?hg.rotation.x*0.4:0;
   const sp01=clamp(sp/PH.top,0,1);
   const buzz=(0.00025+sp01*0.0018)*(p.onCurb?2.0:1);
-  camera.near=0.08;
+  camera.near=0.12;
   p.mesh.g.updateMatrixWorld(true);
-  // Eye in car space: above the dash, under the halo crown, looking down the nose.
-  const eye=new THREE.Vector3(0,0.84,0.20).applyMatrix4(p.mesh.g.matrixWorld);
-  const look=new THREE.Vector3(p.steer*0.15,0.42+nod*0.4,8.5).applyMatrix4(p.mesh.g.matrixWorld);
+  // Sit under the halo crown, look LEVEL down the road so the hoop frames
+  // the visor instead of a carbon bar cutting the tarmac.
+  const eye=new THREE.Vector3(0,0.90,0.08).applyMatrix4(p.mesh.g.matrixWorld);
+  const look=new THREE.Vector3(p.steer*0.22,0.78+nod*0.25,14).applyMatrix4(p.mesh.g.matrixWorld);
   camera.position.set(eye.x+Math.sin(timeSec*49.7+p.phase)*buzz,eye.y,eye.z);
   camera.up.set(0,1,0);
   camera.lookAt(look.x,look.y,look.z);
   camera.rotateZ(lean*0.28+p.steer*0.04);
-  tf=68;
+  tf=62;
   if(p.mesh.steering)p.mesh.steering.visible=false;
   if(p.mesh.halo)p.mesh.halo.visible=true;
   if(p.mesh.body)p.mesh.body.visible=true;
-  if(helmOverlay&&helmOverlay.userData.v!==7){camera.remove(helmOverlay);helmOverlay=null;helmWheel=null;wingMirrors=null;}
+  if(helmOverlay&&helmOverlay.userData.v!==9){camera.remove(helmOverlay);helmOverlay=null;helmWheel=null;wingMirrors=null;}
   if(!helmOverlay){
-   helmOverlay=new THREE.Group();helmOverlay.userData.v=7;
+   helmOverlay=new THREE.Group();helmOverlay.userData.v=9;
    const hMat=new THREE.MeshStandardMaterial({color:0x171a1f,roughness:0.38,metalness:0.22,side:THREE.DoubleSide});
    helmWheel=p.mesh.steering?p.mesh.steering.clone(true):new THREE.Group();
-   helmWheel.position.set(0,-0.28,-0.55);
-   helmWheel.rotation.set(0.32,0,0);
-   helmWheel.scale.set(0.72,0.72,0.72);
+   helmWheel.position.set(0,-0.38,-0.72);
+   helmWheel.rotation.set(0.22,0,0);
+   helmWheel.scale.set(0.55,0.55,0.55);
    helmWheel.visible=true;
    helmWheel.traverse(o=>{if(o.isMesh){o.frustumCulled=false;o.renderOrder=20;}});
    if(p.mesh.steering)helmWheel.userData=p.mesh.steering.userData;
@@ -5391,7 +5405,7 @@ function updCamera(dt){
    };
    const mkGlass=(rt,sx)=>{
     const housing=new THREE.Mesh(new THREE.BoxGeometry(0.24,0.14,0.025),hMat);
-    housing.position.set(sx*0.48,0.12,-0.78);
+    housing.position.set(sx*0.58,0.18,-0.62);
     housing.frustumCulled=false;housing.renderOrder=19;
     const glass=new THREE.Mesh(new THREE.PlaneGeometry(0.21,0.12),
      new THREE.MeshBasicMaterial({map:rt.texture,side:THREE.DoubleSide}));
@@ -6649,7 +6663,10 @@ function tick(){
    if(state.mode!=='title')updAmbient(dtGlobal);
    updPoints(smoke,dtGlobal,2.2);
    updPoints(sparks,dtGlobal,0.12);
-   if(typeof fire!=='undefined')updPoints(fire,dtGlobal,1.4);
+   if(typeof fire!=='undefined')updPoints(fire,dtGlobal,2.6);
+   if(state.mode==='gameover'&&cars){
+    for(const c of cars)if(c&&c.onFire)updWreckFire(c,dtGlobal);
+   }
    updDebris(dtGlobal);
    updWXBlend(dtGlobal);
    updWeatherFX(dtGlobal);
