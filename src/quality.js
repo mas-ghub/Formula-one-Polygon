@@ -56,7 +56,11 @@ export const QUALITY_PRESETS = {
     smokeParticles: 120,
     sparkParticles: 40,
     anisotropy: 1,
-    rainShader: false,
+    // LOW used to skip the windshield pass entirely, which left cheap
+    // devices with no real rain-on-glass. Its budget is hard-capped
+    // (≤2M px at 0.5× in rainShader.js), so true scene refraction is
+    // affordable everywhere — enable it rather than faking it.
+    rainShader: true,
     propDensity: 0.4
   }
 };

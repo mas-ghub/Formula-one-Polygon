@@ -27,7 +27,8 @@ async function fetchJSON(url, timeoutMs = 6000) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const res = await fetch(url, { signal: controller.signal });
+      // Live session data must never be served from a cache.
+      const res = await fetch(url, { signal: controller.signal, cache: 'no-store' });
       if (res.status === 429 && attempt < MAX_RETRIES - 1) {
         await new Promise(r => setTimeout(r, 700 * (attempt + 1)));
         continue;
@@ -43,7 +44,8 @@ async function fetchJSON(url, timeoutMs = 6000) {
 
 async function loadLocalCircuit(circuitKey) {
   try {
-    const res = await fetch(`${import.meta.env.BASE_URL}data/circuits/${circuitKey}.json`);
+    // '?t=' keeps deployed builds fresh after updates without hard-refresh.
+    const res = await fetch(`${import.meta.env.BASE_URL}data/circuits/${circuitKey}.json?t=${Date.now()}`);
     if (!res.ok) return null;
     const pts = await res.json();
     return Array.isArray(pts) && pts.length > 20 ? pts : null;

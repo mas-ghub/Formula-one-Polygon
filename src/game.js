@@ -133,7 +133,9 @@ async function loadOpenF1Drivers() {
   // Pre-downloaded roster + local headshot images (see scripts/fetch-openf1-data.mjs)
   // — instant, no OpenF1 dependency, no rate limiting. This is what ships to players.
   try {
-    const res = await fetch(`${import.meta.env.BASE_URL}data/drivers/manifest.json`);
+    // '?t=' defeats stale browser/CDN caches after each deploy, so a new
+    // build shows up without anyone needing to hard-refresh.
+    const res = await fetch(`${import.meta.env.BASE_URL}data/drivers/manifest.json?t=${Date.now()}`);
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data) && data.length > 0) {
@@ -156,7 +158,7 @@ async function loadOpenF1Drivers() {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 4000);
     
-    const res = await fetch('https://api.openf1.org/v1/drivers?session_key=latest', { signal: controller.signal });
+    const res = await fetch('https://api.openf1.org/v1/drivers?session_key=latest', { signal: controller.signal, cache: 'no-store' });
     clearTimeout(timeoutId);
     
     if (res.status === 420) {
@@ -750,6 +752,10 @@ const softT=ctex(pc,false);
 // Built at module level because buildWorld() re-runs on every track switch,
 // and the lamps of each new world are registered into T.nightMats.
 const nightPoolMat=new THREE.MeshBasicMaterial({map:softT,color:0xffd9a4,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,opacity:0});
+// Glare halo around each lamp head — what actually reads as "the lights are
+// on" from track level and from the broadcast cameras (bloom-lite, one
+// shared sprite material for every mast in the world).
+const lampGlareMat=new THREE.SpriteMaterial({map:softT,color:0xffe2b0,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,depthTest:true,opacity:0});
 let nightLevel=0;
 function bannerTex(name){const[cn,cx]=mkCanvas(1024,96);
  cx.fillStyle='#101216';cx.fillRect(0,0,1024,96);
@@ -849,19 +855,14 @@ function makeCarMesh(d){
  // visibly slowing into a corner read as slowing.
  const brakeMat=new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.5,metalness:0.2,emissive:0xff4a12,emissiveIntensity:0});
  const brakes=new THREE.Mesh(getBrakeGeo(),brakeMat);brakes.position.set(0,0.37,0);
- // Night & rain lights, done the cheap way round: an additive beam cone, a
- // pool of light on the road and a red tail glow. Real spotlights for a 20
- // car grid would blow the light budget and cost a shader recompile per
- // material; these are three quads, and bloom does the rest.
- const beamGeo=(()=>{const g=new THREE.ConeGeometry(1.35,15,10,1,true);g.rotateX(Math.PI/2);g.translate(0,-0.15,7.7);return ensureUV(g);})();
- const beam=new THREE.Mesh(beamGeo,new THREE.MeshBasicMaterial({color:0xfff0cc,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide}));
- beam.position.set(0,0.52,1.75);beam.renderOrder=3;
- const pool=new THREE.Mesh(new THREE.PlaneGeometry(13,19),new THREE.MeshBasicMaterial({map:softT,color:0xffe9c4,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false}));
- pool.rotation.x=-Math.PI/2;pool.position.set(0,0.06,9.4);pool.renderOrder=3;
+ // Rear rain light, done the cheap way round: a red additive tail glow —
+ // and that's it. Modern F1 cars have NO headlights: night races (Singapore,
+ // Las Vegas...) are lit by the circuit, so the lighting budget lives in
+ // the trackside masts/floodlights instead of a fake beam on every nose.
  const tailGlow=new THREE.Mesh(new THREE.PlaneGeometry(0.9,0.5),new THREE.MeshBasicMaterial({map:softT,color:0xff2a10,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false}));
  tailGlow.position.set(0,0.6,-2.6);tailGlow.renderOrder=3;
- beam.userData.fx=1;pool.userData.fx=1;tailGlow.userData.fx=1;   // not bodywork
- g.add(beam,pool,tailGlow,halo);
+ tailGlow.userData.fx=1;   // not bodywork
+ g.add(tailGlow,halo);
  const drs=new THREE.Mesh(drsGeo,new THREE.MeshStandardMaterial({color:d.colB,flatShading:true,roughness:0.4}));
  drs.position.set(0,1.0,-2.42);
  // Rear brake light — lights up under braking in any weather, and also
@@ -876,7 +877,7 @@ function makeCarMesh(d){
  const dmgSprite=makeDamageSprite();
  g.add(dmgSprite);
  g.add(body,driverGroup,axleF,axleR,brakes,drs,brakeLight);
- return{g,body,driverGroup,helmetGroup,halo,axleF,axleR,brakes,brakeMat,drs,brakeLight,beam,pool,tailGlow,dmgSprite,steering:driverGroup.userData.steering||null};
+ return{g,body,driverGroup,helmetGroup,halo,axleF,axleR,brakes,brakeMat,drs,brakeLight,tailGlow,dmgSprite,steering:driverGroup.userData.steering||null};
 }
 
 /* ============ particles ============ */
@@ -1065,57 +1066,122 @@ function updWeatherFX(dt){
  }
 }
 
-/* rain on the camera lens (2D canvas) */
+/* rain on the camera lens (2D canvas)
+   Real water on glass behaves in two ways, and this layer keeps both:
+   - STATICS: tiny condensation beads that twinkle, creep a millimetre and
+     die where they sit. They never travel visibly.
+   - RUNNERS: heavier drops that beat surface tension and RUN DOWN the
+     screen, accelerating as they go, wobbling sideways and dragging a
+     fading wet wake. A runner swallows statics it passes over and grows
+     fatter and faster, which carves the clean channels you see on a real
+     visor. Car speed stretches all of this out like airflow over the glass.
+   Rendering rule: every bead is a soft FILLED radial patch with a small
+   specular pin — nothing is ever drawn as a stroked ring, so no drop can
+   read as an opaque outline against the sky. */
 const dropCv=$('drops'),dropCx=dropCv.getContext('2d');
-const RAIN_RENDER_REV='20260907.8-rain-05';
-let lensDrops=[];
+const RAIN_RENDER_REV='20260908.2-rain-07';
+let lensStatics=[],lensRunners=[];
 function sizeDrops(){dropCv.width=innerWidth;dropCv.height=innerHeight;dropCv.dataset.renderRevision=RAIN_RENDER_REV;}
-function newLensDrop(){return{
- x:Math.random()*dropCv.width,y:Math.random()*dropCv.height,
- r:rand(1.4,5.8),life:rand(2.5,5.8),vy:rand(10,30),vx:rand(-2.5,2.5),
- trail:rand(3,18),hasTrail:Math.random()<0.48,phase:rand(0,6.28)
+function newStaticDrop(){const life=rand(2.4,7.5);return{
+ x:rand(0,dropCv.width),y:rand(0,dropCv.height),r:rand(1.1,3.0),
+ life,age:rand(0,3),tw:rand(0.5,1.3),phase:rand(0,6.28),vy:rand(0.4,2.4)
 };}
+function newRunnerDrop(scattered){const r=rand(2.6,6.0);return{
+ x:rand(0,dropCv.width),y:scattered?rand(-30,dropCv.height):-r*2-6,r,
+ v:rand(15,60),phase:rand(0,6.28),wob:rand(0.55,1.45),a:rand(0.72,1),trail:[]
+};}
+// A runner's bead gets the full gradient treatment; the fill is brightest
+// low on the bead where refraction pools, never ringed at its edge.
+function paintBead(x,y,rx,ry,a){
+ let g=dropCx.createRadialGradient(x,y+ry*0.35,Math.max(0.2,rx*0.12),x,y+ry*0.05,Math.max(rx,ry));
+ g.addColorStop(0,'rgba(215,236,248,'+(0.32*a).toFixed(3)+')');
+ g.addColorStop(0.55,'rgba(158,190,210,'+(0.14*a).toFixed(3)+')');
+ g.addColorStop(1,'rgba(150,180,200,0)');
+ dropCx.fillStyle=g;dropCx.beginPath();dropCx.ellipse(x,y,rx,ry,0,0,6.2832);dropCx.fill();
+ g=dropCx.createRadialGradient(x-rx*0.30,y-ry*0.38,0,x-rx*0.30,y-ry*0.38,rx*0.6);
+ g.addColorStop(0,'rgba(246,252,255,'+(0.38*a).toFixed(3)+')');
+ g.addColorStop(1,'rgba(246,252,255,0)');
+ dropCx.fillStyle=g;dropCx.beginPath();dropCx.ellipse(x-rx*0.30,y-ry*0.38,rx*0.55,rx*0.55,0,0,6.2832);dropCx.fill();
+}
+// Statics are only a few pixels across, so a gradient would be invisible —
+// two solid soft fills read exactly the same at that size and cost nothing.
+function paintStatic(s,a){
+ dropCx.fillStyle='rgba(188,214,232,'+(0.20*a).toFixed(3)+')';
+ dropCx.beginPath();dropCx.ellipse(s.x,s.y,s.r,s.r*1.18,0,0,6.2832);dropCx.fill();
+ dropCx.fillStyle='rgba(244,251,255,'+(0.30*a).toFixed(3)+')';
+ dropCx.beginPath();dropCx.ellipse(s.x-s.r*0.28,s.y-s.r*0.34,s.r*0.42,s.r*0.42,0,0,6.2832);dropCx.fill();
+}
 function updLens(dt){
  dropCx.clearRect(0,0,dropCv.width,dropCv.height);
- const amt=state.mode==='title'?0:clamp(cur.rain,0,1);
- if(amt<0.08){lensDrops.length=0;return;}
- // This is a guaranteed, independent glass layer. The first frame of rain is
- // populated rather than waiting on a probabilistic spawn, which made the
- // original effect look absent on a new race or after changing weather.
- const target=Math.round(115+amt*75);
- while(lensDrops.length<target)lensDrops.push(newLensDrop());
- const spd=player?Math.abs(player.vF):0;
- for(let i=lensDrops.length-1;i>=0;i--){
-  const d=lensDrops[i];
-  d.life-=dt*(0.72+spd*0.006);
-  d.x+=d.vx*dt+Math.sin(timeSec*1.7+d.phase)*dt*0.8;
-  d.y+=d.vy*dt*(0.48+spd*0.012);
-  if(d.life<=0||d.y>dropCv.height+30||d.x<-30||d.x>dropCv.width+30){lensDrops.splice(i,1);continue;}
-  const fade=clamp(Math.min(d.life,1.2)/1.2,0,1)*(0.72+amt*0.28);
-  const stretch=d.trail*(0.65+spd*0.018);
-  // Only some beads leave a trail. The trail is a soft, slightly wandering
-  // taper rather than the old hard straight line attached to every blob.
-  if(d.hasTrail&&stretch>1.5){
-   const trailGrad=dropCx.createLinearGradient(d.x,d.y-stretch,d.x,d.y);
-   trailGrad.addColorStop(0,'rgba(159,199,218,0)');
-   trailGrad.addColorStop(0.55,'rgba(159,199,218,.16)');
-   trailGrad.addColorStop(1,'rgba(188,222,235,.34)');
-   dropCx.globalAlpha=fade*0.72;dropCx.strokeStyle=trailGrad;
-   dropCx.lineWidth=Math.max(0.65,d.r*0.30);dropCx.lineCap='round';dropCx.beginPath();
-   const sway=Math.sin(timeSec*1.7+d.phase)*Math.min(3.5,d.r*.75);
-   dropCx.moveTo(d.x-sway*.35,d.y-stretch);
-   dropCx.quadraticCurveTo(d.x+sway,d.y-stretch*.48,d.x,d.y);dropCx.stroke();
-  }
-  // A low-alpha rim and a small upper glint read as water without making the
-  // edge opaque or drawing a bright "tail" from every droplet.
-  dropCx.globalAlpha=fade*0.40;
-  dropCx.strokeStyle='rgb(205,232,241)';dropCx.lineWidth=Math.max(0.65,d.r*0.22);
-  dropCx.lineCap='round';dropCx.beginPath();dropCx.ellipse(d.x,d.y,d.r,d.r*1.25,0,0,Math.PI*2);dropCx.stroke();
-  dropCx.globalAlpha=fade*0.28;
-  dropCx.strokeStyle='rgb(245,252,255)';dropCx.lineWidth=Math.max(0.4,d.r*0.14);
-  dropCx.beginPath();dropCx.arc(d.x-d.r*.22,d.y-d.r*.3,d.r*.55,Math.PI*1.05,Math.PI*1.78);dropCx.stroke();
+ // Driven by glassBead, not raw rain: water soaks in over several seconds
+ // of rain ("gets worse as it goes on"), airflow strips most of it at
+ // speed but never all of it — exactly the shader's model, so both layers
+ // agree. Runs one frame behind the render pass's glassBead: harmless.
+ // This applies on the title screen too now: the attract cameras fly
+ // through the same weather the user just picked in the menu.
+ const amt=clamp(glassBead*1.1,0,1);
+ // The 2D canvas layer is strictly a FALLBACK now: whenever the real
+ // refraction pass owns the screen these soft non-refracting dots must not
+ // draw — mixing them in is exactly the "weak drops" look over the true
+ // Shadertoy-style beads. It still covers drivers where the pass fails.
+ if(amt<0.08||windshieldOn){lensStatics.length=0;lensRunners.length=0;return;}
+ // This is a guaranteed, independent glass layer. When the weather turns to
+ // rain the first frame is populated across the whole screen (runners arrive
+ // scattered mid-fall), instead of drops trickling in from the top.
+ const targetStatic=Math.round(50+amt*150),targetRun=Math.round(8+amt*30);
+ const seeding=lensRunners.length===0;
+ while(lensStatics.length<targetStatic)lensStatics.push(newStaticDrop());
+ while(lensRunners.length<targetRun)lensRunners.push(newRunnerDrop(seeding));
+ if(lensStatics.length>targetStatic)lensStatics.length=targetStatic;
+ if(lensRunners.length>targetRun)lensRunners.length=targetRun;
+ // Spectator speed: on the title screen only onboard director shots should
+ // clear water as if driven; airborne/broadcast cameras just stay wet.
+ const dCar=state.mode==='title'&&(director.shot==='hood'||director.shot==='halo')&&director.target&&cars.includes(director.target)?director.target:null;
+ const spd=player?Math.abs(player.vF):(dCar?Math.abs(dCar.vF):0);
+ // vF is m/s; airflow strips water harder the faster you go, so runners
+ // gather pace and stretch out. Roughly doubles by 70 m/s (~250 km/h).
+ const wind=1+Math.min(spd*0.014,1.7);
+ // --- statics: twinkle in place, then recycle somewhere else ----------
+ for(let i=0;i<lensStatics.length;i++){
+  const s=lensStatics[i];
+  s.life-=dt;s.age+=dt;s.y+=s.vy*dt;
+  if(s.life<=0||s.y>dropCv.height+6){lensStatics[i]=newStaticDrop();continue;}
+  const fade=clamp(Math.min(s.life,1.4)/1.4,0,1)*clamp(s.age/0.8,0,1);
+  const a=fade*(0.82+Math.sin(timeSec*s.tw+s.phase)*0.18)*(0.5+amt*0.35);
+  if(a>0.02)paintStatic(s,a);
  }
- dropCx.globalAlpha=1;dropCx.lineCap='butt';
+ // --- runners: accelerate down the glass, wake behind, absorb statics ---
+ for(let i=0;i<lensRunners.length;i++){
+  let d=lensRunners[i];
+  d.v+=(120*d.r*wind)*dt;                  // gravity: big drops run sooner
+  const vmax=60+d.r*46*wind;
+  if(d.v>vmax)d.v=vmax;
+  d.y+=d.v*dt;
+  d.x+=Math.sin(d.y*0.021+d.phase)*(9*d.wob)*dt; // surface-tension wobble
+  const tr=d.trail;
+  tr.push(d.x,d.y-d.r*1.1);
+  while(tr.length>64)tr.splice(0,2);       // ~0.53s of wake at 60fps
+  if(d.y-d.r>dropCv.height+24){lensRunners[i]=newRunnerDrop(false);continue;}
+  // swallow nearby condensation: the swept channel stays briefly clean
+  for(let j=0;j<lensStatics.length;j++){
+   const s=lensStatics[j],dx=s.x-d.x,dy=s.y-d.y;
+   if(dx*dx+dy*dy<d.r*d.r*9){s.life=Math.min(s.life,0.22);d.r=Math.min(d.r+s.r*0.12,7.6);}
+  }
+  const a=d.a*(0.8+amt*0.2);
+  const n=tr.length;
+  if(n>=4){
+   const hx=tr[n-2],hy=tr[n-1],tx=tr[0],ty=tr[1];
+   const g=dropCx.createLinearGradient(hx,hy,tx,ty);
+   g.addColorStop(0,'rgba(198,224,240,'+(0.24*a).toFixed(3)+')');
+   g.addColorStop(1,'rgba(198,224,240,0)');
+   dropCx.strokeStyle=g;dropCx.lineWidth=Math.max(0.7,d.r*0.55);dropCx.lineCap='round';
+   dropCx.beginPath();dropCx.moveTo(tx,ty);
+   for(let k=2;k<n;k+=2)dropCx.lineTo(tr[k],tr[k+1]);
+   dropCx.stroke();
+  }
+  paintBead(d.x,d.y,d.r,d.r*1.22,a);
+ }
+ dropCx.lineCap='butt';
 }
 /* ============ clouds ============ */
 let cloudGrp=null,cloudMat=null;
@@ -1362,7 +1428,8 @@ function applyWeatherVisuals(){
 function setNightGlow(){
  const L=clamp((state.tod==='night'?0.78:state.tod==='dusk'?0.34:0)+cur.rain*0.30+(cur.snow||0)*0.25,0,1);
  nightLevel=L;
- nightPoolMat.opacity=L*0.50;
+ nightPoolMat.opacity=L*0.58;
+ lampGlareMat.opacity=L*0.62;
  if(T&&T.nightMats)for(const m of T.nightMats)m.color.setRGB(0.16+L*0.84,0.15+L*0.79,0.11+L*0.58);
 }
 function snapWeather(k){const p=WX[k];
@@ -2103,38 +2170,76 @@ function buildWorld(idx){
   const skMesh=new THREE.Mesh(skGeo,skMat);skMesh.receiveShadow=true;world.add(skMesh);
  }
 
- // 3. Continuous FIA kerbs. They occupy the outer metre OF the road rather
- // than hovering beyond its edge over the lowered terrain. Their base follows
- // every road sample exactly; only the alternating rumble ribs rise above it.
+ // 3. FIA kerbs — CORNERS ONLY, exactly like real circuits: straights are
+ // edged by a painted white track-limit line, not a red/white ribbed raised
+ // edge wrapping the whole lap. Kerb zones come from the same curvature
+ // runs the gravel traps use (padded ~70 m into the braking zone and past
+ // the exit), and T.kerbMask feeds the physics below so what you see is
+ // what you feel — no phantom kerb grip or rumble glued to every straight.
  {
+  const kerbMask=new Uint8Array(N),runs=[];let inRun=false,runStart=0;
+  for(let i=0;i<N;i++){const cv=Math.abs(samples[i].curv||0);const active=cv>0.016;
+   if(active&&!inRun){inRun=true;runStart=i;}
+   else if(!active&&inRun){if(i-runStart>=4)runs.push([runStart,i]);inRun=false;}}
+  if(inRun&&N-runStart>=4)runs.push([runStart,N]);
+  const padI=Math.max(4,Math.round(70/T.segLen));
+  for(const[rs,re]of runs)for(let i=rs-padI;i<re+padI;i++)kerbMask[(i%N+N)%N]=1;
+  T.kerbMask=kerbMask;
+
   const pos=[],uv=[],index=[];let vi=0;
+  const lp=[],li=[];let lVi=0;
   const curbInner=halfW-1.0,curbOuter=halfW-0.04;
+  const lineInner=halfW-0.42,lineOuter=halfW-0.06;
   for(let i=0;i<N;i++){
    const s=samples[i],s2=samples[(i+1)%N];
    // Alternating 1.2 m ribs: enough geometry to read visually and matched by
    // the suspension/audio pulse in updCarVisual().
    const ribA=(Math.floor(s.cum/1.2)%2)?0.075:0.018;
    const ribB=(Math.floor(s2.cum/1.2)%2)?0.075:0.018;
+   const kerbHere=kerbMask[i]&&kerbMask[(i+1)%N];
    for(const sg of[1,-1]){
-    const bIn=bankOffAt(s.bk||0,curbInner*sg),bOut=bankOffAt(s.bk||0,curbOuter*sg);
-    const bIn2=bankOffAt(s2.bk||0,curbInner*sg),bOut2=bankOffAt(s2.bk||0,curbOuter*sg);
-    pos.push(s.p.x+s.n.x*curbInner*sg,s.p.y+0.058+bIn,s.p.z+s.n.z*curbInner*sg,
-     s.p.x+s.n.x*curbOuter*sg,s.p.y+0.058+ribA+bOut,s.p.z+s.n.z*curbOuter*sg,
-     s2.p.x+s2.n.x*curbInner*sg,s2.p.y+0.058+bIn2,s2.p.z+s2.n.z*curbInner*sg,
-     s2.p.x+s2.n.x*curbOuter*sg,s2.p.y+0.058+ribB+bOut2,s2.p.z+s2.n.z*curbOuter*sg);
-    const v0=s.cum/2.4,v1=s2.cum/2.4;
-    uv.push(0,v0,1,v0,0,v1,1,v1);
-    if(sg>0)index.push(vi,vi+2,vi+1,vi+1,vi+2,vi+3);
-    else index.push(vi,vi+1,vi+2,vi+1,vi+3,vi+2);
-    vi+=4;
+    if(kerbHere){
+     const bIn=bankOffAt(s.bk||0,curbInner*sg),bOut=bankOffAt(s.bk||0,curbOuter*sg);
+     const bIn2=bankOffAt(s2.bk||0,curbInner*sg),bOut2=bankOffAt(s2.bk||0,curbOuter*sg);
+     pos.push(s.p.x+s.n.x*curbInner*sg,s.p.y+0.058+bIn,s.p.z+s.n.z*curbInner*sg,
+      s.p.x+s.n.x*curbOuter*sg,s.p.y+0.058+ribA+bOut,s.p.z+s.n.z*curbOuter*sg,
+      s2.p.x+s2.n.x*curbInner*sg,s2.p.y+0.058+bIn2,s2.p.z+s2.n.z*curbInner*sg,
+      s2.p.x+s2.n.x*curbOuter*sg,s2.p.y+0.058+ribB+bOut2,s2.p.z+s2.n.z*curbOuter*sg);
+     const v0=s.cum/2.4,v1=s2.cum/2.4;
+     uv.push(0,v0,1,v0,0,v1,1,v1);
+     if(sg>0)index.push(vi,vi+2,vi+1,vi+1,vi+2,vi+3);
+     else index.push(vi,vi+1,vi+2,vi+1,vi+3,vi+2);
+     vi+=4;
+    }else{
+     // Painted white track-limit line where no kerb exists — what a real F1
+     // straight edge actually looks like. Flat on the road: no rise, no rumble.
+     const bIn=bankOffAt(s.bk||0,lineInner*sg),bOut=bankOffAt(s.bk||0,lineOuter*sg);
+     const bIn2=bankOffAt(s2.bk||0,lineInner*sg),bOut2=bankOffAt(s2.bk||0,lineOuter*sg);
+     lp.push(s.p.x+s.n.x*lineInner*sg,s.p.y+0.056+bIn,s.p.z+s.n.z*lineInner*sg,
+      s.p.x+s.n.x*lineOuter*sg,s.p.y+0.056+bOut,s.p.z+s.n.z*lineOuter*sg,
+      s2.p.x+s2.n.x*lineInner*sg,s2.p.y+0.056+bIn2,s2.p.z+s2.n.z*lineInner*sg,
+      s2.p.x+s2.n.x*lineOuter*sg,s2.p.y+0.056+bOut2,s2.p.z+s2.n.z*lineOuter*sg);
+     if(sg>0)li.push(lVi,lVi+2,lVi+1,lVi+1,lVi+2,lVi+3);
+     else li.push(lVi,lVi+1,lVi+2,lVi+1,lVi+3,lVi+2);
+     lVi+=4;
+    }
    }
   }
-  const g=new THREE.BufferGeometry();
-  g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(pos),3));
-  g.setAttribute('uv',new THREE.BufferAttribute(new Float32Array(uv),2));
-  g.setIndex(index);g.computeVertexNormals();
-  const cm=new THREE.Mesh(g,new THREE.MeshStandardMaterial({map:curbT,roughness:0.82}));
-  cm.receiveShadow=true;world.add(cm);T.curbMesh=cm;
+  if(vi>0){
+   const g=new THREE.BufferGeometry();
+   g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(pos),3));
+   g.setAttribute('uv',new THREE.BufferAttribute(new Float32Array(uv),2));
+   g.setIndex(index);g.computeVertexNormals();
+   const cm=new THREE.Mesh(g,new THREE.MeshStandardMaterial({map:curbT,roughness:0.82}));
+   cm.receiveShadow=true;world.add(cm);T.curbMesh=cm;
+  }
+  if(lVi>0){
+   const lg=new THREE.BufferGeometry();
+   lg.setAttribute('position',new THREE.BufferAttribute(new Float32Array(lp),3));
+   lg.setIndex(li);lg.computeVertexNormals();
+   const lm=new THREE.Mesh(lg,new THREE.MeshStandardMaterial({color:0xe6e4de,roughness:0.88,polygonOffset:true,polygonOffsetFactor:2,polygonOffsetUnits:2}));
+   lm.receiveShadow=true;world.add(lm);
+  }
  }
 
  // 4. Continuous Smooth Curved 3D Barrier Ribbons (TechPro Red/White / Armco Barrier)
@@ -2270,6 +2375,10 @@ function buildWorld(idx){
     const headMat=new THREE.MeshBasicMaterial({color:0x2a2717});
     T.nightMats.push(headMat);
     for(const oz of[-0.42,0.42]){const hd=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.2,0.34),headMat);hd.position.set(-sg*1.9,15.5,oz);grp.add(hd);}
+    // Camera-facing glare halo at the lamp head — fades in with darkness
+    // via the shared material, so the masts visibly glow at night/storm.
+    const glare=new THREE.Sprite(lampGlareMat);
+    glare.position.set(-sg*1.9,15.45,0);glare.scale.set(8.5,5.2,1);glare.renderOrder=3;grp.add(glare);
     const shade=new THREE.Mesh(new THREE.BoxGeometry(0.14,0.34,1.06),gm);shade.position.set(-sg*1.66,15.5,0);grp.add(shade);
     world.add(grp);
     const rx=sa.p.x,rz=sa.p.z,ry=nearestTrackY(rx,rz).y;
@@ -3300,9 +3409,11 @@ function projectCar(c,full){
  c.lat=dx*s.n.x+dz*s.n.z;
  const al=Math.abs(c.lat);
  c.offT=al>T.halfW+1.4;
- // The painted kerb is the outer metre of tarmac (matching the rendered strip),
- // not an invisible band floating in the run-off.
- c.onCurb=al>T.halfW-1.0&&al<=T.halfW+0.08;
+ // The painted kerb is the outer metre of tarmac (matching the rendered
+ // strip), not an invisible band floating in the run-off — and it only
+ // exists in actual kerb zones (corners); straights carry a flat painted
+ // line now, so no kerb grip/rumble where no kerb is drawn.
+ c.onCurb=al>T.halfW-1.0&&al<=T.halfW+0.08&&(!T.kerbMask||T.kerbMask[c.ti|0]);
 }
 
 /* ============ physics ============ */
@@ -3888,11 +3999,9 @@ function updCarVisual(c,dt){
  // Lights: on at night, on in the rain, and on inside a covered section even
  // at midday. The beam brightens with speed and the tail goes red-hot under
  // braking, which is how a car slowing ahead of you reads in your mirrors.
- if(c.mesh.beam){
+ if(c.mesh.tailGlow){
   const lit=clamp(nightLevel+(c.inTunnel?0.85:0)+cur.rain*0.4,0,1);
   const sp01=clamp(Math.abs(c.vF)/PH.top,0,1);
-  c.mesh.beam.material.opacity=lit*(0.05+sp01*0.10);
-  c.mesh.pool.material.opacity=lit*(0.10+sp01*0.26);
   const braking=c.brake>0.12?1:0;
   c.mesh.tailGlow.material.opacity=clamp(lit*0.35+braking*(0.35+sp01*0.5)+cur.wet*0.12,0,1);
   c.mesh.tailGlow.scale.setScalar(1+braking*0.35);
@@ -4559,19 +4668,32 @@ const crashCam={active:false,timer:0,duration:4.2,target:null,from:null,fromLook
 // instead of one static flyover, so the attract screen actually looks like
 // a race in progress.
 const director={shot:'heli',timer:5,target:null};
+// Small caption naming the current attract shot, so the user can tell which
+// camera they're being shown (matches the race camera names where shared).
+const SHOT_LABELS={heli:'HELICOPTER',chase:'CHASE CAM',tv:'TV CAM',orbit:'ORBIT CAM',cine:'CINEMATIC',hood:'HOOD CAM',halo:'VISOR CAM'};
+function setShotTag(txt){const el=$('shotTag');if(!el)return;el.textContent=txt;el.style.opacity=txt?'1':'0';}
+// Re-seat the driver's head if the previous attract shot hid it on board.
+function restoreDirectorDriver(){
+ if(director._hidden&&director._hidden.mesh&&director._hidden.mesh.driverGroup)director._hidden.mesh.driverGroup.visible=true;
+ director._hidden=null;
+}
 function pickDirectorShot(){
  const sorted=[...cars].sort((a,b)=>b.key-a.key);
  // Action-aware directing: when the front runners are bunched up (small
  // gap), favour tight chase/trackside shots that show the wheel-to-wheel
  // racing; when the race is strung out, show off the circuit from the air.
+ // Onboards ('hood'/'halo') are in every pool so the title screen previews
+ // the views the user can actually pick in the race, not just broadcast TVs.
  let spread=1e9;
  if(sorted.length>1)spread=(sorted[0].key-sorted[1].key)*T.segLen/Math.max(Math.abs(sorted[1].vF),12);
  let shots;
- if(spread<180)shots=['chase','chase','cine','chase','tv','tv','orbit'];
- else if(spread<500)shots=['chase','chase','cine','tv','tv','heli','orbit'];
- else shots=['heli','heli','cine','heli','chase','tv','orbit'];
+ if(spread<180)shots=['chase','chase','cine','hood','halo','chase','tv','tv','orbit'];
+ else if(spread<500)shots=['chase','chase','cine','hood','halo','tv','tv','heli','orbit'];
+ else shots=['heli','heli','cine','halo','heli','chase','tv','orbit','hood'];
+ restoreDirectorDriver();
  director.shot=pick(shots);
- director.timer=director.shot==='heli'?rand(6,10):rand(3.5,6);
+ director.timer=director.shot==='heli'?rand(6,10):(director.shot==='hood'||director.shot==='halo')?rand(4,6):rand(3.5,6);
+ setShotTag(state.mode==='title'?(SHOT_LABELS[director.shot]||''):'');
  if(sorted.length){
   const n=Math.min(4,sorted.length);
   director.target=sorted[Math.random()<0.65?0:Math.floor(rand(0,n))];
@@ -4691,6 +4813,26 @@ function updCamera(dt){
    camera.position.set(px,tp.y+1.7,pz);
    clampCameraToSurface(0.45);camera.lookAt(tp.x,carLookY(tc,0.9),tp.z);
    camera.fov=damp(camera.fov,40,3,dt);camera.updateProjectionMatrix();return;
+  }else if(tc&&director.shot==='hood'){
+   // The same T-cam framing the HOOD race camera gives the player, so the
+   // attract screen previews what driving will actually look like.
+   const tp=tc.mesh.g.position,yaw=tc.hdg,fx=Math.sin(yaw),fz=Math.cos(yaw),sp2=Math.abs(tc.vF);
+   camera.position.set(tp.x+fx*0.15,tp.y+1.42,tp.z+fz*0.15);
+   clampCameraToSurface(0.55);
+   camera.lookAt(tp.x+fx*40,Math.max(tp.y+1.05,cameraSurfaceY(tc.x,tc.z)+0.75),tp.z+fz*40);
+   camera.fov=damp(camera.fov,58+sp2*0.06,4,dt);camera.updateProjectionMatrix();return;
+  }else if(tc&&director.shot==='halo'){
+   // Visor view from the target car's helmet position — the full onboard
+   // preview, rain-on-visor included. The driver's own head is hidden for
+   // the duration of the shot (restored at the next cut/race start).
+   const yaw=tc.hdg,fx=Math.sin(yaw),fz=Math.cos(yaw);
+   const hg=tc.mesh.helmetGroup;
+   const head=hg?hg.getWorldPosition(_camHead):_camHead.copy(tc.mesh.g.position).add(V3(0,0.95,0));
+   if(tc.mesh.driverGroup){tc.mesh.driverGroup.visible=false;director._hidden=tc;}
+   camera.position.set(head.x+fx*0.12,head.y+0.03,head.z+fz*0.12);
+   clampCameraToSurface(0.22);
+   camera.lookAt(head.x+fx*26,Math.max(head.y+0.55,cameraSurfaceY(tc.x,tc.z)+0.75),head.z+fz*26);
+   camera.fov=damp(camera.fov,78,4,dt);camera.updateProjectionMatrix();return;
   }
   // Helicopter establishing shot: sweep along the whole circuit from high
   // above. Positions are interpolated between track samples (via sampleF)
@@ -5047,6 +5189,9 @@ function beginRace(){
  TitleTheme.stop();
  $('title').classList.add('hidden');$('results').classList.add('hidden');$('pause').classList.add('hidden');
  $('hud').classList.remove('hidden');
+ // Leaving the attract screen: hide the shot caption and re-seat any
+ // driver's head an onboard title shot had hidden.
+ setShotTag('');restoreDirectorDriver();
  applyTowerVisibility();
  $('hLaps').textContent=state.laps;
  $('hWx').innerHTML=ICONS[state.wx]+'<span>'+WX[state.wx].label+'</span>';
@@ -5941,7 +6086,7 @@ function buildMenu(){
 let last=nowT();
 /* Water actually sitting on the camera glass right now (0..cur.rain) — fed by
    the weather, stripped off by airflow at speed, re-beading when you slow. */
-let glassBead=0;
+let glassBead=0,windshieldOn=false;
 function tick(){
  requestAnimationFrame(tick); const t=nowT();
  let dt=Math.min(t-last,0.05);last=t;
@@ -5993,30 +6138,44 @@ function tick(){
  // a moment to re-bead and dribble down again — like a real visor.
  try{
   const rainShaderOn=(QUALITY_PRESETS[effQuality()]||{}).rainShader!==false;
-  const speedKmh=player?Math.abs(player.vF)*3.6:0;
+  // Onboard director shots on the title screen clear the glass with speed
+  // exactly like the player's car would; airborne/broadcast cameras get wet.
+  const dCam=state.mode==='title'&&(director.shot==='hood'||director.shot==='halo')&&director.target&&cars.includes(director.target)?director.target:null;
+  const speedKmh=player?Math.abs(player.vF)*3.6:(dCam?Math.abs(dCam.vF)*3.6:0);
   const speedFactor=clamp(speedKmh/300,0,1);
   const beadTarget=cur.rain*lerp(1.0,0.08,Math.pow(speedFactor,0.8));
   // Asymmetric response: the wind blasts water off quickly (rate 3), but
-  // fresh drops need a moment to build back up when you slow (rate 0.9).
-  glassBead=damp(glassBead,beadTarget,beadTarget<glassBead?3.0:0.9,dt);
+  // the glass soaks in SLOWLY (rate 0.35) — the longer it rains the worse
+  // the windshield gets, and braking for a corner lets it bead up again
+  // over several seconds, like a real visor. The target never hits zero
+  // at speed, so even flat-out there's still some water out there.
+  glassBead=damp(glassBead,beadTarget,beadTarget<glassBead?3.0:0.35,dt);
   const effRain=glassBead;
-  if(rainPass && !rainPass.failed && rainShaderOn && state.mode!=='title' && (effRain>0.01||lightningFlash>0.01)){
+  // Not title-gated: the attract screen shows the picked weather — wet lens,
+  // refraction and lightning included — so the menu is an honest preview.
+  if(rainPass && !rainPass.failed && rainShaderOn && (effRain>0.01||lightningFlash>0.01)){
    // The windshield pass does its own full-screen composite, so the grade
    // chain stands down for those frames rather than fighting it for the
    // canvas. ACES is restored first, so the look stays the same either way.
    renderer.toneMapping=BASE_TONE;
    try{
-    rainPass.renderScene(scene,camera);
-    rainPass.composite(timeSec,Math.min(effRain*0.62,1),speedKmh,lightningFlash,lightningSeed);
-    if(snowPass&&snowAccum>0.02)snowPass.composite(timeSec,snowAccum*(0.55+0.45*cur.snow),0.3+snowGust*0.7);
+   windshieldOn=true;
+   rainPass.renderScene(scene,camera);
+   // Full effRain: the shader is authored for a 0..1 amount; the old 0.62
+   // scale starved the drop field and was a big part of "title rain looks
+   // weak" — the refraction was technically there but unreadably faint.
+   rainPass.composite(timeSec,Math.min(effRain,1),speedKmh,lightningFlash,lightningSeed);
+   if(snowPass&&snowAccum>0.02)snowPass.composite(timeSec,snowAccum*(0.55+0.45*cur.snow),0.3+snowGust*0.7);
    }catch(e){
     rainPass.failed=true;
+    windshieldOn=false;
     renderer.setRenderTarget(null);
     renderer.toneMapping=BASE_TONE;
     renderer.render(scene,camera);
     console.warn('[rain] pass disabled after render failure:',e&&e.message||e);
    }
   }else{
+   windshieldOn=false;
    postfx.setMood({rain:cur.rain,wet:cur.wet,night:state.tod==='night',exposure:renderer.toneMappingExposure,time:timeSec});
    renderer.toneMapping=postfxActive()?THREE.NoToneMapping:BASE_TONE;
    if(!postfx.render(timeSec))renderer.render(scene,camera);

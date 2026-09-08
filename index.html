@@ -27,6 +27,7 @@ html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:'Chak
 canvas{display:block;}
 #gl{position:fixed;inset:0;z-index:0;pointer-events:auto;}
 #drops{position:fixed;inset:0;z-index:6;pointer-events:none;}
+#shotTag{position:fixed;right:14px;bottom:14px;z-index:8;pointer-events:none;font:700 12px/1 'Chakra Petch',sans-serif;letter-spacing:.16em;color:var(--txt);background:var(--panel);border:1px solid var(--line);padding:7px 11px;opacity:0;transition:opacity .45s;backdrop-filter:blur(6px);}
 #vig{position:fixed;inset:0;z-index:7;pointer-events:none;box-shadow:inset 0 0 160px rgba(0,0,0,.45);}
 .hidden{display:none!important;}
 .panel{background:var(--panel);border:1px solid var(--line);clip-path:polygon(0 0,calc(100% - 12px) 0,100% 12px,100% 100%,12px 100%,0 calc(100% - 12px));backdrop-filter:blur(10px);pointer-events:auto;}
@@ -601,6 +602,7 @@ document.addEventListener('DOMContentLoaded', function() {
 </div>
 <canvas id="gl"></canvas>
 <canvas id="drops"></canvas>
+<div id="shotTag"></div>
 <div id="vig"></div>
 
 <!-- Title Screen -->
