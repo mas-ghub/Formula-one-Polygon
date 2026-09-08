@@ -184,6 +184,9 @@ canvas{display:block;}
 .chip.drs{color:#5a6068;}
 .chip.drs.on{color:var(--green);border-color:#3d6b3c;box-shadow:0 0 10px rgba(125,217,123,.3);}
 .chip.tilt-chip.on{color:var(--cyan);border-color:#2a7596;}
+.chip.face-chip.on{color:var(--cyan);border-color:#2a7596;box-shadow:0 0 10px rgba(0,240,255,.25);}
+/* Webcam face-drive preview: tiny self-view + steering/gas bars, bottom-left. */
+#facePreview{position:absolute;bottom:118px;left:12px;z-index:21;display:none;width:148px;height:104px;border:1px solid rgba(0,240,255,.35);border-radius:8px;background:#0b0d10;opacity:.94;}
 
 #hMsg{position:absolute;top:16%;left:0;right:0;text-align:center;opacity:0;transform:translateY(8px);transition:opacity .25s,transform .25s;pointer-events:none;}
 #hMsg.show{opacity:1;transform:translateY(0);}
@@ -698,8 +701,34 @@ document.addEventListener('DOMContentLoaded', function() {
       <div id="tCtrlMode" class="seg">
         <button id="btnTouchMode" class="sel">KEYBOARD / TOUCH</button>
         <button id="btnTiltMode">MOBILE TILT / GYRO</button>
+        <button id="btnFaceMode">WEBCAM FACE DRIVE</button>
       </div>
       <button id="btnOpenGyroLab" class="btn-mini" style="margin-top:6px;width:100%;padding:8px 10px;background:rgba(0,240,255,0.08);border-color:rgba(0,240,255,0.35);color:#00f0ff;font-weight:700;letter-spacing:.12em;font-size:11px;">🎯 CALIBRATE GYRO &amp; 3D TEST LAB</button>
+    </div>
+
+    <div class="sec" id="tFaceSec">
+      <label>FACE DRIVE (WEBCAM)</label>
+      <div class="row2">
+        <div class="seg" id="tFaceSteer">
+          <button data-v="nose" class="sel">STEER: NOSE</button>
+          <button data-v="eyes">STEER: EYES</button>
+        </div>
+        <div class="seg" id="tFacePedal">
+          <button data-v="mouth" class="sel">GAS: OPEN MOUTH</button>
+          <button data-v="tilt">GAS: HEAD TILT</button>
+        </div>
+      </div>
+      <div class="seg" id="tFaceSens" style="margin-top:6px;">
+        <button data-v="low">STEER LOW</button>
+        <button data-v="med" class="sel">STEER MED</button>
+        <button data-v="high">STEER HIGH</button>
+      </div>
+      <div class="btnrow" style="margin-top:8px;">
+        <button id="tFaceCal" class="btn-mini" style="flex:1;">◎ CALIBRATE NEUTRAL</button>
+        <button id="tFaceInv" class="btn-mini" style="flex:1;">MIRROR STEER: OFF</button>
+      </div>
+      <canvas id="tFaceCam" width="200" height="112" style="display:none;margin-top:8px;width:100%;border:1px solid var(--line);border-radius:6px;"></canvas>
+      <div id="tFaceStatus" style="margin-top:6px;color:var(--muted);font-size:10px;letter-spacing:.08em;line-height:1.4;">Camera off · loads Google’s face model once (≈4 MB, then cached)</div>
     </div>
 
     <div class="sec" id="tTiltSensSec" style="margin-top: 10px;">
@@ -717,11 +746,11 @@ document.addEventListener('DOMContentLoaded', function() {
       <button id="tInst" class="btn-mini" style="flex:1;">HOW TO PLAY</button>
       <button id="tFs" class="btn-mini" style="flex:1;">⛶ FULLSCREEN</button>
     </div>
-    <p class="hint">WASD / ARROWS / TILT — drive · SPACE / DRIFT — power slide<br>C — camera (7 views) · P — pit limiter · R — reset · M — mute · ESC — pause</p>
+    <p class="hint">WASD / ARROWS / TILT / FACE CAM — drive · SPACE / DRIFT — power slide<br>C — camera (7 views) · P — pit limiter · R — reset · M — mute · ESC — pause<br>FACE CAM: turn your head to steer · open your mouth (or nose up) for gas · nose down to brake</p>
   </div>
   
   <div id="tFoot">
-    <span>FULLSCREEN &amp; AUDIO READY · <b id="appVersion">v0.9.9 · BUILD 20260907.8</b></span>
+    <span>FULLSCREEN &amp; AUDIO READY · <b id="appVersion">v1.0.0 · BUILD 20260908.9</b></span>
     <button id="tFootFs" class="btn-mini">⛶ FULLSCREEN</button>
   </div>
   
@@ -745,6 +774,7 @@ document.addEventListener('DOMContentLoaded', function() {
 <!-- Race HUD -->
 <div id="hud" class="hidden">
   <div id="timingTower"></div>
+  <canvas id="facePreview" width="160" height="112"></canvas>
   <div id="hTL" class="panel">
     <div><span id="hPos">P—</span><span id="hPosT"> / 20</span></div>
     <div class="small">LAP <b id="hLap">1</b> / <span id="hLaps">3</span></div>
@@ -758,6 +788,7 @@ document.addEventListener('DOMContentLoaded', function() {
     <button class="chip" id="hCam">CHASE</button>
     <button class="chip" id="hQualityChip">HIGH</button>
     <button class="chip tilt-chip" id="hTiltChip">GYRO OFF</button>
+    <button class="chip face-chip" id="hFaceChip" title="Webcam face driving: turn your face to steer, open your mouth for gas">FACE OFF</button>
     <button class="chip" id="hTowerChip" title="Toggle timing tower">TOWER ON</button>
     <button class="chip" id="hRuleChip">BASIC</button>
     <button class="chip" id="hPenaltyChip">PEN 0s</button>
@@ -1020,7 +1051,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <script>
 (function(){
-  const APP_VERSION='v0.9.9 · BUILD 20260907.8';
+  const APP_VERSION='v1.0.0 · BUILD 20260908.9';
   window.POLYGON_GP_VERSION=APP_VERSION;
   const panel=document.getElementById('runtimeErrorPanel');
   const output=document.getElementById('runtimeErrorText');

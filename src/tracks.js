@@ -151,7 +151,10 @@ export const TRACKS = [
     runoff: 3.2,
     width: 9.5, // barely two cars wide — the tightest road of the season
     bank: 1.8, // city streets are nearly flat
-    water: [{ from: 0.63, to: 0.84, w: 30, side: 'in', boats: true }], // Port Hercule — the harbour sits INSIDE the lap between the chicane and La Rascasse
+    // Port Hercule, like the real harbour run: the water is on the driver's
+    // LEFT from the chicane to La Rascasse, held behind a proper stone quay
+    // (flat sea level) with yachts moored in neat rows.
+    water: [{ from: 0.63, to: 0.84, w: 30, side: 'left', boats: true, quay: true }],
     openf1CircuitKey: 22,
     tunnel: { from: 0.505, to: 0.615 }, // the iconic Portier → Tunnel → Nouvelle Chicane covered section
     meetingName: 'Monaco Grand Prix',
@@ -287,7 +290,7 @@ export const TRACKS = [
     name: 'Bahrain International Circuit',
     loc: 'Sakhir · Bahrain',
     theme: 'park',
-    venue: 'bahrain',
+    venue: 'bahrain', nightOk: true,
     ground: 'desert',
     grass: 0x4d7a3e,
     runoff: 7.0,
@@ -302,7 +305,7 @@ export const TRACKS = [
     name: 'Jeddah Corniche',
     loc: 'Jeddah Corniche Circuit · Saudi Arabia',
     theme: 'street',
-    venue: 'jeddah',
+    venue: 'jeddah', nightOk: true,
     ground: 'desert',
     grass: 0x3f7a44,
     runoff: 4.0,
@@ -433,7 +436,7 @@ export const TRACKS = [
     name: 'Marina Bay',
     loc: 'Marina Bay Street Circuit · Singapore',
     theme: 'street',
-    venue: 'singapore',
+    venue: 'singapore', nightOk: true,
     grass: 0x3a7a45,
     runoff: 3.8,
     width: 11.5,

@@ -22,9 +22,13 @@ export class TiltController {
     this._watchdog = 0;
 
     // Configurable parameters & persistence
-    this.sensitivityIdx = 2; // HIGH (2.6x)
-    this.customSens = 2.6;
-    this.deadzone = 1.0; // degrees
+    // Default to MED, not HIGH: the old 2.6x/9.5°-lock default made the car
+    // snap to full lock with a wrist-twitch — the single biggest driver of
+    // "it's too hard to control" reports. MED is driveable immediately and
+    // players can still crank it up in the gyro lab once it clicks.
+    this.sensitivityIdx = 1; // MED (1.8x)
+    this.customSens = 1.8;
+    this.deadzone = 1.5; // degrees — a touch more sits-out-hand-jitter too
     this.steerAxis = 'auto'; // 'auto' | 'beta' | 'gamma' | 'accel'
     this.invertSteer = false;
     this.invertPitch = false;

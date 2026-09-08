@@ -6,6 +6,8 @@ import { loadRealCircuits } from './circuitData.js';
 import { RainShaderPass } from './rainShader.js';
 import { SnowShaderPass } from './snowShader.js';
 import { TiltController } from './tiltControls.js';
+import { WebcamDrive } from './webcamDrive.js';
+import { GodRays } from './godRays.js';
 import { QualityManager, QUALITY_PRESETS } from './quality.js';
 import { GyroCalibrationLab } from './gyroLab.js';
 import { accentFor } from './teamLivery.js';
@@ -319,7 +321,7 @@ function getRoadHAtCoords(x, z) {
 const WX={
 sun:{label:'SUNNY',skyT:0x2f6fce,skyH:0xbfd9e8,sunC:0xfff1d0,sunI:2.6,hS:0xbdd7ee,hG:0x6f9457,hI:.8,fog:0xbfd9e8,fogD:.0005,exp:1.12,grip:1,rain:0,snow:0,wet:0},
 driz:{label:'DRIZZLE',skyT:0x5f7488,skyH:0xaeb9c2,sunC:0xd9e2ea,sunI:1.8,hS:0xafc0cd,hG:0x668068,hI:.7,fog:0xaeb9c2,fogD:.0009,exp:1.04,grip:.84,rain:.35,snow:0,wet:.45},
-rain:{label:'RAIN',skyT:0x5b6a76,skyH:0xacb8c1,sunC:0xd8e0e6,sunI:2.6,hS:0xc8d1d9,hG:0x8fac91,hI:1.25,fog:0xacb8c1,fogD:.0007,exp:1.5,grip:.72,rain:1,snow:0,wet:1},
+rain:{label:'RAIN',skyT:0x6d7b88,skyH:0xbcc6cd,sunC:0xe2e8ec,sunI:2.6,hS:0xd2dae1,hG:0x96b198,hI:1.3,fog:0xbdc6cc,fogD:.0007,exp:1.5,grip:.72,rain:1,snow:0,wet:1},
  /* Fog is the opposite kind of nasty to rain: the road is nearly dry and the
     grip is there, but you cannot see the corner you are braking for. So it
     gets a thick fog, a flattened sky and no rain at all, and the lamps come
@@ -335,7 +337,7 @@ mist:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1
 snow:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3v18M4.2 7.5l15.6 9M19.8 7.5l-15.6 9"/><path d="M9.4 5.2 12 7.8l2.6-2.6M9.4 18.8 12 16.2l2.6 2.6"/></svg>'};
 
 /* ============ speech / commentary ============ */
-const Speech={enabled:true,cool:0,voice:null,
+const Speech={enabled:true,cool:0,voice:null,femaleVoice:null,
 refresh(){try{
  const vs=speechSynthesis.getVoices();if(!vs.length)return;
  const score=v=>{let s=0;
@@ -360,6 +362,18 @@ refresh(){try{
   return s;};
  vs.sort((a,b)=>score(b)-score(a));
  this.voice=vs[0];
+ // Female co-presenter for the crash verdict ("You can do better than
+ // that") — picked independently so a male commentator voice never lands it.
+ const fscore=v=>{let s=0;const name=v.name.toLowerCase(),lang=v.lang.toLowerCase();
+  if(lang.startsWith('en-gb'))s+=60;else if(lang.startsWith('en'))s+=30;
+  if(v===this.voice)s-=10000;
+  if(/female/.test(name))s+=300;
+  else if(/(samantha|hazel|serena|victoria|kate|karen|moira|tessa|susan|zira|aria|jenny|michelle|fiona|zoe|allison|ava|shelley|cortana|sangeeta|heera|kalpana|priya|swara|sonia|libby|martha|sandy|nicky|cathy|elsa|ellen|flo|grace|joana|leda|luciana|milena|paulina|amelie|anna)/i.test(name))s+=220;
+  if(name.includes('natural'))s+=100;if(name.includes('premium'))s+=80;
+  if(name.includes('google'))s+=60;if(name.includes('neural'))s+=50;
+  if(name.includes('enhanced'))s+=40;
+  return s;};
+ this.femaleVoice=[...vs].sort((a,b)=>fscore(b)-fscore(a))[0]||this.voice;
 }catch(e){}},
 init(){try{this.refresh();speechSynthesis.onvoiceschanged=()=>this.refresh();}catch(e){}},
 say(text,force,opts){
@@ -375,6 +389,22 @@ say(text,force,opts){
   // their moment, this just raises the resting energy level between them.
   u.rate=(opts&&opts.rate!=null)?opts.rate:1.06;
   u.pitch=(opts&&opts.pitch!=null)?opts.pitch:1.05;
+  u.volume=1.0;
+  speechSynthesis.speak(u);
+ }catch(e){}},
+sayFemale(text,force,opts){
+ // The co-presenter's line — delivered by whatever female voice the platform
+ // actually has (picked in refresh()), never the male commentator.
+ if(!this.enabled||!('speechSynthesis'in window))return;
+ const t=nowT();if(!force&&t<this.cool)return;this.cool=t+1.4;
+ try{
+  if(speechSynthesis.speaking){if(force)speechSynthesis.cancel();else return;}
+  const u=new SpeechSynthesisUtterance(text);
+  const v=this.femaleVoice||this.voice;
+  if(v)u.voice=v;
+  u.lang=(v&&v.lang)||'en-GB';
+  u.rate=(opts&&opts.rate!=null)?opts.rate:1.0;
+  u.pitch=(opts&&opts.pitch!=null)?opts.pitch:1.12;
   u.volume=1.0;
   speechSynthesis.speak(u);
  }catch(e){}}};
@@ -845,6 +875,15 @@ function makeCarMesh(d){
  const g=new THREE.Group();
  const body=new THREE.Mesh(getBodyGeo(d.colA,d.colB),matBody);body.castShadow=true;
  const halo=makeHaloAssembly(d.colB||d.colA||'#3b4147');
+ // The halo used to sit with its crown dead at visor height, which put a
+ // carbon bar straight through the road in the HELMET cam; dropped so the
+ // rim rides just ABOVE the visor like the real cars — visible at the top
+ // of frame, never across the tarmac ahead.
+ // Keep the halo at essentially its proper height (lowering it moved the
+ // rim INTO the visor sightline and closed the gap entirely). The visor
+ // clearance is solved on the camera side instead: HELMET seats the eye
+ // above the rim — see updCamera.
+ halo.position.y=-0.06;
  const { driverGroup, helmetGroup } = makeDriverMesh(d.colA, d.helmet, matBody);
  getAxleGeo();
  const axleF=new THREE.Mesh(getAxleGeo(),matWheel);axleF.rotation.order='YXZ';axleF.position.set(0,0.37,1.62);
@@ -914,26 +953,62 @@ function ejectDriverHelmet(c){
  head.position.copy(wp);head.rotation.set(0,c.hdg+rand(-0.35,0.35),0);head.scale.setScalar(1.08);
  head.visible=true;scene.add(head);
  const fx=Math.sin(c.hdg),fz=Math.cos(c.hdg);
- debris.push({m:head,vx:c.vx-fx*6+rand(-4,4),vy:rand(8,13),vz:c.vz-fz*6+rand(-4,4),rx:rand(-12,12),ry:rand(-15,15),rz:rand(-12,12),life:9,dispose:false,helmet:true});
+ // Keep a handle on the ejected helmet so the crash camera can pan down
+ // onto it for the final beat of the wreck sequence.
+ c.helmetDebris={m:head,vx:c.vx-fx*6+rand(-4,4),vy:rand(8,13),vz:c.vz-fz*6+rand(-4,4),rx:rand(-12,12),ry:rand(-15,15),rz:rand(-12,12),life:13,bounce:0.28,dispose:false,helmet:true};
+ debris.push(c.helmetDebris);
  if(c.mesh.driverGroup)c.mesh.driverGroup.visible=false;
 }
 function shedCarParts(c){
- const fx=Math.sin(c.hdg),fz=Math.cos(c.hdg);
+ const fx=Math.sin(c.hdg),fz=Math.cos(c.hdg),rx=-fz,rz=fx;
  for(let i=0;i<12;i++){
   const mat=new THREE.MeshStandardMaterial({color:i%3===0?c.d.colB:(i%2?c.d.colA:0x17181b),roughness:0.55,metalness:0.45});
   const m=new THREE.Mesh(new THREE.BoxGeometry(rand(.12,.48),rand(.025,.12),rand(.18,.65)),mat);
   m.position.set(c.x+rand(-.7,.7),c.y+rand(.25,.9),c.z+rand(-1.5,1.5));scene.add(m);
-  debris.push({m,vx:c.vx+rand(-9,9)-fx*4,vy:rand(3,10),vz:c.vz+rand(-9,9)-fz*4,rx:rand(-9,9),ry:rand(-7,7),rz:rand(-9,9),life:8});
+  debris.push({m,vx:c.vx+rand(-9,9)-fx*4,vy:rand(3,10),vz:c.vz+rand(-9,9)-fz*4,rx:rand(-9,9),ry:rand(-7,7),rz:rand(-9,9),life:11});
  }
+ // Wheels torn off: both fronts detach as loose, bouncing, rolling tyres,
+ // and the front axle vanishes on the wreck — a terminal crash that still
+ // has four wheels bolted on never reads as terminal. The tyre physics
+ // (bounce .45, rolling spin) is handled in updDebris.
+ for(let i=0;i<2;i++){
+  const tyre=new THREE.Mesh(new THREE.TorusGeometry(0.33,0.155,10,20),new THREE.MeshStandardMaterial({color:0x111214,roughness:0.85}));
+  const hub=new THREE.Mesh(new THREE.CylinderGeometry(0.17,0.17,0.30,10),new THREE.MeshStandardMaterial({color:0x8e939b,roughness:0.4,metalness:0.6}));
+  hub.rotation.z=Math.PI/2;tyre.add(hub);
+  const sx=i?1:-1;
+  tyre.position.set(c.x+rx*sx*0.95+fx*1.62,c.y+0.37,c.z+rz*sx*0.95+fz*1.62);
+  scene.add(tyre);
+  debris.push({m:tyre,vx:c.vx+rand(-5,5)-fx*rand(2,7)+rx*sx*2.4,vy:rand(4,9),vz:c.vz+rand(-5,5)-fz*rand(2,7)+rz*sx*2.4,rx:rand(6,14),ry:rand(-4,4),rz:rand(-8,8),life:12,bounce:0.45,tyre:true,roll:rand(9,15),rollDir:Math.random()<0.5?-1:1,dispose:true});
+ }
+ if(c.mesh.axleF)c.mesh.axleF.visible=false;
  ejectDriverHelmet(c);
 }
 function disposeDebrisObject(m){
  if(!m||!m.traverse)return;
  m.traverse(o=>{if(!o.isMesh)return;if(o.geometry)o.geometry.dispose();if(o.material){const mats=Array.isArray(o.material)?o.material:[o.material];for(const mat of mats)mat.dispose();}});
 }
+// The floor under falling debris is the RENDERED surface: road when the part
+// lands on the circuit, terrain when it doesn't. The raw heightfield sits
+// under the road bed, which is exactly what had been swallowing tyres and
+// the ejected helmet through the tarmac.
+function debrisFloorAt(x,z){
+ if(!T)return 0;
+ const near=T.nearestTrackY?T.nearestTrackY(x,z):null;
+ if(near&&Number.isFinite(near.dist)&&near.dist<=((T.latLimit||0)+6))return near.y;
+ return T.terrainHeightAt?T.terrainHeightAt(x,z):0;
+}
 function updDebris(dt){for(let i=debris.length-1;i>=0;i--){const d=debris[i];d.life-=dt;d.vy-=18*dt;
  d.m.position.x+=d.vx*dt;d.m.position.y+=d.vy*dt;d.m.position.z+=d.vz*dt;d.m.rotation.x+=d.rx*dt;d.m.rotation.y+=(d.ry||0)*dt;d.m.rotation.z+=d.rz*dt;
- const floor=T?getTrackHAtCoords(d.m.position.x,d.m.position.z):0;if(d.m.position.y<floor+.04){d.m.position.y=floor+.04;d.vy=Math.abs(d.vy)*.18;d.vx*=.82;d.vz*=.82;d.rx*=.72;d.ry*=.72;d.rz*=.72;}
+ const floor=debrisFloorAt(d.m.position.x,d.m.position.z);
+ if(d.m.position.y<floor+.05){
+  d.m.position.y=floor+.05;
+  d.vy=Math.abs(d.vy)*(d.bounce?? .18);
+  // Tyres stay lively (roll on), bodywork scrubs off speed on each bounce.
+  const fr=d.tyre?(d.vy>1.2?0.96:0.9):0.82;
+  d.vx*=fr;d.vz*=fr;
+  if(d.tyre&&d.vy>0.6){d.rx=(d.roll||12)*(d.rollDir||1);}   // keep the tyre spinning along its roll
+  else{d.rx*=.72;d.ry*=.72;d.rz*=.72;}
+ }
  if(d.life<=0){scene.remove(d.m);if(d.dispose!==false)disposeDebrisObject(d.m);debris.splice(i,1);}}}
 function puff(S,x,y,z,vx,vy,vz,size,life,r,g,b,grav=0){
  const i=S.i;S.i=(S.i+1)%S.n;
@@ -1037,7 +1112,9 @@ function updWeatherFX(dt){
  // strength, how white the road is, how little grip there is) reads off this one
  // number, so the ground and the air always agree with each other.
  const snowing=(cur.snow||0)>0.25;
- snowAccum=clamp(snowAccum+(snowing?dt*0.055:-dt*0.035),0,1);
+ // Melt is brisk enough that a natural stop visibly clears within seconds;
+ // switching WEATHER away from snow hard-zeros it in snapWeather instead.
+ snowAccum=clamp(snowAccum+(snowing?dt*0.055:-dt*0.1),0,1);
  snowGustT-=dt;
  if(snowing&&snowGustT<=0){snowGustT=rand(7,16);snowGust=1;}
  snowGust=Math.max(0,snowGust-dt*0.55);
@@ -1432,10 +1509,35 @@ function setNightGlow(){
  lampGlareMat.opacity=L*0.62;
  if(T&&T.nightMats)for(const m of T.nightMats)m.color.setRGB(0.16+L*0.84,0.15+L*0.79,0.11+L*0.58);
 }
+/* Weather = TARGET then BLEND. A snap used to slam the whole scene dark the
+   instant a button was pressed ("it rains and it instantly goes night").
+   Now picking weather only updates targets; cur* values flow toward them
+   over a few seconds in updWXBlend, so rain visibly rolls in and daylight
+   never cuts out. Physics grip still snaps (fairness), and the snow-stop
+   fix stays instant. */
+const wxT={skyT:new THREE.Color(0x2f6fce),skyH:new THREE.Color(0xbfd9e8),sunC:new THREE.Color(0xfff1d0),hS:new THREE.Color(0xbdd7ee),hG:new THREE.Color(0x6f9457),fog:new THREE.Color(0xbfd9e8),sunI:2.6,hI:.8,fogD:.0005,exp:1.12,rain:0,snow:0,wet:0};
 function snapWeather(k){const p=WX[k];
- cur.skyT.set(p.skyT);cur.skyH.set(p.skyH);cur.sunC.set(p.sunC);cur.hS.set(p.hS);cur.hG.set(p.hG);cur.fog.set(p.fog);
- cur.sunI=p.sunI;cur.hI=p.hI;cur.fogD=p.fogD;cur.exp=p.exp;cur.grip=p.grip;cur.gripBase=p.grip;cur.rain=p.rain;cur.snow=p.snow||0;cur.wet=p.wet;
+ wxT.skyT.set(p.skyT);wxT.skyH.set(p.skyH);wxT.sunC.set(p.sunC);wxT.hS.set(p.hS);wxT.hG.set(p.hG);wxT.fog.set(p.fog);
+ wxT.sunI=p.sunI;wxT.hI=p.hI;wxT.fogD=p.fogD;wxT.exp=p.exp;wxT.rain=p.rain;wxT.snow=p.snow||0;wxT.wet=p.wet;
+ cur.grip=p.grip;cur.gripBase=p.grip;
+ // Picking a different weather must STOP the snow now, not half a minute
+ // later: the on-glass snow overlay, the white road and the grip change all
+ // read snowAccum, which otherwise melts back at only ~0.035/s. Unless the
+ // new weather actually IS snow, drop the accumulation immediately.
+ if((p.snow||0)<=0.25){snowAccum=Math.min(snowAccum,0.02);snowGust=0;snowGustT=6;}
  applyWeatherVisuals();refreshEnv();}
+// Flow cur* toward the target weather over ~4 s. applyWeatherVisuals() then
+// re-runs every frame so sky, fog, exposure and lamp levels follow the blend
+// live instead of jumping.
+function updWXBlend(dt){
+ const k=1-Math.exp(-dt*0.75);
+ cur.skyT.lerp(wxT.skyT,k);cur.skyH.lerp(wxT.skyH,k);cur.sunC.lerp(wxT.sunC,k);
+ cur.hS.lerp(wxT.hS,k);cur.hG.lerp(wxT.hG,k);cur.fog.lerp(wxT.fog,k);
+ cur.sunI+=(wxT.sunI-cur.sunI)*k;cur.hI+=(wxT.hI-cur.hI)*k;
+ cur.fogD+=(wxT.fogD-cur.fogD)*k;cur.exp+=(wxT.exp-cur.exp)*k;
+ cur.rain+=(wxT.rain-cur.rain)*k;cur.snow+=(wxT.snow-cur.snow)*k;cur.wet+=(wxT.wet-cur.wet)*k;
+ applyWeatherVisuals();
+}
 
 /* ============ thunderstorm: lightning flash + delayed thunder ============ */
 let lightningFlash=0,lightningTimer=rand(5,11),lightningSeed=0;
@@ -2363,7 +2465,10 @@ function buildWorld(idx){
  {
   const lm=new THREE.MeshStandardMaterial({color:0x3a3e45,roughness:0.7,metalness:0.45});
   const gm=new THREE.MeshStandardMaterial({color:0x30343a,roughness:0.6,metalness:0.3,side:THREE.DoubleSide});
-  const stepN=Math.max(14,Math.min(26,Math.round(T.len/240)));
+  // Street venues & floodlit night-race tracks get a much denser light grid:
+  // Singapore under lights is a wall of masts, not a scattering of posts.
+  const denseLights=T.def.nightOk||T.def.theme==='street';
+  const stepN=Math.max(14,Math.min(denseLights?56:26,Math.round(T.len/(denseLights?120:240))));
   for(let i=0;i<stepN;i++){
    const si=Math.floor(i*T.N/stepN),sa=samples[si];
    for(const sg of[1,-1]){
@@ -2378,7 +2483,9 @@ function buildWorld(idx){
     // Camera-facing glare halo at the lamp head — fades in with darkness
     // via the shared material, so the masts visibly glow at night/storm.
     const glare=new THREE.Sprite(lampGlareMat);
-    glare.position.set(-sg*1.9,15.45,0);glare.scale.set(8.5,5.2,1);glare.renderOrder=3;grp.add(glare);
+    glare.position.set(-sg*1.9,15.45,0);
+    glare.scale.set(denseLights?11.5:8.5,denseLights?7:5.2,1);
+    glare.renderOrder=3;grp.add(glare);
     const shade=new THREE.Mesh(new THREE.BoxGeometry(0.14,0.34,1.06),gm);shade.position.set(-sg*1.66,15.5,0);grp.add(shade);
     world.add(grp);
     const rx=sa.p.x,rz=sa.p.z,ry=nearestTrackY(rx,rz).y;
@@ -3182,6 +3289,10 @@ function buildWorld(idx){
    if(i1-i0<6)continue;
    const wWide=zone.w!==undefined?zone.w:28,near=wallDist+2.2;
    const sgn=(i)=>{const sm=samples[((i%N)+N)%N];
+    // 'left'/'right' pin the water to a driving side (Monaco's harbour run
+    // is on the driver's LEFT); 'in'/'out' stay relative to the centroid.
+    if(zone.side==='left')return 1;
+    if(zone.side==='right')return -1;
     const outward=Math.sign((sm.p.x-cx)*sm.n.x+(sm.p.z-cz)*sm.n.z)||1;
     return zone.side==='in'?-outward:outward;};
    // Water level per cross-section: terrain sampled mid-strip, then smoothed
@@ -3192,6 +3303,13 @@ function buildWorld(idx){
     lvl.push(terrainHeightAt(sm.p.x+sm.n.x*(near+wWide*0.5)*sd,sm.p.z+sm.n.z*(near+wWide*0.5)*sd));
    }
    for(let k=0;k<30;k++)for(let j=1;j<lvl.length-1;j++)lvl[j]=(lvl[j-1]+lvl[j]*2+lvl[j+1])/4;
+   if(zone.quay){
+    // The sea does not flow uphill: a quay zone sits at ONE flat level for
+    // its whole frontage — the slope the generic zones follow is the thing
+    // that made the Monaco harbour look steppy and untidy.
+    let sea=Infinity;for(const v of lvl)sea=Math.min(sea,v);
+    for(let j=0;j<lvl.length;j++)lvl[j]=sea;
+   }
    const wPos=[],wUv=[],wIdx=[];let wVi=0;
    for(let i=i0;i<i1;i++){
     const A=samples[i%N],B=samples[(i+1)%N],sdA=sgn(i),sdB=sgn(i+1);
@@ -3214,23 +3332,88 @@ function buildWorld(idx){
    wGeo.setAttribute('uv',new THREE.BufferAttribute(new Float32Array(wUv),2));
    wGeo.setIndex(wIdx);wGeo.computeVertexNormals();
    const wMesh=new THREE.Mesh(wGeo,wMat);wMesh.receiveShadow=true;wMesh.renderOrder=2;world.add(wMesh);
+   if(zone.quay){
+    // Quay frontage, like the real Port Hercule: a broad concrete apron
+    // behind the barriers ending in a crisp vertical quay wall that the
+    // water butts against — no stepped, sloping "shoreline".
+    const apronMat=new THREE.MeshStandardMaterial({color:0xb3ab9b,roughness:0.92,side:THREE.DoubleSide});
+    const quayWallMat=new THREE.MeshStandardMaterial({color:0x8d8578,roughness:0.9,side:THREE.DoubleSide});
+    const apIn=near-2.6,apOut=near+0.25;
+    const aPos=[],aIdx=[],qPos=[],qIdx=[];let aVi=0,qVi=0;
+    for(let i=i0;i<i1;i++){
+     const A=samples[i%N],B=samples[(i+1)%N],sdA=sgn(i),sdB=sgn(i+1);
+     const ya=A.p.y-0.055,yb=B.p.y-0.055;
+     aPos.push(A.p.x+A.n.x*apIn*sdA,ya,A.p.z+A.n.z*apIn*sdA,
+               A.p.x+A.n.x*apOut*sdA,ya,A.p.z+A.n.z*apOut*sdA,
+               B.p.x+B.n.x*apIn*sdB,yb,B.p.z+B.n.z*apIn*sdB,
+               B.p.x+B.n.x*apOut*sdB,yb,B.p.z+B.n.z*apOut*sdB);
+     aIdx.push(aVi,aVi+2,aVi+1, aVi+1,aVi+2,aVi+3);aVi+=4;
+     const seaA=lvl[i-i0]-0.45,seaB=lvl[i+1-i0]-0.45;
+     qPos.push(A.p.x+A.n.x*apOut*sdA,ya,A.p.z+A.n.z*apOut*sdA,
+               A.p.x+A.n.x*apOut*sdA,seaA,A.p.z+A.n.z*apOut*sdA,
+               B.p.x+B.n.x*apOut*sdB,yb,B.p.z+B.n.z*apOut*sdB,
+               B.p.x+B.n.x*apOut*sdB,seaB,B.p.z+B.n.z*apOut*sdB);
+     qIdx.push(qVi,qVi+2,qVi+1, qVi+1,qVi+2,qVi+3);qVi+=4;
+    }
+    const aGeo=new THREE.BufferGeometry();
+    aGeo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(aPos),3));
+    aGeo.setIndex(aIdx);aGeo.computeVertexNormals();
+    const apron=new THREE.Mesh(aGeo,apronMat);apron.receiveShadow=true;world.add(apron);
+    const qGeo=new THREE.BufferGeometry();
+    qGeo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(qPos),3));
+    qGeo.setIndex(qIdx);qGeo.computeVertexNormals();
+    const qwall=new THREE.Mesh(qGeo,quayWallMat);qwall.receiveShadow=true;world.add(qwall);
+   }
    if(zone.boats){
-    const nBoat=Math.max(2,Math.round((i1-i0)/26));
-    for(let b=0;b<nBoat;b++){
-     const i=i0+4+Math.floor(Math.random()*Math.max(1,i1-i0-8));
-     const sm=samples[i%N],sd=sgn(i);
-     const off=near+rand(wWide*0.32,wWide*0.75);
-     const bx=sm.p.x+sm.n.x*off*sd,bz=sm.p.z+sm.n.z*off*sd;
-     const by=lvl[clamp(i-i0,0,lvl.length-1)]+0.16;
-     const boat=new THREE.Group();
-     const hl=rand(4.5,8);
-     const hull=new THREE.Mesh(new THREE.BoxGeometry(hl,0.7,hl*0.32),hullMat);hull.position.y=0.28;boat.add(hull);
-     const bow=new THREE.Mesh(new THREE.BoxGeometry(hl*0.26,0.55,hl*0.26),hullMat);bow.position.set(hl*0.55,0.24,0);bow.rotation.y=Math.PI/4;boat.add(bow);
-     const cab=new THREE.Mesh(new THREE.BoxGeometry(hl*0.38,0.6,hl*0.24),cabinMat);cab.position.set(-hl*0.12,0.9,0);boat.add(cab);
-     if(Math.random()<0.5){const mast=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.07,rand(3,5),5),cabinMat);mast.position.set(hl*0.1,2.2,0);boat.add(mast);}
-     boat.position.set(bx,by,bz);boat.rotation.y=rand(0,Math.PI*2);boat.userData.isBoat=true;
-     boat.traverse(o=>{if(o.isMesh)o.castShadow=true;});
-     world.add(boat);
+    if(zone.quay){
+     // Moored in rows parallel to the quay like GP week in the real harbour:
+     // white yachts berthed bow-to-stern, occasional empty berths — not a
+     // handful of dinghies scattered at random angles across the water.
+     const ycol=(g,hex)=>{const c=new THREE.Color(hex);const n2=g.attributes.position.count;
+      const arr=new Float32Array(n2*3);
+      for(let q2=0;q2<n2;q2++){arr[q2*3]=c.r;arr[q2*3+1]=c.g;arr[q2*3+2]=c.b;}
+      g.setAttribute('color',new THREE.BufferAttribute(arr,3));return g;};
+     const hullG=ycol(new THREE.BoxGeometry(6.6,0.75,2.0),0xf2f4f6);hullG.translate(0,0.32,0);
+     const bowG=ycol(new THREE.BoxGeometry(1.7,0.6,1.4),0xf2f4f6);bowG.rotateY(Math.PI/4);bowG.translate(3.6,0.28,0);
+     const cabG=ycol(new THREE.BoxGeometry(2.5,0.8,1.45),0x2c4a5a);cabG.translate(-0.6,1.05,0);
+     const mastG=ycol(new THREE.CylinderGeometry(0.045,0.06,3.4,5),0x565c64);mastG.translate(0.8,2.6,0);
+     const yGeo=mergeGeometries([hullG,bowG,cabG,mastG]);
+     const yMat=new THREE.MeshStandardMaterial({vertexColors:true,roughness:0.5});
+     const MAXY=90;
+     const yachts=new THREE.InstancedMesh(yGeo,yMat,MAXY);
+     const yd=new THREE.Object3D();let yi=0;
+     const berth=(i,offF,jitYaw,scl)=>{
+      if(yi>=MAXY)return;
+      const sm=samples[i%N],sd=sgn(i);
+      const off=near+wWide*offF+rand(-0.8,0.8);
+      yd.position.set(sm.p.x+sm.n.x*off*sd,lvl[clamp(i-i0,0,lvl.length-1)]+0.16,sm.p.z+sm.n.z*off*sd);
+      yd.rotation.set(0,Math.atan2(sm.t.x,sm.t.z)+jitYaw,0);
+      yd.scale.setScalar(scl);yd.updateMatrix();
+      yachts.setMatrixAt(yi++,yd.matrix);
+     };
+     // Row A: tight to the quay. Row B: staggered, reversed bows.
+     for(let i=i0+8;i<i1-10;i+=4){if((i-i0)%12===8)continue;berth(i,0.40,rand(-0.07,0.07),rand(0.92,1.05));}
+     for(let i=i0+12;i<i1-10;i+=5){if((i-i0)%15===9)continue;berth(i,0.74,Math.PI+rand(-0.07,0.07),rand(0.85,1.0));}
+     yachts.count=yi;yachts.castShadow=true;
+     world.add(yachts);
+    }else{
+     const nBoat=Math.max(2,Math.round((i1-i0)/26));
+     for(let b=0;b<nBoat;b++){
+      const i=i0+4+Math.floor(Math.random()*Math.max(1,i1-i0-8));
+      const sm=samples[i%N],sd=sgn(i);
+      const off=near+rand(wWide*0.32,wWide*0.75);
+      const bx=sm.p.x+sm.n.x*off*sd,bz=sm.p.z+sm.n.z*off*sd;
+      const by=lvl[clamp(i-i0,0,lvl.length-1)]+0.16;
+      const boat=new THREE.Group();
+      const hl=rand(4.5,8);
+      const hull=new THREE.Mesh(new THREE.BoxGeometry(hl,0.7,hl*0.32),hullMat);hull.position.y=0.28;boat.add(hull);
+      const bow=new THREE.Mesh(new THREE.BoxGeometry(hl*0.26,0.55,hl*0.26),hullMat);bow.position.set(hl*0.55,0.24,0);bow.rotation.y=Math.PI/4;boat.add(bow);
+      const cab=new THREE.Mesh(new THREE.BoxGeometry(hl*0.38,0.6,hl*0.24),cabinMat);cab.position.set(-hl*0.12,0.9,0);boat.add(cab);
+      if(Math.random()<0.5){const mast=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.07,rand(3,5),5),cabinMat);mast.position.set(hl*0.1,2.2,0);boat.add(mast);}
+      boat.position.set(bx,by,bz);boat.rotation.y=rand(0,Math.PI*2);boat.userData.isBoat=true;
+      boat.traverse(o=>{if(o.isMesh)o.castShadow=true;});
+      world.add(boat);
+     }
     }
    }
   }
@@ -3255,43 +3438,99 @@ function buildWorld(idx){
  }
 
  // 14. Tunnel — a covered section over a stretch of track (used by Monaco, the
- //     Portier→Tunnel→Nouvelle Chicane run). Built as an enclosed arch that
- //     follows the track's own elevation; `T.tunnel` lets the physics/audio
- //     know when a car is inside so the engine can rumble and the lighting
- //     drops. castShadow on the roof naturally darkens the road underneath.
+ //     Portier→Tunnel→Nouvelle Chicane run). The real tube has vertical side
+ //     walls with a broad, gently rounded shot-crete ceiling and heavy stone
+ //     portal faces at both ends — the old five-point tent read as a crumpled
+ //     metal BRIDGE over the road. So: a smooth nine-point arch profile,
+ //     warm dark concrete inside, limestone portal frames outside, and the
+ //     continuous warm light strips the real bore is famous for.
+ //     `T.tunnel` lets the physics/audio know when a car is inside so the
+ //     engine can rumble and the lighting drops.
  if(def.tunnel){
   const i0=Math.round(def.tunnel.from*N), i1=Math.round(def.tunnel.to*N);
-  const hw=halfW+1.4, roofH=5.2, wallTop=2.7;
+  const hw=halfW+1.55;
+  // [lateral fraction, height] — upright walls sweeping into a flat crown.
+  const ARCH=[[-1,0.05],[-1,2.5],[-0.86,3.75],[-0.55,4.55],[-0.22,4.88],[0.22,4.88],[0.55,4.55],[0.86,3.75],[1,2.5],[1,0.05]];
+  const K=ARCH.length;
   const tPos=[],tIdx=[];let tVi=0;
   const arcDr=(i)=>{const s=samples[((i%N)+N)%N];
-   const pts=[ s.p.x+s.n.x*(-hw), s.p.y+0.05, s.p.z+s.n.z*(-hw),
-               s.p.x+s.n.x*(-hw), s.p.y+wallTop, s.p.z+s.n.z*(-hw),
-               s.p.x,             s.p.y+roofH,   s.p.z,
-               s.p.x+s.n.x*(hw),  s.p.y+wallTop, s.p.z+s.n.z*(hw),
-               s.p.x+s.n.x*(hw),  s.p.y+0.05,    s.p.z+s.n.z*(hw)];
+   const pts=[];
+   for(const [f,hp] of ARCH)pts.push(s.p.x+s.n.x*f*hw, s.p.y+hp, s.p.z+s.n.z*f*hw);
    return pts;};
   for(let i=i0;i<=i1;i++){
    const A=arcDr(i),B=arcDr(i+1);
    tPos.push(...A,...B);
-   for(let k=0;k<4;k++){
-    const a=tVi+k, b=tVi+k+1, c=tVi+5+k, d=tVi+6+k;
+   for(let k=0;k<K-1;k++){
+    const a=tVi+k, b=tVi+k+1, c=tVi+K+k, d=tVi+K+k+1;
     tIdx.push(a,c,b, b,c,d);
    }
-   tVi+=10;
+   tVi+=K;
   }
   const tGeo=new THREE.BufferGeometry();
   tGeo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(tPos),3));
   tGeo.setIndex(tIdx);tGeo.computeVertexNormals();
-  const tMat=new THREE.MeshStandardMaterial({color:0x3a3d43,roughness:0.7,metalness:0.2,side:THREE.DoubleSide});
+  const tMat=new THREE.MeshStandardMaterial({color:0x44413b,roughness:0.86,metalness:0.05,side:THREE.DoubleSide});
   const tun=new THREE.Mesh(tGeo,tMat);tun.castShadow=true;tun.receiveShadow=true;world.add(tun);
-  // A few warm tunnel lights along the ceiling for a bit of artificial glow.
-  const lampMat=new THREE.MeshStandardMaterial({color:0x222,emissive:0xffd98a,emissiveIntensity:2.2});
+  // Portal frames: heavy limestone face — jambs either side of the bore, a
+  // deep lintel across the top, splayed retaining wings, and the red/white
+  // edge markers drivers actually aim between.
+  const stoneMat=new THREE.MeshStandardMaterial({color:0xcfc2a4,roughness:0.82});
+  const stoneDark=new THREE.MeshStandardMaterial({color:0x9b917a,roughness:0.9});
+  const redMat=new THREE.MeshStandardMaterial({color:0xd1112e,roughness:0.6});
+  const whtMat=new THREE.MeshStandardMaterial({color:0xe9e6df,roughness:0.6});
+  const portalAt=(iE,out)=>{
+   const s=samples[((iE%N)+N)%N];
+   const g=new THREE.Group();
+   g.position.set(s.p.x,s.p.y,s.p.z);
+   g.rotation.y=Math.atan2(s.t.x,s.t.z)*1;
+   const zf=out?1.05:-1.05;
+   const box=(w,h,d,mat,x,y,z)=>{const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;g.add(m);};
+   box(2.1,6.0,1.8,stoneMat,-hw-1.05,3.0,zf);          // left jamb
+   box(2.1,6.0,1.8,stoneMat, hw+1.05,3.0,zf);          // right jamb
+   box(2*hw+6.4,2.0,2.0,stoneMat,0,5.85,zf);           // lintel
+   box(2*hw+6.4,0.5,2.06,stoneDark,0,4.92,zf);         // lintel shadow band
+   const wingL=box(6.0,3.4,1.1,stoneMat,-hw-3.6,1.7,zf+(out?2.6:-2.6));wingL.rotation.y= 0.5;
+   const wingR=box(6.0,3.4,1.1,stoneMat, hw+3.6,1.7,zf+(out?2.6:-2.6));wingR.rotation.y=-0.5;
+   // red/white hazard edges on the inner faces of the jambs
+   box(0.16,2.0,0.12,whtMat,-hw+0.08,1.05,zf+(out?0.95:-0.95));
+   box(0.16,2.0,0.12,redMat,-hw+0.08,3.05,zf+(out?0.95:-0.95));
+   box(0.16,2.0,0.12,whtMat, hw-0.08,1.05,zf+(out?0.95:-0.95));
+   box(0.16,2.0,0.12,redMat, hw-0.08,3.05,zf+(out?0.95:-0.95));
+   world.add(g);
+  };
+  portalAt(i0,false);
+  portalAt(i1,true);
+  // The continuous warm side strips of the real bore, plus crown spots.
+  const lampMat=new THREE.MeshStandardMaterial({color:0x222222,emissive:0xffd98a,emissiveIntensity:2.3});
+  const stripGeo=new THREE.BoxGeometry(1.3,0.09,0.2);
+  const nStrip=Math.floor((i1-i0)/3)*2+4;
+  const strips=new THREE.InstancedMesh(stripGeo,lampMat,nStrip);
+  const ld=new THREE.Object3D();let li=0;
+  for(let i=i0;i<=i1&&li<nStrip-1;i+=3){
+   const s=samples[i],yaw=Math.atan2(s.t.x,s.t.z);
+   for(const f of [-0.86,0.86]){
+    ld.position.set(s.p.x+s.n.x*f*hw*0.98,s.p.y+3.55,s.p.z+s.n.z*f*hw*0.98);
+    ld.rotation.set(0,yaw,0);ld.updateMatrix();strips.setMatrixAt(li++,ld.matrix);
+   }
+  }
+  strips.count=li;world.add(strips);
   const lamps=new THREE.InstancedMesh(new THREE.BoxGeometry(0.5,0.08,0.6),lampMat,Math.max(2,Math.floor((i1-i0)/28)));
-  let li=0;const ld=new THREE.Object3D();
+  li=0;
   for(let i=i0;i<=i1&&li<lamps.count;i+=28){const s=samples[i];
-   ld.position.set(s.p.x,s.p.y+roofH-0.18,s.p.z);ld.updateMatrix();lamps.setMatrixAt(li++,ld.matrix);}
+   ld.rotation.set(0,0,0);
+   ld.position.set(s.p.x,s.p.y+4.62,s.p.z);ld.updateMatrix();lamps.setMatrixAt(li++,ld.matrix);}
   lamps.count=li;world.add(lamps);
   T.tunnel={i0,i1};
+ }
+
+ // God rays — one instanced shaft set per circuit (skipped on LOW quality:
+ // the whole feature is a single draw call, but LOW is about guarantees).
+ T.godRays=null;
+ const godRayOk=(QUALITY_PRESETS[effQuality()]||{}).propDensity>=0.72;
+ if(godRayOk){
+  const gr=new GodRays();
+  gr.build(world,samples,N,terrainHeightAt,wallDist);
+  T.godRays=gr;
  }
 
  buildMinimapPath();
@@ -3420,6 +3659,8 @@ function projectCar(c,full){
 const keys={};
 const tiltCtrl=new TiltController();
 const gyroLab=new GyroCalibrationLab(tiltCtrl);
+// Face driving (webcam): nose/eyes steer, open mouth or head-tilt for gas.
+const faceDrive=new WebcamDrive({onStatus:m=>{if(typeof fsToast==='function')fsToast(m);else console.log('[face]',m);}});
 
 function nearestAhead(c){
  let best=null,bd=1e9;
@@ -3475,6 +3716,16 @@ function playerControl(){
   p.brake=keys.down?1:0;
   p.drift=!!keys.space;
  }
+ // Webcam face driving overlays everything else: keyboard always wins on
+ // steering (touching a key means "I'm driving by hand"), and the face adds
+ // analog pedals that keys can't give (keys are all-or-nothing on the gas).
+ if(faceDrive.state==='live'){
+  const keySteer=(keys.left?-1:0)+(keys.right?1:0);
+  if(Math.abs(keySteer)<=0.1&&(!tiltCtrl.enabled||Math.abs(tiltCtrl.steer)<0.15))p.steer=damp(p.steer,faceDrive.steer,22,dtGlobal);
+  if(!keys.up)p.throttle=Math.max(p.throttle,faceDrive.throttle);
+  if(!keys.down&&!tiltCtrl.handBrake)p.brake=Math.max(p.brake,faceDrive.brake);
+ }
+ faceDrive.updateHUD();
 }
 function aiThink(c,dt){
  if(state.mode==='race'&&raceT<c.reactT){c.throttle=0;c.brake=0;c.steer=damp(c.steer,0,8,dt);return;}
@@ -3660,13 +3911,19 @@ function wreckCar(c){
  if(c.wrecked)return;c.wrecked=true;c.throttle=0;c.brake=1;c.drsOpen=false;
  c.vx*=0.42;c.vz*=0.42;
  shedCarParts(c);sparkBurst(c.x,c.y+.35,c.z,7.5);
+ // Crumple the monocoque: squashed tub, drooped nose — the wreck must look
+ // wrecked in the pan-out, not just parked with bits missing.
+ if(c.mesh.body){c.mesh.body.scale.set(0.97,0.84,0.90);c.mesh.body.rotation.x=-0.045;}
  for(let i=0;i<9;i++)smk(c.x+rand(-.8,.8),c.y+rand(.25,1.1),c.z+rand(-.8,.8),rand(-1.5,1.5),rand(1.2,3.4),rand(-1.5,1.5),rand(1.4,2.6),rand(1.2,2.5),0.18,0.18,0.20,0.5);
  if(c.isPlayer){
   beginCrashCamera(c);
   state.mode='gameover';slowMo=1.2;slowMoDur=1.2;cam.shake=Math.max(cam.shake,.75);
   showMsg('CRASHED OUT','TERMINAL DAMAGE · DRIVER EJECTED','red',4);
   if(!driverRadio(c,'crash'))Speech.say('Heavy impact! The car is out of the race.',true,{rate:1.08,pitch:.96});
-  setTimeout(()=>{if(state.mode==='gameover')showResults();},4500);
+  // As the camera drops toward the helmet, the co-presenter delivers the
+  // verdict — female voice, deadpan. Results wait until the descent ends.
+  setTimeout(()=>{if(state.mode==='gameover')Speech.sayFemale('You can do better than that.',true,{rate:0.98,pitch:1.12});},4300);
+  setTimeout(()=>{if(state.mode==='gameover')showResults();},Math.max(3600,crashCam.duration*1000-350));
  }else if(player&&Math.hypot(player.x-c.x,player.z-c.z)<95){
   if(!driverRadio(c,'crash'))Speech.say(pick(LINES.crash),false,{rate:1.04,pitch:1.02});
  }
@@ -4092,6 +4349,7 @@ function updCarVisual(c,dt){
   const yawG=clamp(c.vF*yawRate,-40,40);           // signed, m/s² toward the outside
   const gLat=clamp(-yawG*0.09,-1,1);
   const gLon=clamp(-acc*0.055,-1,1);
+  c.gLat=gLat;c.gLon=gLon;   // the IMMERSIVE cam reads these to react
   const sp01=clamp(Math.abs(c.vF)/PH.top,0,1);
   const[bumpHeight,bsl]=bumpAt(c);
   // Detect a change in the road's slope, not just a hill. A constant climb
@@ -4661,7 +4919,7 @@ const cam={pos:V3(0,20,0),shake:0,orbA:0,smHdg:0,heliU:0,heliPos:null};
 // A terminal impact temporarily takes over whichever live camera was active.
 // It starts from the current view, then cranes back to a wide, readable wreck
 // reveal so the car, ejected helmet and settled debris all stay in frame.
-const crashCam={active:false,timer:0,duration:4.2,target:null,from:null,fromLook:null};
+const crashCam={active:false,timer:0,duration:7.0,target:null,from:null,fromLook:null};
 // Title-screen "director": cuts between a helicopter establishing shot, a
 // close chase cam, a trackside TV angle and a slow orbit — like a real
 // broadcast director cutting live between cameras on the leading pack —
@@ -4741,18 +4999,38 @@ function updCrashCamera(dt){
  const t=clamp(crashCam.timer/crashCam.duration,0,1);
  const ease=t<0.7?1-Math.pow(1-t/0.7,3):1;
  const yaw=c.hdg,fx=Math.sin(yaw),fz=Math.cos(yaw);
- const side=Math.sin(crashCam.timer*0.42)*5.5;
- const back=13+Math.sin(Math.min(t,1)*Math.PI)*5.5;
+ const side=Math.sin(crashCam.timer*0.42)*5.5*(1-ease*0.5);
+ // Crane the low crowd-pleasing reveal in the first beat, then KEEP climbing
+ // and pulling inward until the whole scene — crumpled car, torn-off tyres,
+ // helmet, debris trail — is laid out in a clean overhead shot.
+ const back=13+Math.sin(Math.min(t,1)*Math.PI)*5.5-ease*10.5;
+ const up=4.8+Math.sin(Math.min(t,1)*Math.PI)*2.4+ease*24;
  const desired=new THREE.Vector3(c.x-fx*back+Math.cos(yaw)*side,
-  c.y+4.8+Math.sin(Math.min(t,1)*Math.PI)*2.4,
+  c.y+up,
   c.z-fz*back-Math.sin(yaw)*side);
  const floor=cameraSurfaceY(desired.x,desired.z);
  desired.y=Math.max(desired.y,floor+1.2);
  camera.position.lerpVectors(crashCam.from,desired,ease);
+ // Look slightly down-track of the wreck so the debris field shares the frame.
+ const look=new THREE.Vector3(c.x+fx*2.2,c.y+0.6,c.z+fz*2.2);
+ // Final beat: after the overhead reveal has settled, pan DOWN onto the
+ // driver's head — a smooth dive from the crane shot into a low, tight
+ // close-up of the helmet lying on the tarmac, with an fov punch-in.
+ let e2=0;
+ const hd=c.helmetDebris&&c.helmetDebris.m?c.helmetDebris.m.position:null;
+ if(hd){
+  const e2raw=clamp((t-0.72)/0.28,0,1);
+  e2=e2raw*e2raw*(3-2*e2raw);
+  const end=new THREE.Vector3(
+   hd.x-fx*2.1+Math.cos(yaw)*1.4,
+   Math.max(hd.y+1.15,cameraSurfaceY(hd.x,hd.z)+1.05),
+   hd.z-fz*2.1-Math.sin(yaw)*1.4);
+  camera.position.lerp(end,e2);
+  look.lerp(new THREE.Vector3(hd.x,hd.y+0.12,hd.z),e2);
+ }
  clampCameraToSurface(0.55);
- const look=new THREE.Vector3(c.x,c.y+0.78,c.z);
  camera.lookAt(look);
- camera.fov=damp(camera.fov,46,4,dt);camera.updateProjectionMatrix();
+ camera.fov=damp(camera.fov,e2>0.45?40:(ease>0.6?52:46),4,dt);camera.updateProjectionMatrix();
  if(crashCam.timer>=crashCam.duration)crashCam.active=false;
 }
 function cockpitFrame(speed){
@@ -4788,19 +5066,19 @@ function updCamera(dt){
    const latV=tc.vx*Math.cos(yaw)-tc.vz*Math.sin(yaw);
    camera.rotateZ(clamp(latV*0.012,-0.08,0.08));
    clampCameraToSurface();
-   camera.fov=damp(camera.fov,clamp(60+sp*0.24,60,80),4,dt);camera.updateProjectionMatrix();return;
+   camera.fov=damp(camera.fov,zf(clamp(60+sp*0.24,60,80)),4,dt);camera.updateProjectionMatrix();return;
   }else if(tc&&director.shot==='tv'&&T.tvCams.length){
    const tp=tc.mesh.g.position;
    let best=T.tvCams[0],bd=1e18;
    for(const c2 of T.tvCams){const d=(c2.x-tp.x)**2+(c2.z-tp.z)**2;if(d<bd){bd=d;best=c2;}}
    camera.position.copy(best);clampCameraToSurface(0.5);camera.lookAt(tp.x,carLookY(tc),tp.z);
-   camera.fov=damp(camera.fov,clamp(3200/(Math.sqrt(bd)+30),22,55),4,dt);camera.updateProjectionMatrix();return;
+   camera.fov=damp(camera.fov,zf(clamp(3200/(Math.sqrt(bd)+30),22,55)),4,dt);camera.updateProjectionMatrix();return;
   }else if(tc&&director.shot==='orbit'){
    cam.orbA+=dt*0.45;
    const tp=tc.mesh.g.position;
    camera.position.set(tp.x+Math.sin(cam.orbA)*14,tp.y+5.5,tp.z+Math.cos(cam.orbA)*14);
    clampCameraToSurface(0.5);camera.lookAt(tp.x,carLookY(tc,0.8),tp.z);
-   camera.fov=damp(camera.fov,58,4,dt);camera.updateProjectionMatrix();return;
+   camera.fov=damp(camera.fov,zf(58),4,dt);camera.updateProjectionMatrix();return;
   }else if(tc&&director.shot==='cine'){
    // A low, slow tracking dolly just ahead of the leader with a shallow
    // long lens — a clean, cinematic "cracking view" of the racing line.
@@ -4812,7 +5090,7 @@ function updCamera(dt){
    const pz=tp.z+fz*ahead+Math.cos(yaw)*side;
    camera.position.set(px,tp.y+1.7,pz);
    clampCameraToSurface(0.45);camera.lookAt(tp.x,carLookY(tc,0.9),tp.z);
-   camera.fov=damp(camera.fov,40,3,dt);camera.updateProjectionMatrix();return;
+   camera.fov=damp(camera.fov,zf(40),3,dt);camera.updateProjectionMatrix();return;
   }else if(tc&&director.shot==='hood'){
    // The same T-cam framing the HOOD race camera gives the player, so the
    // attract screen previews what driving will actually look like.
@@ -4820,7 +5098,7 @@ function updCamera(dt){
    camera.position.set(tp.x+fx*0.15,tp.y+1.42,tp.z+fz*0.15);
    clampCameraToSurface(0.55);
    camera.lookAt(tp.x+fx*40,Math.max(tp.y+1.05,cameraSurfaceY(tc.x,tc.z)+0.75),tp.z+fz*40);
-   camera.fov=damp(camera.fov,58+sp2*0.06,4,dt);camera.updateProjectionMatrix();return;
+   camera.fov=damp(camera.fov,zf(58+sp2*0.06),4,dt);camera.updateProjectionMatrix();return;
   }else if(tc&&director.shot==='halo'){
    // Visor view from the target car's helmet position — the full onboard
    // preview, rain-on-visor included. The driver's own head is hidden for
@@ -4829,10 +5107,12 @@ function updCamera(dt){
    const hg=tc.mesh.helmetGroup;
    const head=hg?hg.getWorldPosition(_camHead):_camHead.copy(tc.mesh.g.position).add(V3(0,0.95,0));
    if(tc.mesh.driverGroup){tc.mesh.driverGroup.visible=false;director._hidden=tc;}
-   camera.position.set(head.x+fx*0.12,head.y+0.03,head.z+fz*0.12);
+   const crownY2=tc.mesh.g.position.y+0.985+(tc.mesh.halo?tc.mesh.halo.position.y:0);
+   const eyeT=Math.max(head.y+0.10,crownY2+0.16);
+   camera.position.set(head.x+fx*0.12,eyeT,head.z+fz*0.12);
    clampCameraToSurface(0.22);
    camera.lookAt(head.x+fx*26,Math.max(head.y+0.55,cameraSurfaceY(tc.x,tc.z)+0.75),head.z+fz*26);
-   camera.fov=damp(camera.fov,78,4,dt);camera.updateProjectionMatrix();return;
+   camera.fov=damp(camera.fov,zf(78),4,dt);camera.updateProjectionMatrix();return;
   }
   // Helicopter establishing shot: sweep along the whole circuit from high
   // above. Positions are interpolated between track samples (via sampleF)
@@ -4905,11 +5185,11 @@ function updCamera(dt){
   // Gentle banking via a roll around the camera's own view axis only —
   // rotateZ never touches the yaw/pitch, so it can't cause a flip.
   camera.rotateZ((swooping?Math.sin(swoopT*Math.PI)*0.14:0)+Math.sin(timeSec*0.35)*0.03);
-  camera.fov=damp(camera.fov,swooping?54:50,4,dt);camera.updateProjectionMatrix();return;}
+  camera.fov=damp(camera.fov,zf(swooping?54:50),4,dt);camera.updateProjectionMatrix();return;}
  const p=player,pp=p.mesh.g.position;
- // First-person modes hide the driver mesh so the camera is not trapped inside
- // the helmet; the halo and nose remain part of the car body and stay visible.
- if(p.mesh.driverGroup)p.mesh.driverGroup.visible=state.camMode!==2&&state.camMode!==3;
+ // Only the HELMET cam hides the driver now; the IMMERSIVE nose/shoulder cam
+ // wants the driver in frame (a driverless cockpit looks wrong from up there).
+ if(p.mesh.driverGroup)p.mesh.driverGroup.visible=state.camMode!==3;
  const sp=Math.abs(p.vF);
  let tf=62;
  if(state.camMode===0){
@@ -4923,30 +5203,44 @@ function updCamera(dt){
   camera.lookAt(pp.x+fx*6,Math.max(pp.y+1.2,cameraSurfaceY(p.x,p.z)+0.8),pp.z+fz*6);
   tf=clamp(60+sp*0.24,60,80);
  }else if(state.camMode===2){
-  /* IMMERSIVE / HALO CAM — this is a driver's view, not a chase camera.
-     The lens is at the visor, inside the cockpit, looking forward over the
-     nose. It must never use a rear offset: the halo is overhead and the nose
-     is visible at the bottom of the frame. */
+  /* IMMERSIVE / ADRENALINE CAM — completely different intent from HELMET.
+     Not through the halo, not top-down: it rides just above the monocoque,
+     does NOT squint through the halo at visor level — it sits high enough to
+     own the whole front of the car and the road rushing at you. Everything
+     about it REACTS: the look point leads into the velocity in a slide, the
+     frame rolls and dives with the actual g-forces, the lens widens with
+     speed, and there is real buzz. This is the "hold on tight" camera. */
   const yaw=p.hdg,fx=Math.sin(yaw),fz=Math.cos(yaw);
-  const hg=p.mesh.helmetGroup;
-  const lean=hg?hg.rotation.z*0.66:0, nod=hg?hg.rotation.x*0.52:0;
-  const headWorld=hg?hg.getWorldPosition(_camHead):_camHead.copy(pp).add(V3(0,0.98,0));
   const sp01=clamp(sp/PH.top,0,1);
-  const roadHere=getRoadHAtCoords(pp.x,pp.z)+0.82;
-  const eyeX=headWorld.x+fx*0.18,eyeZ=headWorld.z+fz*0.18;
-  const eyeY=Math.max(headWorld.y+0.015,roadHere);
-  const buzz=(0.0007+sp01*0.0055)*(p.onCurb?2.3:1);
-  camera.position.set(eyeX+Math.sin(timeSec*51.3+p.phase)*buzz,
-   Math.max(eyeY+Math.cos(timeSec*63.7+p.phase*2)*buzz*0.7,roadHere),eyeZ);
-  clampCameraToSurface(0.10);
-  const frame=cockpitFrame(sp);
-  const ahead=frame.ahead,fyaw=yaw+(hg?hg.rotation.y*0.38:0);
-  const lx=pp.x+Math.sin(fyaw)*ahead,lz=pp.z+Math.cos(fyaw)*ahead;
-  const roadAhead=getRoadHAtCoords(lx,lz);
+  const roadHere=getRoadHAtCoords(pp.x,pp.z);
+  // Damped anchor above the cockpit: clear of the halo, tracking the car.
+  cam.pos.x=damp(cam.pos.x,pp.x,14,dt);
+  cam.pos.y=damp(cam.pos.y,Math.max(pp.y+1.32,roadHere+1.05),10,dt);
+  cam.pos.z=damp(cam.pos.z,pp.z,14,dt);
+  camera.position.copy(cam.pos);
+  // Velocity-lead: in a slide the camera watches where the car is GOING,
+  // not where the nose points — this is what makes drifting feel insane.
+  const vm=Math.hypot(p.vx,p.vz);
+  let lx,lz;
+  if(vm>3){
+   const lead=clamp(vm*0.011,0,0.5);
+   let dx=fx+(p.vx/vm-fx)*lead,dz=fz+(p.vz/vm-fz)*lead;
+   const dl=Math.hypot(dx,dz)||1;dx/=dl;dz/=dl;
+   lx=cam.pos.x+dx*30;lz=cam.pos.z+dz*30;
+  }else{lx=cam.pos.x+fx*30;lz=cam.pos.z+fz*30;}
   camera.up.set(0,1,0);
-  camera.lookAt(lx,roadAhead+frame.lookDrop+nod*ahead*0.16,lz);
-  camera.rotateZ(lean*0.30);
-  tf=frame.fov;
+  camera.lookAt(lx,getRoadHAtCoords(lx,lz)+0.9,lz);
+  // g-reactive frame: roll into corners, dip under braking, lift on power.
+  const gL=p.gLat||0,gO=p.gLon||0;
+  camera.rotateZ(clamp(gL*0.16,-0.2,0.2)*(0.5+sp01*0.5));
+  camera.rotateX(clamp(-gO*0.10,-0.14,0.1));
+  // Speed buzz; kerbs double it.
+  const buzz=sp01*0.0033*(p.onCurb?2.6:1);
+  camera.position.y+=Math.cos(timeSec*57.1)*buzz;
+  camera.position.x+=Math.sin(timeSec*49.3)*buzz*0.6;
+  clampCameraToSurface(0.30);
+  // Wide and widening with speed — the objective "very fast" dial.
+  tf=clamp(72+sp01*26,72,98);
  }else if(state.camMode===3){
   /* HELMET CAM — true eye-level sightline. The lens sits at the visor,
      slightly behind the halo's front hoop, with a lowered look target so the
@@ -4960,7 +5254,13 @@ function updCamera(dt){
   const nod=hg?hg.rotation.x*0.62:0;
   const roadHere=getRoadHAtCoords(pp.x,pp.z)+0.82;
   const eyeX=headWorld.x+fx*0.18,eyeZ=headWorld.z+fz*0.18;
-  const eyeY=Math.max(headWorld.y+0.02,roadHere);
+  // Visor must sit CLEAR of the halo crown so the rim falls BELOW the road
+  // sightline — the F1-game "tall seat" cheat: the eye is guaranteed above
+  // the crown rather than squashing the halo assembly itself (dropping the
+  // assembly is what erased the gap entirely). The rim stays in frame at
+  // the top, the centre pillar falls away low, the road is open.
+  const crownY=pp.y+0.985+(p.mesh.halo?p.mesh.halo.position.y:0);
+  const eyeY=Math.max(headWorld.y+0.10,crownY+0.16,roadHere);
   const sp01=clamp(sp/PH.top,0,1);
   const buzz=(0.0006+sp01*0.0045)*(p.onCurb?2.2:1);
   camera.position.set(eyeX+Math.sin(timeSec*49.7+p.phase)*buzz,
@@ -4971,7 +5271,9 @@ function updCamera(dt){
   const lx=pp.x+Math.sin(fyaw)*ahead,lz=pp.z+Math.cos(fyaw)*ahead;
   const roadAhead=getRoadHAtCoords(lx,lz);
   camera.up.set(0,1,0);
-  camera.lookAt(lx,roadAhead+frame.lookDrop+nod*ahead*0.16,lz);
+  // Slightly raised sightline: with the lowered halo assembly this keeps the
+  // aero screen visible at frame top without eating the road ahead.
+  camera.lookAt(lx,roadAhead+frame.lookDrop+0.22+nod*ahead*0.16,lz);
   camera.rotateZ(lean*0.34);
   tf=frame.fov;
 }else if(state.camMode===1){
@@ -5014,7 +5316,7 @@ function updCamera(dt){
  if(slowMo>0&&state.camMode!==2&&state.camMode!==3)tf=Math.min(tf,46);
  if(cam.shake>0){cam.shake=Math.max(0,cam.shake-dt*1.6);
   camera.position.x+=rand(-1,1)*cam.shake*0.35;camera.position.y+=rand(-1,1)*cam.shake*0.3;}
- camera.fov=damp(camera.fov,tf,8,dt);camera.updateProjectionMatrix();
+ camera.fov=damp(camera.fov,zf(tf),8,dt);camera.updateProjectionMatrix();
  // Both light and target track the car's real elevation (not a hardcoded 0),
  // so the shadow camera stays correctly aimed on hilly real-world circuits
  // instead of drifting off the actual ground and under-covering the scene.
@@ -5178,6 +5480,17 @@ function resetRaceSession(){
 }
 function beginRace(){
  resetRaceSession();
+ // A fresh race re-centres tilt: the player picked the phone up to tap
+ // through the menu, so the stored zero angle is stale by lights-out and
+ // the car would pull to one side (read as "it goes backwards/the wrong
+ // way"). Recalibrating here means "hold it how you like, we call that
+ // straight" every single race.
+ if(tiltCtrl&&tiltCtrl.enabled)tiltCtrl.calibrate();
+ // If the user drives by webcam, lights-out is a fresh user gesture — the
+ // one moment a browser lets us reopen the camera without a separate click.
+ if(faceDrive&&faceDrive.wanted&&faceDrive.state!=='live'&&faceDrive.state!=='starting'){
+  faceDrive.enable().then(ok=>{if(ok)fsToast('FACE DRIVE LIVE — TURN FACE TO STEER');syncFaceChip();});
+ }
  // A new event always opens on the visible starting grid. Do not inherit a
  // previous TV/orbit/top/helmet view, which could point away from the cars.
  state.camMode=0;
@@ -5708,8 +6021,8 @@ addEventListener('keydown',e=>{
  if(k==='Space'){keys.space=true;e.preventDefault();}
  if(k==='KeyC')cycleCam();
  if(k==='KeyF')toggleFullscreen();
- if(k==='Equal'||k==='NumpadAdd')state.zoom=Math.max(20,state.zoom-5);
- if(k==='Minus'||k==='NumpadSubtract')state.zoom=Math.min(150,state.zoom+5);
+ if(k==='Equal'||k==='NumpadAdd')zoomCam(-1);
+ if(k==='Minus'||k==='NumpadSubtract')zoomCam(1);
  if(k==='KeyR')resetPlayer();
  if(k==='KeyP')togglePitLimiter();
  if(k==='KeyM'){state.muted=!state.muted;AudioSys.setMute(state.muted);}
@@ -5725,12 +6038,21 @@ addEventListener('keyup',e=>{
  if(k==='Space')keys.space=false;
 });
 addEventListener('wheel', e => {
-  if (state.camMode === 6) { // Only zoom in top down view
-    state.zoom += Math.sign(e.deltaY) * 5;
-    state.zoom = Math.max(20, Math.min(150, state.zoom));
-  }
+  // Zoom in every camera (was top-down-only).
+  zoomCam(Math.sign(e.deltaY));
 }, {passive: true});
 
+// Universal camera zoom: one control that works in EVERY view. Most cameras
+// scale their computed FOV target through zf(); top-down keeps its own
+// height zoom (state.zoom), which reads better there anyway.
+let camZoomF=1;
+const zf=(f)=>clamp(f*camZoomF,14,110);
+function zoomCam(dir){
+ if(state.camMode===6&&(state.mode==='race'||state.mode==='finished'||demoOn)){
+  state.zoom=clamp(state.zoom+dir*8,20,150);return;
+ }
+ camZoomF=clamp(camZoomF*(dir>0?1.13:1/1.13),0.5,1.9);
+}
 function cycleCam(){
  state.camMode=(state.camMode+1)%CAM_NAMES.length;
  const n=CAM_NAMES[state.camMode];
@@ -5782,8 +6104,8 @@ if($('tFsTouch'))$('tFsTouch').addEventListener('pointerdown',e=>{e.preventDefau
 if($('hPauseChip'))$('hPauseChip').onclick=togglePause;
 if($('hTowerChip'))$('hTowerChip').onclick=()=>{towerHidden=!towerHidden;applyTowerVisibility();};
 
-if($('hZoomIn'))$('hZoomIn').onclick=()=>{state.zoom=Math.max(20,state.zoom-8);};
-if($('hZoomOut'))$('hZoomOut').onclick=()=>{state.zoom=Math.min(150,state.zoom+8);};
+if($('hZoomIn'))$('hZoomIn').onclick=()=>{zoomCam(-1);};
+if($('hZoomOut'))$('hZoomOut').onclick=()=>{zoomCam(1);};
 
 // Tilt mode menu buttons & chips
 // --- gyroscope retry prompt -------------------------------------------------
@@ -5820,6 +6142,58 @@ if($('btnTouchMode')){
    tiltCtrl.showToast('TOUCH CONTROLS ACTIVE');
  };
 }
+/* ---- webcam face drive UI ---- */
+function syncFaceChip(){
+ const b=$('hFaceChip');if(!b)return;
+ const st=faceDrive.state;
+ b.textContent=st==='live'?'FACE LIVE':st==='starting'?'FACE …':st==='error'?'FACE ERR':'FACE OFF';
+ b.classList.toggle('on',st==='live');
+ const fs=$('tFaceStatus');
+ if(fs)fs.textContent=
+  st==='live'?(faceDrive.pedalMode==='mouth'?'Live · steer with your face · OPEN MOUTH = GAS · nose down = brake':'Live · steer with your face · nose UP = GAS · nose down = brake'):
+  st==='starting'?'Starting camera + loading face model…':
+  st==='error'?('⚠ '+(faceDrive.error||'Camera failed')):
+  'Camera off · loads Google\u2019s face model once (≈4 MB, then cached)';
+}
+function bindSeg(id,fn){
+ const el=$(id);if(!el)return;
+ el.querySelectorAll('button').forEach(b=>b.addEventListener('click',e=>{
+  e.preventDefault();
+  el.querySelectorAll('button').forEach(o=>o.classList.remove('sel'));
+  b.classList.add('sel');fn(b.dataset.v);
+ }));
+}
+if($('btnFaceMode')){
+ $('btnFaceMode').onclick=async e=>{
+  e.preventDefault();
+  if(faceDrive.state==='live'||faceDrive.state==='starting'){faceDrive.disable();fsToast('FACE DRIVE OFF');}
+  else await faceDrive.enable();
+  syncFaceChip();
+ };
+}
+if($('hFaceChip')){
+ $('hFaceChip').onclick=async e=>{
+  e.preventDefault();
+  if(faceDrive.state==='live'||faceDrive.state==='starting'){faceDrive.disable();}
+  else await faceDrive.enable();
+  syncFaceChip();
+ };
+}
+bindSeg('tFaceSteer',v=>{faceDrive.steerSrc=v==='eyes'?'eyes':'nose';faceDrive.saveSettings();faceDrive.calibrate();});
+bindSeg('tFacePedal',v=>{faceDrive.pedalMode=v==='tilt'?'tilt':'mouth';faceDrive.saveSettings();syncFaceChip();});
+if($('tFaceCal'))$('tFaceCal').onclick=e=>{e.preventDefault();faceDrive.calibrate();};
+if($('tFaceInv'))$('tFaceInv').onclick=e=>{e.preventDefault();faceDrive.invert=!faceDrive.invert;faceDrive.saveSettings();$('tFaceInv').textContent='MIRROR STEER: '+(faceDrive.invert?'ON':'OFF');faceDrive.calibrate();};
+if($('tFaceSens')){
+ bindSeg('tFaceSens',v=>{faceDrive.sens=v==='low'?0.7:v==='high'?1.4:1.0;faceDrive.saveSettings();faceDrive.calibrate();});
+}
+syncFaceChip();
+if($('tFaceInv'))$('tFaceInv').textContent='MIRROR STEER: '+(faceDrive.invert?'ON':'OFF');
+(function initFaceSegs(){
+ const mark=(id,pred)=>{const el=$(id);if(!el)return;el.querySelectorAll('button').forEach(b=>b.classList.toggle('sel',!!pred(b.dataset.v)));};
+ mark('tFaceSteer',v=>v===faceDrive.steerSrc);
+ mark('tFacePedal',v=>v===faceDrive.pedalMode);
+ mark('tFaceSens',v=>faceDrive.sens<0.85?v==='low':faceDrive.sens>1.2?v==='high':v==='med');
+})();
 if($('btnOpenGyroLab')){
  $('btnOpenGyroLab').onclick = async (e) => {
    e.preventDefault();
@@ -5973,7 +6347,19 @@ function buildMenu(){
  function selectTrack(i,rebuild){
   state.trackIdx=(i+TRACKS.length)%TRACKS.length;
   setButton(state.trackIdx);
-  if(rebuild){buildWorld(state.trackIdx);snapWeather(state.wx);setupGrid(20);}
+  // Dim the NIGHT option for non-floodlit venues, and if night was selected
+  // when we leave a floodlit track, step back to DUSK before rebuilding —
+  // otherwise the new circuit would be an unlit black hole.
+  const todEl=$('tTod');
+  if(todEl&&todEl.children[2])todEl.children[2].style.opacity=TRACKS[state.trackIdx].nightOk?'1':'0.4';
+  if(rebuild){
+   if(state.tod==='night'&&!TRACKS[state.trackIdx].nightOk){
+    state.tod='dusk';
+    if(todEl)[...todEl.children].forEach((x,xi)=>x.className=xi===1?'sel':'');
+    applyWeatherVisuals();
+   }
+   buildWorld(state.trackIdx);snapWeather(state.wx);setupGrid(20);
+  }
  }
  function closeList(){dd.classList.remove('open');list.classList.add('hidden');}
  function openList(){dd.classList.add('open');list.classList.remove('hidden');}
@@ -6001,7 +6387,17 @@ function buildMenu(){
  seg('tWeather',['SUNNY','DRIZZLE','RAIN','FOG','SNOW'].map((l,i)=>ICONS[['sun','driz','rain','mist','snow'][i]]+'<span>'+l+'</span>'),0,
   i=>{state.wx=['sun','driz','rain','mist','snow'][i];snapWeather(state.wx);});
  seg('tTod',['DAY','DUSK','NIGHT'],0,
-  i=>{state.tod=['day','dusk','night'][i];applyWeatherVisuals();refreshEnv();});
+  i=>{
+   // Night racing only exists where real F1 races under floodlights
+   // (Singapore, Bahrain, Jeddah). Elsewhere NIGHT bounces back to DUSK.
+   const want=['day','dusk','night'][i];
+   if(want==='night'&&!(TRACKS[state.trackIdx]&&TRACKS[state.trackIdx].nightOk)){
+    state.tod='dusk';
+    const tT=$('tTod');if(tT)[...tT.children].forEach((x,xi)=>x.className=xi===1?'sel':'');
+    if(typeof fsToast==='function')fsToast('NIGHT RACING ONLY AT FLOODLIT VENUES — SINGAPORE, BAHRAIN, JEDDAH');
+   }else state.tod=want;
+   applyWeatherVisuals();refreshEnv();});
+ {const tT=$('tTod');if(tT&&tT.children[2])tT.children[2].style.opacity=(TRACKS[state.trackIdx]&&TRACKS[state.trackIdx].nightOk)?'1':'0.4';}
  seg('tLaps',['3 LAPS','5 LAPS','8 LAPS'],0,i=>state.laps=[3,5,8][i]);
  seg('tGrid',['10 CARS','14 CARS','20 CARS'],2,i=>state.grid=[10,14,20][i]);
  seg('tDiff',['RELAXED','NORMAL','PRO'],1,i=>state.diffMul=[0.88,0.97,1.05][i]);
@@ -6116,7 +6512,13 @@ function tick(){
    updPoints(smoke,dtGlobal,2.2);
    updPoints(sparks,dtGlobal,0.12);
    updDebris(dtGlobal);
+   updWXBlend(dtGlobal);
    updWeatherFX(dtGlobal);
+   // God rays: culled by weather/TOD inside — costs nothing when hidden.
+   if(T&&T.godRays){
+    const grGate=(1-cur.rain*0.92)*(1-clamp(cur.snow,0,1)*0.95)*(state.tod==='night'?0:1)*(1-clamp(cur.fogD*240,0,1));
+    T.godRays.update(dtGlobal,camera,sunVec,grGate);
+   }
    updLens(dtGlobal);
    updClouds(dtGlobal);
    updBirds(dtGlobal);
