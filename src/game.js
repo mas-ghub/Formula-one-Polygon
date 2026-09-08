@@ -820,9 +820,10 @@ function makeHaloAssembly(accent='#3b4147'){
  const group=new THREE.Group();
  // F1 2026 cars use predominantly dark carbon halos; a restrained team
  // accent is kept only on the front mounting shoe.
- const steel=new THREE.MeshStandardMaterial({color:0x171a1f,roughness:0.38,metalness:0.22,side:THREE.DoubleSide});
- const darkSteel=new THREE.MeshStandardMaterial({color:0x0d0f12,roughness:0.48,metalness:0.18,side:THREE.DoubleSide});
- const accentMat=new THREE.MeshStandardMaterial({color:accent,roughness:0.42,metalness:0.24,side:THREE.DoubleSide});
+ const po={polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-1};
+ const steel=new THREE.MeshStandardMaterial({color:0x171a1f,roughness:0.38,metalness:0.22,side:THREE.DoubleSide,...po});
+ const darkSteel=new THREE.MeshStandardMaterial({color:0x0d0f12,roughness:0.48,metalness:0.18,side:THREE.DoubleSide,...po});
+ const accentMat=new THREE.MeshStandardMaterial({color:accent,roughness:0.42,metalness:0.24,side:THREE.DoubleSide,...po});
  const tube=(points,radius,mat=steel)=>{
   const curve=new THREE.CatmullRomCurve3(points.map(v=>new THREE.Vector3(v[0],v[1],v[2])),false,'centripetal',0.34);
   const mesh=new THREE.Mesh(new THREE.TubeGeometry(curve,48,radius,8,false),mat);
@@ -4387,7 +4388,7 @@ function updCarVisual(c,dt){
  // should shrink as speed rises, not stay fixed regardless of how fast
  // you're going.
  const steerVis=clamp(1-Math.abs(c.vF)/PH.top*0.75,0.22,1);
- c.mesh.axleF.rotation.y=-c.steer*0.58*steerVis;
+ c.mesh.axleF.rotation.y=c.steer*0.58*steerVis;
  c.mesh.axleF.rotation.x=c.wheelRot;
  c.mesh.axleR.rotation.x=c.wheelRot;
  c.mesh.drs.rotation.x=c.drsOpen?-1.15:0;
@@ -5303,10 +5304,9 @@ function updCamera(dt){
  const suit=p.mesh.driverGroup&&p.mesh.driverGroup.userData.suit;
  if(suit)suit.visible=state.camMode!==3;
  const helm=state.camMode===3;
- if(p.mesh.steering&&!helm)p.mesh.steering.visible=true;
+ if(p.mesh.steering)p.mesh.steering.visible=true;
  if(p.mesh.halo)p.mesh.halo.visible=true;
  if(p.mesh.body)p.mesh.body.visible=true;
- if(p.mesh.driverGroup)p.mesh.driverGroup.visible=!helm;
  if(p.mesh.drs)p.mesh.drs.visible=true;
  if(p.mesh.brakes)p.mesh.brakes.visible=true;
  if(p.mesh.brakeLight)p.mesh.brakeLight.visible=true;
@@ -5372,32 +5372,23 @@ function updCamera(dt){
   const nod=hg?hg.rotation.x*0.4:0;
   const sp01=clamp(sp/PH.top,0,1);
   const buzz=(0.00025+sp01*0.0018)*(p.onCurb?2.0:1);
-  camera.near=0.12;
+  camera.near=0.22;
   p.mesh.g.updateMatrixWorld(true);
-  // Sit under the halo crown, look LEVEL down the road so the hoop frames
-  // the visor instead of a carbon bar cutting the tarmac.
-  const eye=new THREE.Vector3(0,0.90,0.08).applyMatrix4(p.mesh.g.matrixWorld);
-  const look=new THREE.Vector3(p.steer*0.22,0.78+nod*0.25,14).applyMatrix4(p.mesh.g.matrixWorld);
+  const eye=new THREE.Vector3(0,0.92,0.18).applyMatrix4(p.mesh.g.matrixWorld);
+  const look=new THREE.Vector3(p.steer*0.22,0.72+nod*0.25,16).applyMatrix4(p.mesh.g.matrixWorld);
   camera.position.set(eye.x+Math.sin(timeSec*49.7+p.phase)*buzz,eye.y,eye.z);
   camera.up.set(0,1,0);
   camera.lookAt(look.x,look.y,look.z);
   camera.rotateZ(lean*0.28+p.steer*0.04);
-  tf=62;
-  if(p.mesh.steering)p.mesh.steering.visible=false;
+  tf=58;
+  if(p.mesh.steering)p.mesh.steering.visible=true;
   if(p.mesh.halo)p.mesh.halo.visible=true;
   if(p.mesh.body)p.mesh.body.visible=true;
-  if(helmOverlay&&helmOverlay.userData.v!==9){camera.remove(helmOverlay);helmOverlay=null;helmWheel=null;wingMirrors=null;}
+  if(helmOverlay&&helmOverlay.userData.v!==10){camera.remove(helmOverlay);helmOverlay=null;helmWheel=null;wingMirrors=null;}
   if(!helmOverlay){
-   helmOverlay=new THREE.Group();helmOverlay.userData.v=9;
-   const hMat=new THREE.MeshStandardMaterial({color:0x171a1f,roughness:0.38,metalness:0.22,side:THREE.DoubleSide});
-   helmWheel=p.mesh.steering?p.mesh.steering.clone(true):new THREE.Group();
-   helmWheel.position.set(0,-0.38,-0.72);
-   helmWheel.rotation.set(0.22,0,0);
-   helmWheel.scale.set(0.55,0.55,0.55);
-   helmWheel.visible=true;
-   helmWheel.traverse(o=>{if(o.isMesh){o.frustumCulled=false;o.renderOrder=20;}});
-   if(p.mesh.steering)helmWheel.userData=p.mesh.steering.userData;
-   helmOverlay.add(helmWheel);
+   helmOverlay=new THREE.Group();helmOverlay.userData.v=10;
+   const hMat=new THREE.MeshStandardMaterial({color:0x171a1f,roughness:0.38,metalness:0.22,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2});
+   helmWheel=p.mesh.steering||null;
    const mkRt=()=>{
     const rt=new THREE.WebGLRenderTarget(320,200,{minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter,format:THREE.RGBAFormat});
     rt.texture.colorSpace=THREE.SRGBColorSpace;
@@ -5418,11 +5409,10 @@ function updCamera(dt){
    camera.add(helmOverlay);
   }
   helmOverlay.visible=true;
-  if(helmWheel){
-   helmWheel.rotation.z=-p.steer*2.05*Math.max(0.28,1-sp01*0.7);
+  if(p.mesh.steering){
    const rpm01=clamp(p.rpm!=null?p.rpm:sp01,0,1);
    const gearTxt=p.vF<-0.5?'R':(Math.abs(p.vF)<0.5&&p.throttle===0?'N':(p.gear||1));
-   updateSteeringHUD(helmWheel,{
+   updateSteeringHUD(p.mesh.steering,{
     rpm01,speed:sp*3.6,gear:gearTxt,
     pos:'P'+(p.pos||1),lap:(p.lap||0)+1,drs:!!p.drsOpen,ers:1-clamp(sp01*0.15,0,0.4),
     tyre:Math.round(92+(p.onCurb?8:0)+sp01*12),drawLcd:true
@@ -6803,5 +6793,8 @@ addEventListener('keydown',unlockAudioForTitle);
 addEventListener('pointerdown',()=>{
  lastInput=nowT();
  if(demoArmed>0){demoArmed=0;const b=$('demoBanner');if(b)b.classList.add('hidden');}
+ if(demoOn&&state.mode!=='title')toTitle();
+});
+;if(b)b.classList.add('hidden');}
  if(demoOn&&state.mode!=='title')toTitle();
 });
