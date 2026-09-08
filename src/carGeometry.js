@@ -116,8 +116,8 @@ export function makeDriverMesh(colA, helmetCol, material){
   // and a live LCD. Geometry stays cheap (boxes); the screen is one 256×128
   // canvas texture updated only for the player in helmet-cam on HIGH/ULTRA.
   const steering = new THREE.Group();
-  steering.position.set(0, 0.50, 0.70);
-  steering.rotation.x = 0.42;
+  steering.position.set(0, 0.76, 0.52);
+  steering.rotation.x = 0.55;
   const carbonMat = new THREE.MeshStandardMaterial({color:0x121417,roughness:0.42,metalness:0.28,flatShading:true});
   const gripMat = new THREE.MeshStandardMaterial({color:0x0a0b0d,roughness:0.72,metalness:0.08,flatShading:true});
   const addBox=(w,h,d,mat,x,y,z,rx=0,ry=0,rz=0)=>{
@@ -345,8 +345,5 @@ export function updateSteeringHUD(steering, info){
   cx.fillStyle='#7adf3a';cx.fillRect(48,104,160*Math.max(0,Math.min(1,info.ers??1)),12);
   cx.fillStyle='#070b10';cx.font='700 9px sans-serif';cx.textAlign='center';
   cx.fillText(((info.ers??1)*100|0)+'%',128,114);
-  lcd.tex.needsUpdate=true;
-}
- cx.fillText(((info.ers??1)*100|0)+'%',128,114);
   lcd.tex.needsUpdate=true;
 }

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { getBodyGeo, makeDriverMesh, getAxleGeo, getBrakeGeo, updateSteeringHUD } from './carGeometry.js';
+let helmOverlay=null,helmWheel=null;
 import { TRACKS } from './tracks.js';
 import { loadRealCircuits } from './circuitData.js';
 import { RainShaderPass } from './rainShader.js';
@@ -488,6 +489,7 @@ renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.outputColorSpace=THREE
 renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
 const scene=new THREE.Scene();
 const camera=new THREE.PerspectiveCamera(62,1,0.08,6000);
+scene.add(camera);
 const SUNDIR=V3(0.42,0.55,0.25).normalize();
 // The live sun direction (SUNDIR is the default; the time of day re-aims it)
 // and how cool the shade side of the image should read.
@@ -1126,7 +1128,10 @@ function updWeatherFX(dt){
  }
  const cx=camera.position.x,cz=camera.position.z;
  const rp=rainGeo.attributes.position.array;
- rainMesh.visible=cur.rain>0.03;
+ // When the visor shader is running, world-space rain lines stack on top
+ // and read as an opaque curtain (especially on ULTRA). Keep them as a
+ // fallback only.
+ rainMesh.visible=cur.rain>0.03&&!windshieldOn;
  /* Snow uses the same particle system as rain (it is the only one built) but
     it must not look like rain: the flakes fall at a fifth of the speed, drift
     sideways on the wind and stop being drawn as streaks. */
@@ -5217,6 +5222,8 @@ function updCamera(dt){
  if(p.mesh.driverGroup)p.mesh.driverGroup.visible=true;
  const suit=p.mesh.driverGroup&&p.mesh.driverGroup.userData.suit;
  if(suit)suit.visible=state.camMode!==3;
+ if(p.mesh.steering&&state.camMode!==3)p.mesh.steering.visible=true;
+ if(helmOverlay)helmOverlay.visible=state.camMode===3;
  const sp=Math.abs(p.vF);
  let tf=62;
  if(state.camMode!==3&&camera.near!==0.08){camera.near=0.08;}
@@ -5270,37 +5277,43 @@ function updCamera(dt){
   // Wide and widening with speed — the objective "very fast" dial.
   tf=clamp(72+sp01*26,72,98);
  }else if(state.camMode===3){
-  /* HELMET CAM — onboard visor. Eye sits IN the cockpit so the halo pillar
-     frames the shot and the steering wheel occupies the lower third. */
+  /* HELMET CAM — THROUGH the halo, not over it. */
   const yaw=p.hdg,fx=Math.sin(yaw),fz=Math.cos(yaw);
   const hg=p.mesh.helmetGroup;
-  const lean=hg?hg.rotation.z*0.82:0;
-  const nod=hg?hg.rotation.x*0.55:0;
-  const roadHere=getRoadHAtCoords(pp.x,pp.z);
-  const eyeY=pp.y+0.92;
-  const eyeX=pp.x+fx*0.22,eyeZ=pp.z+fz*0.22;
+  const lean=hg?hg.rotation.z*0.7:0;
+  const nod=hg?hg.rotation.x*0.45:0;
   const sp01=clamp(sp/PH.top,0,1);
-  const buzz=(0.0005+sp01*0.0038)*(p.onCurb?2.2:1);
-  camera.position.set(eyeX+Math.sin(timeSec*49.7+p.phase)*buzz,
-   Math.max(eyeY+Math.cos(timeSec*61.3+p.phase)*buzz*0.55,roadHere+0.55),eyeZ);
-  clampCameraToSurface(0.10);
-  const ahead=18+sp01*8;
-  const fyaw=yaw+(hg?hg.rotation.y*0.28:0)+p.steer*0.04;
-  const lx=pp.x+Math.sin(fyaw)*ahead,lz=pp.z+Math.cos(fyaw)*ahead;
-  const roadAhead=getRoadHAtCoords(lx,lz);
+  const buzz=(0.0003+sp01*0.0022)*(p.onCurb?2.0:1);
+  camera.near=0.05;
+  camera.position.set(pp.x+fx*0.32+Math.sin(timeSec*49.7+p.phase)*buzz,pp.y+0.80,pp.z+fz*0.32);
+  const ahead=12+sp01*5;
+  const fyaw=yaw+(hg?hg.rotation.y*0.18:0)+p.steer*0.025;
   camera.up.set(0,1,0);
-  camera.lookAt(lx,roadAhead+0.55+nod*ahead*0.12,lz);
-  camera.rotateZ(lean*0.42+p.steer*0.06);
-  tf=clamp(78+sp01*10,76,92);
-  const st=p.mesh.steering;
-  if(st){
-   const hi=(QUALITY_PRESETS[effQuality()]||{}).cockpitDetail;
+  camera.lookAt(pp.x+Math.sin(fyaw)*ahead,pp.y+0.70+nod*2,pp.z+Math.cos(fyaw)*ahead);
+  camera.rotateZ(lean*0.32+p.steer*0.04);
+  tf=68;
+  if(p.mesh.steering)p.mesh.steering.visible=false;
+  if(!helmOverlay){
+   helmOverlay=new THREE.Group();
+   helmWheel=p.mesh.steering?p.mesh.steering.clone(true):new THREE.Group();
+   helmWheel.position.set(0,-0.16,-0.42);
+   helmWheel.rotation.set(0.15,0,0);
+   helmWheel.scale.set(1.2,1.2,1.2);
+   helmWheel.visible=true;
+   helmWheel.traverse(o=>{if(o.isMesh){o.frustumCulled=false;o.renderOrder=20;}});
+   if(p.mesh.steering)helmWheel.userData=p.mesh.steering.userData;
+   helmOverlay.add(helmWheel);
+   camera.add(helmOverlay);
+  }
+  helmOverlay.visible=true;
+  if(helmWheel){
+   helmWheel.rotation.z=-p.steer*2.05*Math.max(0.28,1-sp01*0.7);
    const rpm01=clamp(p.rpm!=null?p.rpm:sp01,0,1);
    const gearTxt=p.vF<-0.5?'R':(Math.abs(p.vF)<0.5&&p.throttle===0?'N':(p.gear||1));
-   updateSteeringHUD(st,{
+   updateSteeringHUD(helmWheel,{
     rpm01,speed:sp*3.6,gear:gearTxt,
     pos:'P'+(p.pos||1),lap:(p.lap||0)+1,drs:!!p.drsOpen,ers:1-clamp(sp01*0.15,0,0.4),
-    tyre:Math.round(92+(p.onCurb?8:0)+sp01*12),drawLcd:!!hi
+    tyre:Math.round(92+(p.onCurb?8:0)+sp01*12),drawLcd:true
    });
   }
  }else if(state.camMode===1){
@@ -5336,7 +5349,7 @@ function updCamera(dt){
  }
  // Final guard for every race camera, including a camera that has just
  // switched modes or is still damping from a previous view.
- clampCameraToSurface(state.camMode===2?0.18:state.camMode===3?0.12:0.32);
+ if(state.camMode!==3)clampCameraToSurface(state.camMode===2?0.18:0.32);
  // Cinematic: pull in closer/tighter to the crash while slow-mo runs.
  // Keep helmet view wide and driveable during impacts; the external cameras
  // may punch in for the cinematic slow-motion shot.

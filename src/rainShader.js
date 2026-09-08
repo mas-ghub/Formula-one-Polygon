@@ -202,7 +202,7 @@ void main() {
   // The bead itself needs to be clearly VISIBLE like the Shadertoy original:
   // a higher refracted mix inside each drop, still capped well under 0.5 so
   // the circuit never vanishes behind the water.
-  float dropletAlpha=clamp(c.x*0.55+c.y*0.16,0.0,0.48);
+  float dropletAlpha=clamp(c.x*0.22+c.y*0.08,0.0,0.20);
   vec3 col=mix(originalScene,refractedScene,dropletAlpha);
 
   // Fresnel rim and bright pin highlight make droplets read as water rather
@@ -213,11 +213,10 @@ void main() {
   // short strike envelope, so wet glass never becomes a full-screen white veil.
   // Kept soft on purpose: a stronger rim/glint reads as an opaque outline
   // around every bead instead of wet glass.
-  col+=vec3(0.48,0.68,0.82)*edge*0.07*rainAmount;
-  col+=vec3(0.95,0.99,1.0)*glint*0.22*rainAmount;
-  // A restrained trail sheen is the readable part of the moving bead path.
-  col+=vec3(0.42,0.62,0.76)*c.y*0.10*rainAmount;
-  col=mix(col,col*vec3(0.82,0.91,1.03),clamp(c.y*0.12,0.0,0.12));
+  col+=vec3(0.48,0.68,0.82)*edge*0.035*rainAmount;
+  col+=vec3(0.95,0.99,1.0)*glint*0.10*rainAmount;
+  col+=vec3(0.42,0.62,0.76)*c.y*0.05*rainAmount;
+  col=mix(col,col*vec3(0.88,0.94,1.02),clamp(c.y*0.06,0.0,0.06));
 
   // The matching Shadertoy Heartfelt effect is a glass/rain shader; lightning
   // is layered separately so it can be spectacular without making rain itself
