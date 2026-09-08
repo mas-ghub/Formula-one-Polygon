@@ -162,8 +162,18 @@ export function makeDriverMesh(colA, helmetCol, material){
   return { driverGroup, helmetGroup };
 }
 
-let axleGeo=null, brakeGeo=null;
-export function getAxleGeo(){if(axleGeo&&brakeGeo)return axleGeo;
+// Tyre compounds. Real F1 distinguishes them by a coloured band on the
+// sidewall: soft=red, medium=yellow, hard=white, intermediate=green,
+// full-wet=blue. The tread geometry is identical; only the ring colour
+// changes, and each compound caches its own single shared geometry so every
+// car on that compound still shares one BufferGeometry.
+const COMPOUND_RING={
+ soft:'#e10600', medium:'#f7d117', hard:'#f4f4f0',
+ inter:'#00a651', wet:'#1e6fd9'
+};
+const axleGeoCache=new Map();
+let brakeGeo=null;
+export function getAxleGeo(compound='medium'){if(axleGeoCache.has(compound))return axleGeoCache.get(compound);
  // Build one clean wheel at the origin and duplicate it at the two axle ends.
  // Previously suspension pieces for both sides were merged into this single
  // wheel and then the whole assembly was duplicated again. Those extra rods
@@ -172,7 +182,17 @@ export function getAxleGeo(){if(axleGeo&&brakeGeo)return axleGeo;
  // Rounded slick tyre, recessed alloy rim and hub. More radial segments remove
  // the conspicuously faceted twelve-sided outline without making the grid
  // expensive (all cars share this geometry).
- parts.push(part(new THREE.CylinderGeometry(0.37,0.37,0.34,24,1,false),'#151619',0,0,0,0,0,Math.PI/2));
+ const TIRE_R=0.37, TIRE_W=0.34, HALF_W=TIRE_W/2, BEVEL=0.05;
+ // Tread cylinder.
+ parts.push(part(new THREE.CylinderGeometry(TIRE_R,TIRE_R,TIRE_W,24,1,false),'#151619',0,0,0,0,0,Math.PI/2));
+ // BEVELLED SHOULDERS — a torus fillet ring on each side seats its outer face
+ // tangent to BOTH the tread radius and the sidewall plane, so the tread rolls
+ // into the sidewall through a smooth rounded shoulder instead of a sharp 90°
+ // edge (the old flat-sided disc look). The ring's plane is rotated to face the
+ // axle (TorusGeometry defaults to a Z-facing ring; rotateY maps it onto X).
+ for(const sx of[1,-1]){
+  parts.push(part(new THREE.TorusGeometry(TIRE_R-BEVEL,BEVEL,10,24),'#151619',sx*(HALF_W-BEVEL),0,0,0,Math.PI/2,0));
+ }
  parts.push(part(new THREE.CylinderGeometry(0.225,0.225,0.352,20,1,false),'#34383e',0,0,0,0,0,Math.PI/2));
  parts.push(part(new THREE.CylinderGeometry(0.072,0.072,0.365,16),'#aeb3ba',0,0,0,0,0,Math.PI/2));
  parts.push(part(new THREE.CylinderGeometry(0.030,0.030,0.378,12),'#ffd23f',0,0,0,0,0,Math.PI/2));
@@ -182,17 +202,45 @@ export function getAxleGeo(){if(axleGeo&&brakeGeo)return axleGeo;
   const a=s*Math.PI/5;
   parts.push(part(new THREE.BoxGeometry(0.105,0.26,0.026),'#d5dae0',0,Math.cos(a)*0.125,Math.sin(a)*0.125,a,0,0));
  }
+ // TREAD BLOCKS — a band of raised blocks around the circumference in a
+ // slightly lighter rubber, so the wheels visibly turn with road speed from
+ // ANY camera. A featureless dark cylinder spins invisibly; these studs catch
+ // the light and read as directional tread. Columns are staggered so the
+ // pattern reads as a real block tread rather than a ring of uniform studs.
+ const TREAD_COLS=[-0.085,-0.028,0.028,0.085], N_BLOCKS=20;
+ for(let c=0;c<TREAD_COLS.length;c++){
+  const stagger=(c%2)?Math.PI/N_BLOCKS:0;
+  for(let s=0;s<N_BLOCKS;s++){
+   const a=s*Math.PI*2/N_BLOCKS+stagger;
+   // Box axes: X along the axle (block width), Y radial (thickness), Z around
+   // the rim (block length); rotated about X so the thickness points outward.
+   // Centred at TIRE_R + half the thickness so each block sits FLUSH on the
+   // tread surface and stands ~0.024 m proud of the rubber.
+   parts.push(part(new THREE.BoxGeometry(0.052,0.024,0.05),'#26292f',TREAD_COLS[c],Math.cos(a)*(TIRE_R+0.012),Math.sin(a)*(TIRE_R+0.012),a,0,0));
+  }
+ }
+ // COMPOUND RING — a thin coloured band on the sidewall between the rim and
+ // the tread shoulder, the way Pirelli marks soft/medium/hard and the wet
+ // compounds. Placed a whisker proud of the sidewall plane so it never
+ // z-fights the rubber; axis runs along X (the axle) like the bevel rings.
+ const ring=COMPOUND_RING[compound]||COMPOUND_RING.medium;
+ for(const sx of[1,-1]){
+  parts.push(part(new THREE.TorusGeometry(0.29,0.02,10,28),ring,sx*(HALF_W+0.002),0,0,0,Math.PI/2,0));
+ }
  const wheel=mergeGeometries(parts,false);
  const left=wheel.clone();left.translate(-0.82,0,0);
  const right=wheel.clone();right.translate(0.82,0,0);
- axleGeo=mergeGeometries([left,right],false);
+ const geo=mergeGeometries([left,right],false);
+ axleGeoCache.set(compound,geo);
 
  // Brake discs are centred once and then placed directly behind each rim.
  // The old code applied two lateral translations, leaving duplicate discs at
  // the axle centre and beyond the outside edge of the tyres.
- const disc=part(new THREE.CylinderGeometry(0.205,0.205,0.045,20), '#3a2018',0,0,0,0,0,Math.PI/2);
- const d1=disc.clone();d1.translate(-0.82,0,0);
- const d2=disc.clone();d2.translate(0.82,0,0);
- brakeGeo=mergeGeometries([d1,d2],false);
- return axleGeo;}
+ if(!brakeGeo){
+  const disc=part(new THREE.CylinderGeometry(0.205,0.205,0.045,20), '#3a2018',0,0,0,0,0,Math.PI/2);
+  const d1=disc.clone();d1.translate(-0.82,0,0);
+  const d2=disc.clone();d2.translate(0.82,0,0);
+  brakeGeo=mergeGeometries([d1,d2],false);
+ }
+ return geo;}
 export function getBrakeGeo(){getAxleGeo();return brakeGeo;}

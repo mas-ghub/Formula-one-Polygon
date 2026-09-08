@@ -791,9 +791,10 @@ function bannerTex(name){const[cn,cx]=mkCanvas(1024,96);
  cx.fillStyle='#101216';cx.fillRect(0,0,1024,96);
  cx.fillStyle='#e10600';cx.fillRect(0,0,26,96);cx.fillRect(998,0,26,96);
  cx.fillStyle='#f4f1ea';cx.font='italic 700 52px sans-serif';cx.textAlign='center';cx.textBaseline='middle';
- // Mirrored so the banner reads the correct way round when you approach the
- // line (the plane's facing means a normal draw comes out backwards).
- cx.save();cx.translate(512,52);cx.scale(-1,1);cx.fillText(name.toUpperCase()+' · POLYGON GP',0,0,940);cx.restore();
+ // Drawn normally: the banner plane is already rotated 180° about Y (its
+ // -Z face presents to the approaching cars), which mirrors the texture
+ // once. Mirroring again here made the writing read back-to-front.
+ cx.save();cx.translate(512,52);cx.fillText(name.toUpperCase()+' · POLYGON GP',0,0,940);cx.restore();
  return ctex(cn,false);}
 const numCache=new Map();
 function numTex(n){if(numCache.has(n))return numCache.get(n);
@@ -871,7 +872,7 @@ function makeDamageSprite(){
  };
  return spr;
 }
-function makeCarMesh(d){
+function makeCarMesh(d,compound){
  const g=new THREE.Group();
  const body=new THREE.Mesh(getBodyGeo(d.colA,d.colB),matBody);body.castShadow=true;
  const halo=makeHaloAssembly(d.colB||d.colA||'#3b4147');
@@ -885,9 +886,9 @@ function makeCarMesh(d){
  // above the rim — see updCamera.
  halo.position.y=-0.06;
  const { driverGroup, helmetGroup } = makeDriverMesh(d.colA, d.helmet, matBody);
- getAxleGeo();
- const axleF=new THREE.Mesh(getAxleGeo(),matWheel);axleF.rotation.order='YXZ';axleF.position.set(0,0.37,1.62);
- const axleR=new THREE.Mesh(getAxleGeo(),matWheel);axleR.position.set(0,0.37,-1.62);
+ const axleGeo=getAxleGeo(compound);
+ const axleF=new THREE.Mesh(axleGeo,matWheel);axleF.rotation.order='YXZ';axleF.position.set(0,0.37,1.62);
+ const axleR=new THREE.Mesh(axleGeo,matWheel);axleR.position.set(0,0.37,-1.62);
  // Brake discs sit behind the rims and do NOT spin with the axle — instead
  // their emissive colour climbs from cold grey to cherry red under braking
  // and fades back over a couple of seconds, which is what makes a car
@@ -1525,7 +1526,7 @@ function snapWeather(k){const p=WX[k];
  // read snowAccum, which otherwise melts back at only ~0.035/s. Unless the
  // new weather actually IS snow, drop the accumulation immediately.
  if((p.snow||0)<=0.25){snowAccum=Math.min(snowAccum,0.02);snowGust=0;snowGustT=6;}
- applyWeatherVisuals();refreshEnv();}
+ applyWeatherVisuals();refreshEnv();applyWeatherTyres();}
 // Flow cur* toward the target weather over ~4 s. applyWeatherVisuals() then
 // re-runs every frame so sky, fog, exposure and lamp levels follow the blend
 // live instead of jumping.
@@ -3546,8 +3547,31 @@ const GEAR_COUNT=8;
 // Eight forward automatic ratios. The final upshift is reachable before the
 // 284 km/h top speed; the last 294 km/h value is only the redline ceiling.
 const GEAR_BANDS_KMH=[0,46,78,108,138,170,204,240,294];
-function makeCar(d,isPlayer){
- const mesh=makeCarMesh(d);scene.add(mesh.g);
+// Tyre compounds. Dry races run a mix of three compounds (soft / medium /
+// hard, assigned round-robin down the grid); wet weather forces intermediates
+// and full rain forces full wets. The per-car dry pick is remembered so the
+// grid reverts to its spread when the weather dries out.
+const DRY_COMPOUNDS=['soft','medium','hard'];
+function dryCompoundFor(i){return DRY_COMPOUNDS[i%DRY_COMPOUNDS.length];}
+function weatherCompound(dryCompound){
+ const wx=state.wx;
+ if(wx==='rain'||wx==='snow')return 'wet';
+ if(wx==='driz')return 'inter';
+ return dryCompound||'medium';
+}
+// Re-tyre every car to match the current weather without rebuilding the grid —
+// used when the weather is changed live from the menu (attract screen) or at a
+// session start. The geometries are shared per compound, so this is just a
+// pointer swap.
+function applyWeatherTyres(){
+ for(const c of cars){
+  const g=getAxleGeo(weatherCompound(c.dryCompound));
+  c.mesh.axleF.geometry=g;
+  c.mesh.axleR.geometry=g;
+ }
+}
+function makeCar(d,isPlayer,dryCompound){
+ const mesh=makeCarMesh(d,weatherCompound(dryCompound));scene.add(mesh.g);
  return{d,isPlayer,mesh,x:0,z:0,hdg:0,vx:0,vz:0,vF:0,ti:0,f:0,_pf:0,lat:0,
   steer:0,throttle:0,brake:0,drift:false,
   gear:1,rpm:0.15,audioRpm:0.15,wheelRot:0,wheelspin:0,drsOpen:false,slipstream:false,
@@ -3560,7 +3584,7 @@ function makeCar(d,isPlayer){
   penalties:[],penaltySec:0,ruleCooldowns:{},trackLimitWarnings:0,offPrev:false,
   pitLane:false,pitRequest:false,pitLimiter:false,pitDist:0,vscDelta:0,
   jumpStart:false,lastBrakeMove:0,
-  phase:rand(0,9),pos:1,near:null,shiftT:0,hitT:0,reactT:0,dustT:0,exT:0};
+  phase:rand(0,9),pos:1,near:null,shiftT:0,hitT:0,reactT:0,dustT:0,exT:0,dryCompound};
 }
 function setupGrid(gridSize){
  for(const c of cars)scene.remove(c.mesh.g);
@@ -3569,7 +3593,7 @@ function setupGrid(gridSize){
   name: d[0], team: d[1], skill: d[2], num: d[3], color: d[4], colB: d[5], helmet: d[6]
  }));
  const ais = source.slice(0, gridSize - 1);
- ais.forEach(d => {
+ ais.forEach((d, i) => {
   const pers=personaFor(d);
   cars.push(makeCar({
    name: d.name,
@@ -3582,9 +3606,9 @@ function setupGrid(gridSize){
    headshot: d.headshot || null,
    code: d.code || d.name.substring(0,3).toUpperCase(),
    agg: pers.agg, defend: pers.defend, risk: pers.risk
-  }, false));
+  }, false, dryCompoundFor(i)));
  });
- player=makeCar({name:state.name,team:'POLYGON GP',skill:0.9,num:99,colA:'#f5f5f2',colB:'#e10600',helmet:'#e10600',headshot:state.driverPhoto||null,code:state.name.substring(0,3).toUpperCase(),agg:0.95,defend:0.95,risk:0.6},true);
+ player=makeCar({name:state.name,team:'POLYGON GP',skill:0.9,num:99,colA:'#f5f5f2',colB:'#e10600',helmet:'#e10600',headshot:state.driverPhoto||null,code:state.name.substring(0,3).toUpperCase(),agg:0.95,defend:0.95,risk:0.6},true,dryCompoundFor(gridSize-1));
  cars.push(player);
  gridPlace();
 }
