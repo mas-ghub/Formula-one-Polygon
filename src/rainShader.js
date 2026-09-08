@@ -195,7 +195,7 @@ void main() {
   float wetGlass = 0.0;
   vec3 originalScene = texture2D(uScene, UV).rgb;
   vec3 refractedScene = texture2D(uScene, clamp(UV + n * 0.65, 0.0, 1.0)).rgb;
-  float dropletAlpha=clamp(c.x*0.14+c.y*0.05,0.0,0.12);
+  float dropletAlpha=clamp(c.x*0.42+c.y*0.16,0.0,0.40);
   vec3 col=mix(originalScene,refractedScene,dropletAlpha);
 
   // Fresnel rim and bright pin highlight make droplets read as water rather
@@ -206,9 +206,9 @@ void main() {
   // short strike envelope, so wet glass never becomes a full-screen white veil.
   // Kept soft on purpose: a stronger rim/glint reads as an opaque outline
   // around every bead instead of wet glass.
-  col+=vec3(0.55,0.72,0.85)*edge*0.02*rainAmount;
-  col+=vec3(0.95,0.99,1.0)*glint*0.06*rainAmount;
-  col+=vec3(0.42,0.62,0.76)*c.y*0.025*rainAmount;
+  col+=vec3(0.55,0.72,0.85)*edge*0.07*rainAmount;
+  col+=vec3(0.95,0.99,1.0)*glint*0.16*rainAmount;
+  col+=vec3(0.42,0.62,0.76)*c.y*0.06*rainAmount;
 
   // The matching Shadertoy Heartfelt effect is a glass/rain shader; lightning
   // is layered separately so it can be spectacular without making rain itself

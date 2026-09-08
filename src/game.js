@@ -57,7 +57,7 @@ loadDriverProfile();
    strength: a low sun is not just a dimmer sun, it is long shadows, warm
    raking light on the cars and a horizon that burns. */
 const TOD={
- day :{sunMul:1.0,hMul:1.0,expMul:1.0,skyMul:1.0,el:0.92,az:0.7 ,haze:0.0 ,stars:0.0,cool:0.0},
+ day :{sunMul:1.18,hMul:1.18,expMul:1.22,skyMul:1.08,el:0.92,az:0.7 ,haze:0.0 ,stars:0.0,cool:0.0},
  dusk:{sunMul:0.72,hMul:0.8,expMul:1.08,skyMul:0.78,el:0.13,az:1.9 ,haze:0.9 ,stars:0.15,cool:0.15},
  night:{sunMul:0.22,hMul:0.42,expMul:1.35,skyMul:0.3,el:0.28,az:3.6 ,haze:0.25,stars:1.0,cool:0.55}
 };
@@ -1133,7 +1133,7 @@ function updWeatherFX(dt){
  // When the visor shader is running, world-space rain lines stack on top
  // and read as an opaque curtain (especially on ULTRA). Keep them as a
  // fallback only.
- rainMesh.visible=false;
+ rainMesh.visible=cur.rain>0.12&&!flake;
  /* Snow uses the same particle system as rain (it is the only one built) but
     it must not look like rain: the flakes fall at a fifth of the speed, drift
     sideways on the wind and stop being drawn as streaks. */
@@ -1489,11 +1489,11 @@ function applyWeatherVisuals(){
  skyMat.uniforms.sunC.value.copy(cur.sunC).multiplyScalar(2.2*tod.skyMul);
  scene.fog.color.copy(cur.fog).multiplyScalar(tod.skyMul);scene.fog.density=cur.fogD;
  sunLight.color.copy(cur.sunC).lerp(new THREE.Color(0xffb066),clamp(tod.el<0.3?0.55:0.12,0,1)*(1-cur.rain*0.6));
- sunBase=cur.sunI*tod.sunMul*(0.55+0.45*clamp(sunVec.y*1.6,0,1));
+ sunBase=cur.sunI*tod.sunMul*(0.78+0.32*clamp(sunVec.y*1.6,0,1));
  sunLight.intensity=sunBase;
  hemi.color.copy(cur.hS);hemi.groundColor.copy(cur.hG);hemi.intensity=cur.hI*tod.hMul;
  renderer.toneMappingExposure=cur.exp*tod.expMul;
- rainMesh.material.opacity=0.008+cur.rain*0.028;
+ rainMesh.material.opacity=0.05+cur.rain*0.10;
  if(cloudMat){const g=cur.rain;cloudMat.color.setRGB(1-g*0.45,1-g*0.43,1-g*0.40);}
  if(T){const wet=cur.wet;
   // A wet road is not merely a damp one: it goes darker, glassier and it
@@ -4478,7 +4478,11 @@ function updCarVisual(c,dt){
   c._trV=tv2;
   c.mesh.driverGroup.rotation.z=tr;
   // the wheel itself: hands turn it, and it kicks back over a kerb
-  if(c.mesh.steering)c.mesh.steering.rotation.z=-c.steer*2.1*Math.max(0.25,1-sp01*0.72)+road*2.2;
+  if(c.mesh.steering){
+   const lock=-c.steer*2.1*Math.max(0.25,1-sp01*0.72);
+   const kick=state.mode==='title'?0:road*0.35;
+   c.mesh.steering.rotation.z=damp(c.mesh.steering.rotation.z,lock+kick,14,dt);
+  }
   if(c.mesh.brakes){
    c.brakeHeat=Math.max(0,(c.brakeHeat||0)-dt*0.42+(c.brake>0.02?dt*c.brake*1.9:0));
    const bh=clamp(c.brakeHeat,0,1);
@@ -5372,10 +5376,10 @@ function updCamera(dt){
   const nod=hg?hg.rotation.x*0.4:0;
   const sp01=clamp(sp/PH.top,0,1);
   const buzz=(0.00025+sp01*0.0018)*(p.onCurb?2.0:1);
-  camera.near=0.22;
+  camera.near=0.16;
   p.mesh.g.updateMatrixWorld(true);
-  const eye=new THREE.Vector3(0,0.92,0.18).applyMatrix4(p.mesh.g.matrixWorld);
-  const look=new THREE.Vector3(p.steer*0.22,0.72+nod*0.25,16).applyMatrix4(p.mesh.g.matrixWorld);
+  const eye=new THREE.Vector3(0,0.86,0.12).applyMatrix4(p.mesh.g.matrixWorld);
+  const look=new THREE.Vector3(p.steer*0.18,0.40+nod*0.2,8.0).applyMatrix4(p.mesh.g.matrixWorld);
   camera.position.set(eye.x+Math.sin(timeSec*49.7+p.phase)*buzz,eye.y,eye.z);
   camera.up.set(0,1,0);
   camera.lookAt(look.x,look.y,look.z);
@@ -6692,7 +6696,7 @@ function tick(){
   const dCam=state.mode==='title'&&(director.shot==='hood'||director.shot==='halo')&&director.target&&cars.includes(director.target)?director.target:null;
   const speedKmh=player?Math.abs(player.vF)*3.6:(dCam?Math.abs(dCam.vF)*3.6:0);
   const speedFactor=clamp(speedKmh/300,0,1);
-  const beadTarget=cur.rain*lerp(1.0,0.08,Math.pow(speedFactor,0.8));
+  const beadTarget=cur.rain*lerp(1.0,0.55,Math.pow(speedFactor,0.8));
   // Asymmetric response: the wind blasts water off quickly (rate 3), but
   // the glass soaks in SLOWLY (rate 0.35) — the longer it rains the worse
   // the windshield gets, and braking for a corner lets it bead up again

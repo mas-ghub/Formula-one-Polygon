@@ -73,7 +73,7 @@ export function getBodyGeo(colA,colB){
   C(0.018, 0.018, 0.20, 5, '#101114', sx * 0.62, 0.62, 0.42, 0, 0, sx * 1.1);
   B(0.13, 0.06, 0.03, '#0b0d10', sx * 0.72, 0.64, 0.44);
  }
- B(0.58, 0.04, 0.16, '#101114', 0, 0.64, 0.62);            // thin dash lip under the wheel
+ B(0.58, 0.03, 0.12, '#101114', 0, 0.56, 0.82);            // thin dash lip ahead of the wheel
  
  // Engine cover & sidepods
  C(0.09,0.3,1.9,8,colA,0,0.5,-0.95,-Math.PI/2);
@@ -117,8 +117,8 @@ export function makeDriverMesh(colA, helmetCol, material){
   // and a live LCD. Geometry stays cheap (boxes); the screen is one 256×128
   // canvas texture updated only for the player in helmet-cam on HIGH/ULTRA.
   const steering = new THREE.Group();
-  steering.position.set(0, 0.76, 0.52);
-  steering.rotation.x = 0.55;
+  steering.position.set(0, 0.80, 0.62);
+  steering.rotation.x = 0.42;
   const carbonMat = new THREE.MeshStandardMaterial({color:0x121417,roughness:0.42,metalness:0.28,flatShading:true});
   const gripMat = new THREE.MeshStandardMaterial({color:0x0a0b0d,roughness:0.72,metalness:0.08,flatShading:true});
   const addBox=(w,h,d,mat,x,y,z,rx=0,ry=0,rz=0)=>{
