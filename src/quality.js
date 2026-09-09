@@ -52,25 +52,25 @@ export const QUALITY_PRESETS = {
   },
   LOW: {
     label: 'LOW',
-    pixelRatio: 0.6,
+    pixelRatio: 0.48,
     shadows: false,
     shadowSize: 256,
     shadowType: 'none',
     smokeParticles: 120,
     sparkParticles: 40,
     anisotropy: 1,
-    // LOW used to skip the windshield pass entirely, which left cheap
-    // devices with no real rain-on-glass. Its budget is hard-capped
-    // (≤2M px at 0.5× in rainShader.js), so true scene refraction is
-    // affordable everywhere — enable it rather than faking it.
-    rainShader: true,
+    // LOW is the mobile/PWA survival tier. Skip the expensive full-screen
+    // refraction pass and use the cheap world/canvas rain fallback instead.
+    rainShader: false,
     propDensity: 0.4
   }
 };
 
 // A frame-rate window shorter than this (frames) ignores the FPS that drops
 // on a cold start / while the JIT warms up or data loads.
-const WARMUP_FRAMES = 60;
+const WARMUP_FRAMES = 45;
+function isMobileGpu() { return /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent || '') || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); }
+function isIOSGpu() { return /iPhone|iPad|iPod/i.test(navigator.userAgent || '') || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); }
 
 export class QualityManager {
   constructor(renderer, sunLight, rainPass) {
@@ -124,12 +124,15 @@ export class QualityManager {
     // Keep the main canvas itself within a conservative pixel budget as well
     // as probing framebuffer completeness. This prevents ULTRA from producing
     // a white/context-lost screen on high-DPI displays.
-    const pixelBudget=mode==='ULTRA'?18000000:mode==='HIGH'?9000000:mode==='MED'?4500000:2200000;
+    const mobile=isMobileGpu();
+    const pixelBudget=mobile
+      ? (mode==='ULTRA'?3600000:mode==='HIGH'?2600000:mode==='MED'?1700000:950000)
+      : (mode==='ULTRA'?18000000:mode==='HIGH'?9000000:mode==='MED'?4500000:2200000);
     ratio=Math.min(ratio,Math.sqrt(pixelBudget/Math.max(1,innerWidth*innerHeight)));
     // Test the requested allocation, then walk down until this GPU confirms a
     // complete colour/depth target. LOW is the final universally safe floor.
-    while(ratio>0.55&&!this._probeFramebuffer(Math.floor(innerWidth*ratio),Math.floor(innerHeight*ratio)))ratio*=0.8;
-    ratio=Math.max(0.5,ratio);
+    while(ratio>(isMobileGpu()?0.38:0.55)&&!this._probeFramebuffer(Math.floor(innerWidth*ratio),Math.floor(innerHeight*ratio)))ratio*=0.8;
+    ratio=Math.max(isMobileGpu()?0.38:0.5,ratio);
     this._safeRatios.set(key,ratio);
     return ratio;
   }
@@ -139,8 +142,13 @@ export class QualityManager {
   autoDetect() {
     const dpr = window.devicePixelRatio || 1;
     const cores = navigator.hardwareConcurrency || 4;
-    const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent || '');
+    const isMobile = isMobileGpu();
     const area = innerWidth * innerHeight;
+    // iPhone 14/15/16 Pro Max class screens are high-DPR and thermally limited:
+    // AUTO must start in a performance tier, not MED/HIGH, or it can sit around
+    // 20–30 fps before the tuner catches up. LOW still keeps the cars/track but
+    // drops shadows/refraction/resolution first.
+    if (isMobile && (dpr >= 2 || area > 350000)) return 'LOW';
     if (isMobile || area < 620000 || dpr < 1.1) return 'MED';
     if (cores >= 8 && dpr >= 1.5) return 'ULTRA';
     if (cores >= 6) return 'HIGH';
@@ -181,7 +189,8 @@ export class QualityManager {
     // monitor's full refresh made AUTO lower internal resolution during the
     // title/demo/race even on strong machines, which looked like ULTRA had
     // randomly gone soft. Hold a crisp 60-ish target instead.
-    this.targetFps = Math.max(30, Math.min(60, this.targetFps) * 0.94);
+    if (isMobileGpu()) this.targetFps = isIOSGpu() ? 45 : 50;
+    else this.targetFps = Math.max(30, Math.min(60, this.targetFps) * 0.94);
   }
 
   apply(mode) {
@@ -252,7 +261,7 @@ export class QualityManager {
     if (this.current !== 'AUTO') return;
     if (this.fpsN < WARMUP_FRAMES) { this.fpsAcc += fps; this.fpsN++; return; }
     this.fpsAcc += fps; this.fpsN++;
-    if (this.fpsN < WARMUP_FRAMES + 30) return; // evaluate over ~30 frames
+    if (this.fpsN < WARMUP_FRAMES + (isMobileGpu()?18:30)) return; // evaluate over ~30 frames
     const avg = this.fpsAcc / this.fpsN;
     this.fpsAcc = 0; this.fpsN = WARMUP_FRAMES;
 
@@ -261,9 +270,9 @@ export class QualityManager {
 
     if (avg < low) {
       // Slower than we want — drop internal resolution first.
-      this.resScale = Math.max(0.5, this.resScale - 0.08);
+      this.resScale = Math.max(isMobileGpu()?0.42:0.5, this.resScale - (isMobileGpu()?0.12:0.08));
       this.applyConcrete(this.autoLevel || this.resolved);
-      if (this.resScale <= 0.51) this.stepAuto(-1, true);
+      if (this.resScale <= (isMobileGpu()?0.43:0.51)) this.stepAuto(-1, true);
     } else if (avg > high) {
       // Plenty of headroom — push resolution up to sharpen the image.
       this.resScale = Math.min(1.7, this.resScale + 0.08);

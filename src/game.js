@@ -6190,7 +6190,7 @@ function updCamera(dt){
 /* ============ speed feeling + FPS ============ */
 const speedFxCanvas=$('speedFxCanvas'),speedFxCtx=speedFxCanvas?speedFxCanvas.getContext('2d'):null;
 let fpsAcc=0,fpsN=0,fpsShown=0,speedFxT=0;
-function sizeSpeedFx(){if(!speedFxCanvas)return;const pr=Math.min(window.devicePixelRatio||1,2);speedFxCanvas.width=Math.max(2,Math.floor(innerWidth*pr));speedFxCanvas.height=Math.max(2,Math.floor(innerHeight*pr));speedFxCanvas.style.width=innerWidth+'px';speedFxCanvas.style.height=innerHeight+'px';}
+function sizeSpeedFx(){if(!speedFxCanvas)return;const mob=/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent||'')||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);const pr=mob?1:Math.min(window.devicePixelRatio||1,2);speedFxCanvas.width=Math.max(2,Math.floor(innerWidth*pr));speedFxCanvas.height=Math.max(2,Math.floor(innerHeight*pr));speedFxCanvas.style.width=innerWidth+'px';speedFxCanvas.style.height=innerHeight+'px';}
 function syncFpsVisibility(){
  const chip=$('hFpsChip'),meter=$('hFpsMeter');
  if(chip)chip.textContent=state.showFps?'FPS ON':'FPS OFF';
