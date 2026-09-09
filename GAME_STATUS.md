@@ -1,7 +1,7 @@
 # POLYGON GP — current game status / what is already done
 
 **Last updated:** 2026-09-09  
-**Visible app version in `index.html`:** `v1.0.0 · BUILD 20260909.3`  
+**Visible app version in `index.html`:** `v1.0.0 · BUILD 20260909.4`  
 **Validation after latest edits:** `npm run build` ✅, `npm run lint` ✅  
 **Note:** Playwright was not used for the latest work.
 
@@ -530,8 +530,8 @@ Summary:
 18. Fixed the 8th-gear audio/tacho drop: final gear now keeps a high rev floor so it does not sound like the engine bogs or slows by itself after the upshift.
 19. Steering wheel/yoke is now detached from the animated driver torso and hard-locked to the cockpit base transform each frame, so it only pivots/rotates from its centre rather than translating with body/head g-load motion.
 20. Steering wheel LCD has been simplified around big, readable gear and KPH speed, with shift LEDs updating for the player in all driving cameras and full LCD refresh in wheel-visible helmet/onboard views including the title halo shot.
-21. Helmet/halo camera corrected after feedback: it now sits lower in the cockpit and looks through the halo gap/front hoop, rather than over the halo.
-22. Road-side visuals clarified: the intended order is asphalt → continuous white track-limit line / red-white kerb at corners → dark run-off apron → neutral grey Armco/concrete barrier. The outer wall is no longer red/white, so it should not read as random extra kerb chunks after a blank gap.
+21. Helmet/halo camera corrected after feedback: it now sits lower in the cockpit and looks through the halo gap/front hoop, rather than over the halo; latest pass lowered it further for the intended through-gap view.
+22. Road-side visuals corrected again after screenshot feedback: both edges now use one continuous, flat red/white painted strip, followed immediately by the dark run-off apron and a neutral grey barrier. The strip is no longer intermittent or ribbed/raised, so the road should not look elevated on a ledge.
 23. Added a comedy fatal-accident radio call: when a car terminally wrecks during the race, a surviving nearby/random driver may shout a line such as “Oh no, <name> has had a fatal accident! Let’s go, go, go!”
 24. Build and lint both pass.
 
