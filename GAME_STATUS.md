@@ -1,7 +1,7 @@
 # POLYGON GP — current game status / what is already done
 
 **Last updated:** 2026-09-09  
-**Visible app version in `index.html`:** `v1.0.0 · BUILD 20260909.26`  
+**Visible app version in `index.html`:** `v1.0.0 · BUILD 20260909.37`  
 **Validation after latest edits:** `npm run build` ✅, `npm run lint` ✅  
 **Note:** Playwright was not used for the latest work.
 
@@ -551,6 +551,17 @@ Summary:
 39. Clear-water rain correction: reduced full-screen rain density, vertical trail alpha, smear length and milky blue/white sheen; droplet refraction now uses a lighter clear-water mix and world-space rain streak opacity is lower so rain reads as transparent water rather than frosted glass.
 40. Fish one-command admin helper: added `admin/fish-auto-voicepack.mjs` plus npm scripts `fish:dry`, `fish:auto`, and `fish:auto:force`; the auto helper searches licensed English voices, picks separate commentator/engineer/driver/angry-driver IDs, caches the choices, then runs the generator so the user does not have to run many small commands.
 41. Fish `.env.local` loading fix: Fish admin scripts now explicitly load `.env.local` before `.env`, matching the documented setup so `npm run fish:auto` sees local API keys without manual terminal `set` commands.
+42. Fish key-file fallback: Fish admin scripts also accept a plain ignored `fish-key.txt`, `admin/fish-key.txt`, or `.fish-key` file containing only the API key, making Windows setup simpler when `.env.local` is missed or saved with the wrong extension; error messages/docs updated accordingly.
+43. Fish auto-search fallback: auto voice picker still prefers `licensed=true`, but if Fish returns zero licensed results on a free account it falls back to accessible public English models and records a rights-check note in `admin/fish-cache/auto-selected-voices.json` so local testing is ready while release licensing remains explicit.
+44. Per-driver radio fingerprinting: driver radio clips now get per-driver playback-rate/pitch fingerprints, and browser speech fallback gets per-driver rate/pitch too, so drivers can be recognised by face popup plus distinct radio tone instead of every cockpit line sounding identical.
+45. Excited commentator and PWA pass: runtime commentator lines now avoid spoken `P{n}` placeholders for key overtake/fastest/win/rain/hype moments, admin voice-lines expanded with more exact high-energy commentator clips, service worker version bumped and caches `audio/voicepack` MP3s, service worker registers on localhost as well as HTTPS, and the PWA manifest has richer install metadata/shortcuts for friend/testing deployment.
+46. Separate voice/SFX toggles: added HUD and setup toggles for `VOICE ON/OFF` and `SFX ON/OFF`, persisted locally; `M` toggles engine/effects, `V` toggles voice/commentary, turning voice off cancels active generated/browser speech, and SFX mute leaves Fish commentary/radio audible for isolated voice testing.
+47. PWA voice-pack precache: service worker install now reads `audio/voicepack/manifest.json` and caches the generated MP3 files in batches, so a hosted PWA with the voice pack included can keep the Fish voices available offline after first install/update rather than needing live Fish API access during gameplay.
+48. Busier pack-only commentary: when a Fish voicepack is loaded, commentary/driver/female speech no longer falls back to browser TTS for missing lines, stopping the extra “other speaker”; added generated fill-time commentary and shortened routine race chatter cadence to ~9–13s so quiet laps have more broadcast-style context.
+49. Audio toggle scope and commentary repeat fix: moved `toggleSfx`/`toggleVoice`/`syncAudioToggles` to top-level scope so keyboard/HUD handlers cannot throw `ReferenceError`; generated speech now suppresses exact repeat lines within 10s, gives clips a text-length-based cooldown, and routine commentary will not cut off an already playing clip.
+50. Radio-interrupt etiquette and PWA voice deploy BAT: driver-radio clips now interrupt commentator clips, and when the commentator returns he plays a short professional “back to the action” apology line; added/generated matching return clips. Added local `update-github-pages-pwa-voices.bat` to build/lint, verify the PWA voice-pack manifest/MP3 count, stage source + `public/audio/voicepack`, exclude API keys/caches/zips, commit, rebase and push to GitHub Pages.
+51. Immediate circuit intro commentary: countdown now starts with `Welcome to <circuit> for another exciting race!` from the generated voice pack, and lights out uses a new more energetic `Lights out and away we gooo!` call; generated exact intro clips for all 25 circuits so the commentator speaks from the off without browser fallback.
+52. Speech.stop race-start fix: restored the missing `Speech.stop()` method used by `beginRace()` so starting a race cannot throw `TypeError: Speech.stop is not a function`; it now pauses active voicepack audio, clears current clip/return state, and cancels browser speech before the circuit intro starts.
 
 ### 2026-09-09 circuit-drivability pass
 

@@ -17,6 +17,15 @@ function loadEnvFile(file){
 }
 loadEnvFile('.env.local');
 loadEnvFile('.env');
+function loadFishKeyFile(file){
+  try{
+    const key=readFileSync(file,'utf8').trim();
+    if(key&&!key.includes('=')&&!process.env.FISH_AUDIO_API_KEY)process.env.FISH_AUDIO_API_KEY=key;
+  }catch{}
+}
+loadFishKeyFile('fish-key.txt');
+loadFishKeyFile('admin/fish-key.txt');
+loadFishKeyFile('.fish-key');
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
@@ -42,7 +51,7 @@ function speechKey(text){
 }
 
 if (!API && !DRY) {
-  console.error('Missing FISH_AUDIO_API_KEY. Use --dry-run to only build the planned manifest.');
+  console.error('Missing FISH_AUDIO_API_KEY. Create .env.local containing FISH_AUDIO_API_KEY=your_key, or put only the key text in fish-key.txt. Use --dry-run to only build the planned manifest.');
   process.exit(1);
 }
 

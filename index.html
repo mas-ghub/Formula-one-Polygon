@@ -703,8 +703,11 @@ document.addEventListener('DOMContentLoaded', function() {
         </div>
       </div>
       <div class="sec">
-        <label>COMMENTARY</label>
-        <button id="tSpeech" class="tgl on">VOICE ON</button>
+        <label>AUDIO</label>
+        <div style="display:flex;gap:6px;">
+          <button id="tSpeech" class="tgl on" style="flex:1;">VOICE ON</button>
+          <button id="tSfx" class="tgl on" style="flex:1;">SFX ON</button>
+        </div>
       </div>
     </div>
 
@@ -762,7 +765,7 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
   
   <div id="tFoot">
-    <span>FULLSCREEN &amp; AUDIO READY · <b id="appVersion">v1.0.0 · BUILD 20260909.26</b></span>
+    <span>FULLSCREEN &amp; AUDIO READY · <b id="appVersion">v1.0.0 · BUILD 20260909.37</b></span>
     <button id="tFootFs" class="btn-mini">⛶ FULLSCREEN</button>
     <button id="tInstall" class="btn-mini" style="display:none;">⤓ INSTALL APP</button>
   </div>
@@ -802,6 +805,8 @@ document.addEventListener('DOMContentLoaded', function() {
     <button class="chip" id="hCam">CHASE</button>
     <button class="chip" id="hQualityChip">HIGH</button>
     <button class="chip good" id="hFpsChip" title="Toggle FPS meter">FPS ON</button>
+    <button class="chip good" id="hVoiceChip" title="Toggle commentary / radio voices">VOICE ON</button>
+    <button class="chip good" id="hSfxChip" title="Toggle engine and sound effects">SFX ON</button>
     <button class="chip tilt-chip" id="hTiltChip">GYRO OFF</button>
     <button class="chip face-chip" id="hFaceChip" title="Webcam face driving: turn your face to steer, open your mouth for gas">FACE OFF</button>
     <button class="chip" id="hTowerChip" title="Toggle timing tower">TOWER ON</button>
@@ -1067,7 +1072,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <script>
 (function(){
-  const APP_VERSION='v1.0.0 · BUILD 20260909.26';
+  const APP_VERSION='v1.0.0 · BUILD 20260909.37';
   window.POLYGON_GP_VERSION=APP_VERSION;
   const panel=document.getElementById('runtimeErrorPanel');
   const output=document.getElementById('runtimeErrorText');
@@ -1109,13 +1114,13 @@ document.addEventListener('DOMContentLoaded', function() {
 // prompt as a title-screen button. Installed, the game runs standalone:
 // real fullscreen and gyro/motion permission both work, unlike in an
 // embedded iframe.
-if('serviceWorker' in navigator&&location.protocol==='https:'){addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));}
+if('serviceWorker' in navigator&&(location.protocol==='https:'||location.hostname==='localhost'||location.hostname==='127.0.0.1')){addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));}
 let __pgpInstall=null;
 addEventListener('beforeinstallprompt',e=>{e.preventDefault();__pgpInstall=e;const b=document.getElementById('tInstall');if(b)b.style.display='';});
 addEventListener('DOMContentLoaded',()=>{const b=document.getElementById('tInstall');if(b)b.onclick=async()=>{if(!__pgpInstall)return;__pgpInstall.prompt();await __pgpInstall.userChoice;__pgpInstall=null;b.style.display='none';};});
 addEventListener('appinstalled',()=>{const b=document.getElementById('tInstall');if(b)b.style.display='none';});
 </script>
-<script type="module" src="/src/game.js?rain=20260909.26"></script>
+<script type="module" src="/src/game.js?rain=20260909.37"></script>
 </body>
 </html>
 

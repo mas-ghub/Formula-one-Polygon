@@ -17,6 +17,15 @@ function loadEnvFile(file){
 }
 loadEnvFile('.env.local');
 loadEnvFile('.env');
+function loadFishKeyFile(file){
+  try{
+    const key=readFileSync(file,'utf8').trim();
+    if(key&&!key.includes('=')&&!process.env.FISH_AUDIO_API_KEY)process.env.FISH_AUDIO_API_KEY=key;
+  }catch{}
+}
+loadFishKeyFile('fish-key.txt');
+loadFishKeyFile('admin/fish-key.txt');
+loadFishKeyFile('.fish-key');
 import fs from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 
@@ -69,11 +78,20 @@ function scoreModel(role, m, used = new Set()) {
 }
 
 async function searchModels(q) {
-  const params = new URLSearchParams({ page_size: '25', page_number: '1', title: q, language: 'en', licensed: 'true' });
-  const res = await fetch(`https://api.fish.audio/model?${params}`, { headers: { Authorization: `Bearer ${API}` } });
-  if (!res.ok) throw new Error(`Fish Audio model search failed for "${q}" ${res.status}: ${await res.text()}`);
-  const data = await res.json();
-  return data.items || [];
+  const common = { page_size: '25', page_number: '1', title: q, language: 'en' };
+  // Prefer explicitly licensed voices. Some free accounts currently return zero
+  // for licensed=true; if so, fall back to accessible public models so the pack
+  // can still be generated for local testing. The selection cache records what
+  // happened so release rights can be checked before public/commercial use.
+  for (const licensed of ['true', '']) {
+    const params = new URLSearchParams(licensed ? { ...common, licensed } : common);
+    const res = await fetch(`https://api.fish.audio/model?${params}`, { headers: { Authorization: `Bearer ${API}` } });
+    if (!res.ok) throw new Error(`Fish Audio model search failed for "${q}" ${res.status}: ${await res.text()}`);
+    const data = await res.json();
+    const items = data.items || [];
+    if (items.length || !licensed) return items.map(m => ({ ...m, __licensedSearch: !!licensed }));
+  }
+  return [];
 }
 
 async function pickVoice(role, used) {
@@ -108,7 +126,7 @@ function runGenerator(env) {
 }
 
 if (!API && !DRY) {
-  console.error('Missing FISH_AUDIO_API_KEY. Put it in .env.local or set it in this terminal, then run npm run fish:auto.');
+  console.error('Missing FISH_AUDIO_API_KEY. Create .env.local containing FISH_AUDIO_API_KEY=your_key, or put only the key text in fish-key.txt, then run npm run fish:auto.');
   process.exit(1);
 }
 
@@ -126,7 +144,7 @@ for (const role of ['commentator', 'engineer', 'driver_radio', 'driver_angry']) 
   used.add(pick.id);
   console.log(`${role}: ${pick.id}  ${pick.title}  score=${pick.score}`);
 }
-await fs.writeFile('admin/fish-cache/auto-selected-voices.json', JSON.stringify({ generatedAt: new Date().toISOString(), model: MODEL, selected }, null, 2));
+await fs.writeFile('admin/fish-cache/auto-selected-voices.json', JSON.stringify({ generatedAt: new Date().toISOString(), model: MODEL, note: 'Auto-search prefers licensed=true. If Fish returned no licensed results, selected voices are accessible public models for local testing; verify usage rights before public/commercial release.', selected }, null, 2));
 
 await runGenerator({
   FISH_TTS_MODEL: MODEL,

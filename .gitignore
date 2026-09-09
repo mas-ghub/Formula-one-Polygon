@@ -8,3 +8,8 @@ coverage/
 !.env.example
 update-github.bat
 tools/cloudflared
+fish-key.txt
+admin/fish-key.txt
+.fish-key
+update-github-pages-pwa-voices.bat
+*.zip

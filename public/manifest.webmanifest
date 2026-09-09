@@ -1,20 +1,63 @@
 {
-  "name": "POLYGON GP — Low-Poly Grand Prix",
+  "name": "POLYGON GP \u2014 Low-Poly Grand Prix",
   "short_name": "POLYGON GP",
-  "description": "High-speed 3D low-poly F1 racing simulator with real circuits, dynamic weather and mobile tilt controls.",
+  "description": "Installable 3D low-poly Grand Prix racing game with real circuits, dynamic weather, Fish Audio voice pack, mobile controls and offline launch support.",
   "id": "./",
   "start_url": "./?source=pwa",
   "scope": "./",
   "display": "fullscreen",
-  "display_override": ["fullscreen", "standalone", "minimal-ui"],
+  "display_override": [
+    "fullscreen",
+    "standalone",
+    "minimal-ui"
+  ],
   "orientation": "landscape",
   "background_color": "#0b0f16",
   "theme_color": "#0b0f16",
-  "categories": ["games", "sports", "racing"],
+  "categories": [
+    "games",
+    "sports",
+    "racing"
+  ],
   "icons": [
-    { "src": "assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "assets/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
-    { "src": "assets/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
-  ]
+    {
+      "src": "assets/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/icon-maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "assets/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Start Polygon GP",
+      "short_name": "Race",
+      "url": "./?source=pwa&quick=race",
+      "description": "Launch straight into Polygon GP"
+    },
+    {
+      "name": "Open Setup",
+      "short_name": "Setup",
+      "url": "./?source=pwa&screen=setup",
+      "description": "Open the race setup screen"
+    }
+  ],
+  "prefer_related_applications": false
 }

@@ -35,7 +35,7 @@ function fmtG(t){const n=Number(t);return Number.isFinite(n)?'+'+safeFixed(n,3):
 // rendering decisions (ground resolution, prop density, rain shader, etc.).
 function effQuality(){ return (qualityMgr&&qualityMgr.resolvedLevel)?qualityMgr.resolvedLevel():state.quality; }
 
-const state={mode:'boot',trackIdx:0,wx:'sun',tod:'day',laps:3,grid:20,diffMul:0.97,name:'YOU',driverPhoto:'',camMode:0,muted:false,paused:false,zoom: 52,quality:'AUTO',ruleset:'basic',showFps:true};
+const state={mode:'boot',trackIdx:0,wx:'sun',tod:'day',laps:3,grid:20,diffMul:0.97,name:'YOU',driverPhoto:'',camMode:0,muted:false,sfxOn:true,voiceOn:true,paused:false,zoom: 52,quality:'AUTO',ruleset:'basic',showFps:true};
 // Race control is intentionally a preset rather than a hidden difficulty
 // multiplier. BASIC keeps the forgiving arcade experience; SPORTING adds the
 // most visible stewarding; FULL FIA enables the complete optional rule layer.
@@ -48,9 +48,12 @@ const RULE_HINTS={basic:'ARCADE · NO STEWARD PENALTIES',sporting:'TRACK LIMITS 
 const rulesOn=k=>!!(RULE_PRESETS[state.ruleset]||RULE_PRESETS.basic)[k];
 function currentRules(){return RULE_PRESETS[state.ruleset]||RULE_PRESETS.basic;}
 const PROFILE_KEY='polygon_gp_driver_profile_v1';
+const AUDIO_PREF_KEY='polygon_gp_audio_prefs_v1';
 function loadDriverProfile(){try{const p=JSON.parse(localStorage.getItem(PROFILE_KEY)||'{}');state.name=p.name||'YOU';state.driverPhoto=p.photo||'';}catch(e){}}
 function saveDriverProfile(){try{localStorage.setItem(PROFILE_KEY,JSON.stringify({name:state.name,photo:state.driverPhoto}));}catch(e){console.warn('Driver profile could not be stored',e);}}
-loadDriverProfile();
+function loadAudioPrefs(){try{const p=JSON.parse(localStorage.getItem(AUDIO_PREF_KEY)||'{}');if(p.sfxOn!=null)state.sfxOn=!!p.sfxOn;if(p.voiceOn!=null)state.voiceOn=!!p.voiceOn;state.muted=!state.sfxOn;}catch(e){}}
+function saveAudioPrefs(){try{localStorage.setItem(AUDIO_PREF_KEY,JSON.stringify({sfxOn:state.sfxOn,voiceOn:state.voiceOn}));}catch(e){}}
+loadDriverProfile();loadAudioPrefs();
 // Time-of-day mood, independent of weather — mainly to give control over how
 // dark a rainy day reads, without needing a whole night skybox/lighting rig.
 /* Each time of day carries the direction the light comes from as well as its
@@ -416,22 +419,44 @@ function speechKey(text){
  for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)>>>0;}
  return h.toString(16).padStart(8,'0');
 }
-const Speech={enabled:true,cool:0,voice:null,femaleVoice:null,driverVoice:null,clips:null,clipAudio:null,
+const Speech={enabled:true,cool:0,lastKey:'',lastAt:-99,returnPending:false,returnAt:-99,voice:null,femaleVoice:null,driverVoice:null,clips:null,clipAudio:null,
 async loadPack(){try{
  const res=await fetch(`${import.meta.env.BASE_URL}audio/voicepack/manifest.json?t=${Date.now()}`,{cache:'no-store'});
  if(!res.ok)return;const data=await res.json();const map=new Map();
  for(const c of(data.clips||[])){if(c&&c.key&&c.file)map.set(c.key,c);}
  this.clips=map;console.log('[voicepack] loaded',map.size,'clips');
 }catch(e){console.warn('[voicepack] unavailable',e);}},
-tryClip(text,force){
+tryClip(text,force,opts){
  if(!this.clips||!this.clips.size)return false;
- const c=this.clips.get(speechKey(text));if(!c)return false;
- const t=nowT();if(!force&&t<this.cool)return true;this.cool=t+Math.max(1.0,Number(c.cooldown)||1.25);
- try{if(this.clipAudio){this.clipAudio.pause();this.clipAudio=null;}try{speechSynthesis.cancel();}catch(e){}
-  const a=new Audio(`${import.meta.env.BASE_URL}audio/voicepack/${c.file}`);this.clipAudio=a;a.volume=c.volume??1.0;
-  a.onended=()=>{if(this.clipAudio===a)this.clipAudio=null;};a.play().catch(()=>{});return true;
+ const key=speechKey(text),c=this.clips.get(key);if(!c)return false;
+ const t=nowT();
+ // Do not immediately repeat the same generated line, and do not let routine
+ // fill chatter cut off a clip that is already playing. Force calls (crashes,
+ // lights out, angry radio) may still interrupt, but exact duplicates are
+ // suppressed for a few seconds either way.
+ if(key===this.lastKey&&t-this.lastAt<22)return true;
+ if(!force&&(t<this.cool||this.clipAudio))return true;
+ this.lastKey=key;this.lastAt=t;
+ const spokenSecs=clamp(String(text||'').length/17,1.8,6.2);
+ this.cool=t+Math.max(spokenSecs+0.65,Number(c.cooldown)||1.25);
+ try{
+  const interrupted=this.currentClip;
+  if(this.clipAudio){this.clipAudio.pause();this.clipAudio=null;}try{speechSynthesis.cancel();}catch(e){}
+  if(c.role==='driver'&&interrupted&&interrupted.role!=='driver'&&t-(this.returnAt||-99)>8){this.returnPending=true;this.returnAt=t;}
+  this.currentClip=c;
+  const a=new Audio(`${import.meta.env.BASE_URL}audio/voicepack/${c.file}`);this.clipAudio=a;
+  // Driver-radio packs may deliberately reuse one recorded voice, so per-driver
+  // playback pitch/rate gives each driver a recognisable radio fingerprint.
+  if(opts&&opts.clipRate){a.playbackRate=opts.clipRate;try{a.preservesPitch=false;a.mozPreservesPitch=false;a.webkitPreservesPitch=false;}catch(e){}}
+  a.volume=(opts&&opts.clipVolume!=null)?opts.clipVolume:(c.volume??1.0);
+  a.onended=()=>{if(this.clipAudio===a){this.clipAudio=null;this.currentClip=null;}
+   if(this.returnPending&&c.role==='driver'&&state.mode==='race'&&this.enabled){
+    this.returnPending=false;setTimeout(()=>{if(!this.clipAudio&&this.enabled&&state.mode==='race')this.say(pick(COMMENTARY_RETURN_LINES),false,{rate:1.12+exCur*.12,pitch:1.04+exCur*.06});},360);
+   }
+  };a.play().catch(()=>{});return true;
  }catch(e){return false;}
 },
+stop(){try{if(this.clipAudio){this.clipAudio.pause();this.clipAudio=null;}this.currentClip=null;this.returnPending=false;if('speechSynthesis'in window)speechSynthesis.cancel();}catch(e){}},
 refresh(){try{
  const vs=speechSynthesis.getVoices();if(!vs.length)return;
  const score=v=>{let s=0;
@@ -483,7 +508,8 @@ refresh(){try{
 init(){try{this.refresh();speechSynthesis.onvoiceschanged=()=>this.refresh();this.loadPack();}catch(e){}},
 say(text,force,opts){
  if(!this.enabled)return;
- if(this.tryClip(text,force))return;
+ if(this.tryClip(text,force,opts))return;
+ if(this.clips&&this.clips.size)return; // voice pack is active: do not mix in browser TTS
  if(!('speechSynthesis'in window))return;
  const t=nowT();if(!force&&t<this.cool)return;this.cool=t+1.4;
  try{
@@ -504,7 +530,8 @@ sayDriver(text,force,opts){
  // into the spoken text: the face/radio popup identifies them, and clean text
  // lets Fish-generated driver clips match the manifest keys.
  if(!this.enabled)return;
- if(this.tryClip(text,force))return;
+ if(this.tryClip(text,force,opts))return;
+ if(this.clips&&this.clips.size)return; // voice pack is active: do not mix in browser TTS
  if(!('speechSynthesis'in window))return;
  const t=nowT();if(!force&&t<this.cool)return;this.cool=t+1.05;
  try{
@@ -521,7 +548,10 @@ sayDriver(text,force,opts){
 sayFemale(text,force,opts){
  // The co-presenter's line — delivered by whatever female voice the platform
  // actually has (picked in refresh()), never the male commentator.
- if(!this.enabled||!('speechSynthesis'in window))return;
+ if(!this.enabled)return;
+ if(this.tryClip(text,force,opts))return;
+ if(this.clips&&this.clips.size)return; // voice pack is active: do not mix in browser TTS
+ if(!('speechSynthesis'in window))return;
  const t=nowT();if(!force&&t<this.cool)return;this.cool=t+1.4;
  try{
   if(speechSynthesis.speaking){if(force)speechSynthesis.cancel();else return;}
@@ -536,20 +566,20 @@ sayFemale(text,force,opts){
  }catch(e){}}};
 Speech.init();
 const LINES={
-start:['Lights out and away we go!','And it is lights out — we are racing!'],
-overtake:['Lovely move! Up to P{n}!','She is through — P{n}!','Down the inside, and it sticks — P{n}!'],
+start:['Lights out and away we gooo!'],
+overtake:['Lovely move! Up another place!','She is through — brilliant move!','Down the inside, and it sticks!','That is absolutely sensational! He saw the gap and went for it!'],
 podium:['That is a podium position — brilliant driving!'],
 lead:['You are leading this Grand Prix. Keep it clean.'],
-fastest:['Fastest lap of the race — stunning pace.'],
-final:['Final lap! Give it everything you have left.'],
-win:['You win the Grand Prix! What a drive!'],
+fastest:['Fastest lap of the race — that is absolutely flying!'],
+final:['Final lap! Give it everything you have left!'],
+win:['You win the Grand Prix! What a drive! The crowd goes wild!'],
 finish:['Chequered flag! A superb drive to P{n}.','Chequered flag! P{n} — the team is delighted.'],
 hit:['Ooh, heavy contact! She is still running, keep it together.'],
-crash:['Oh no! They have come together!','Contact! Big moment in the midfield!','Ooh, that was a heavy hit!'],
+crash:['Oh no! They have come together!','Contact! Big moment in the midfield!','Ooh, that was a heavy hit!','That is a huge moment — carbon fibre everywhere!'],
 lost:['{d} gets back through — you are down to P{n}.','And {d} retakes the position!','{d} sweeps past! Down to P{n} you go.'],
-close:['They are side by side into the corner!','This is brilliant racing — door to door!','The crowd is on their feet, side by side!'],
-rain:['The track is treacherous out there now.','Rain is lashing down — keep it on the black stuff.','This is a proper wet-weather test!'],
-finishClose:['What a finish! Absolute scenes at the line!','They cross the line together — that was a classic!'],
+close:['They are side by side into the corner!','This is brilliant racing — door to door!','The crowd is on their feet, side by side!','Wheel to wheel at unbelievable speed!'],
+rain:['The track is treacherous out there now!','Rain is lashing down — keep it on the black stuff!','This is a proper wet-weather test!'],
+finishClose:['What a finish! Absolute scenes at the line!','They cross the line together — that was a classic!','That is Grand Prix racing at its very best!'],
 giveBack:['That overtake was off the track — give the place back to {d}!','{d} is furious! You cut the corner — hand the position back!','Off track! Give {d} the place back right now!','The stewards are watching — hand that place back to {d}!','{d} is absolutely raging! That was illegal — give it back!','You gained an advantage off track — {d} wants it back!'],
 angry:['{d} is livid — he will remember that!','{d} waves his fist — that was a divebomb!','{d} is seeing red after that hit!','{d} is furious — you are on thin ice!','{d} is on the radio immediately — he says you left no room!','{d} is absolutely raging in the cockpit!'],
 apology:['Stewards are taking a look at that one.','Getting messy out there — the stewards are onto it.'],
@@ -586,6 +616,21 @@ const GENERIC_DRIVER_RADIO={
  vsc:['I am on the delta, but they are all over the place.']
 };
 function isLewis(c){return!!c&&/lewis\s+hamilton/i.test(c.d&&c.d.name||'');}
+
+const DRIVER_RADIO_TONES={
+ NORRIS:{rate:1.13,pitch:1.03,clipRate:1.06}, PIASTRI:{rate:1.03,pitch:0.88,clipRate:0.95}, VERSTAPPEN:{rate:1.17,pitch:0.82,clipRate:0.91}, HADJAR:{rate:1.20,pitch:1.02,clipRate:1.07},
+ LECLERC:{rate:1.12,pitch:0.96,clipRate:1.02}, HAMILTON:{rate:1.04,pitch:0.90,clipRate:0.93}, RUSSELL:{rate:1.10,pitch:0.92,clipRate:0.98}, ANTONELLI:{rate:1.18,pitch:1.08,clipRate:1.09},
+ ALONSO:{rate:0.98,pitch:0.78,clipRate:0.89}, STROLL:{rate:1.05,pitch:0.94,clipRate:0.97}, ALBON:{rate:1.09,pitch:1.00,clipRate:1.03}, SAINZ:{rate:1.02,pitch:0.86,clipRate:0.92},
+ HULKENBERG:{rate:0.96,pitch:0.80,clipRate:0.88}, BORTOLETO:{rate:1.16,pitch:1.06,clipRate:1.08}, GASLY:{rate:1.14,pitch:0.98,clipRate:1.04}, COLAPINTO:{rate:1.19,pitch:1.05,clipRate:1.10},
+ OCON:{rate:1.07,pitch:0.87,clipRate:0.94}, BEARMAN:{rate:1.18,pitch:1.10,clipRate:1.11}, LAWSON:{rate:1.15,pitch:0.95,clipRate:1.05}, LINDBLAD:{rate:1.20,pitch:1.12,clipRate:1.12},
+ PEREZ:{rate:1.01,pitch:0.84,clipRate:0.90}, BOTTAS:{rate:0.94,pitch:0.76,clipRate:0.87}
+};
+function driverRadioTone(c,event='contact'){
+ const key=((c&&c.d&&c.d.name)||'').split(' ').pop().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+ const t=DRIVER_RADIO_TONES[key]||{rate:1.10,pitch:0.92,clipRate:0.98};
+ const angry=(event==='angry'||event==='crash'||event==='wall');
+ return{rate:t.rate+(angry?0.05:0),pitch:clamp(t.pitch+(angry?0.03:0),0.65,1.25),clipRate:clamp(t.clipRate+(angry?0.025:0),0.82,1.16),clipVolume:1};
+}
 function driverRadio(c,event='contact'){
  if(!c||!c.d)return false;
  const now=timeSec;
@@ -596,7 +641,7 @@ function driverRadio(c,event='contact'){
  const line=pick(lines);
  const last=(c.d.name||'Driver').split(' ').pop().toUpperCase();
  if(typeof showDriverBoard==='function')showDriverBoard(c,line.toUpperCase(),event==='angry'||event==='crash'?3000:2300,event==='angry'||event==='crash'?4:event==='contact'?3:2,'radio');
- Speech.sayDriver(line,true,{rate:special?1.04:1.16,pitch:special?0.94:0.90});
+ Speech.sayDriver(line,true,special?{...driverRadioTone(c,event),rate:1.04,pitch:0.90,clipRate:0.93}:driverRadioTone(c,event));
  return true;
 }
 const FATAL_BANTER_LINES=[
@@ -619,7 +664,7 @@ function fatalAccidentBanter(victim,wasRace){
  setTimeout(()=>{
   if(!speaker||speaker.wrecked||!speaker.d)return;
   if(typeof showDriverBoard==='function')showDriverBoard(speaker,line.toUpperCase(),3100,4,'radio');
-  Speech.sayDriver(line,true,{rate:1.18,pitch:0.94});
+  Speech.sayDriver(line,true,{...driverRadioTone(speaker,'angry'),rate:1.18});
  },650);
 }
 const ATT_LINES=[
@@ -628,13 +673,34 @@ const ATT_LINES=[
 'Just listen to these engines — screaming all the way to fifteen thousand.',
 'Look at those skies above {loc}. A proper test of nerve.',
 'Twenty cars, one apex. This is Polygon GP.'];
+function raceIntroLine(){const tr=TRACKS[state.trackIdx]||TRACKS[0];return `Welcome to ${tr.name} for another exciting race!`;}
 const RACE_HYPE_LINES=[
 'What a joy to be here — listen to this crowd and these magnificent cars!',
 'This is why we love Grand Prix racing — speed, commitment and pure theatre!',
 'Absolutely glorious racing today! Every lap is alive with possibility!',
 'The atmosphere is electric — what a privilege to call this race!',
 'Look at the speed out there! This is a wonderful motor race!',
-'Brilliant commitment from the whole field — I am loving every second of this!'];
+'Brilliant commitment from the whole field — I am loving every second of this!',
+'They are absolutely on the limit — this race is coming alive!',
+'I can barely keep up with this — magnificent Grand Prix racing!'];
+const RACE_FILL_LINES=[
+'There is pressure building all through the field now.',
+'This is the phase where patience matters, but nobody wants to wait.',
+'Every braking zone looks like an opportunity from up here.',
+'The field is starting to stretch, but one mistake brings it all back together.',
+'Tyre grip, traffic, weather, confidence — everything is moving lap by lap.',
+'You can feel the tension rising as the cars settle into rhythm.',
+'This race has not exploded yet, but it is simmering beautifully.',
+'The drivers are searching for clean air and just a little more grip.',
+'One lock-up, one poor exit, and the order can change in a heartbeat.',
+'The middle sector is where the car balance really starts to show.',
+'The leaders may look calm, but nobody is comfortable at this speed.',
+'The next few corners are about commitment, confidence and nerve.'];
+const COMMENTARY_RETURN_LINES=[
+'Apologies for the interruption — we had to hear that radio, and the race is still absolutely alive.',
+'Right, back to the action — important radio there, and this Grand Prix is bubbling up beautifully.',
+'We will keep an eye on that, but meanwhile the battle on track is still raging.',
+'Race radio cutting across the drama there — now back to this magnificent fight on circuit.'];
 const ENCOURAGE_LINES=[
 'Good luck out there, {name}. Take a breath, trust your lines, and enjoy every lap.',
 'Alright {name}, the team believes in you. Smooth is fast — go get it.',
@@ -5098,7 +5164,7 @@ const AudioSys={started:false,
   eg.connect(this.tdSend);this.tdSend.connect(this.tdBuf);
   this.tdBuf.connect(this.tdFb);this.tdFb.connect(this.tdBuf);
   this.tdFb.connect(this.tdGain);this.tdGain.connect(this.master);
-  this.started=true;},
+  this.started=true;this.setMute(!state.sfxOn);},
  shift(){if(!this.started||state.mode==='title')return;const t=this.ctx.currentTime;
   this.eg.gain.cancelScheduledValues(t);
   this.eg.gain.setValueAtTime(this.eg.gain.value,t);
@@ -5313,6 +5379,29 @@ const AudioSys={started:false,
   }},
  setMute(m){if(this.started)this.master.gain.value=m?0:1.0;}
 };
+
+
+function syncAudioToggles(){
+ const setBtn=(id,on,onTxt,offTxt)=>{const b=$(id);if(!b)return;b.classList.toggle('on',on);b.classList.toggle('good',on);b.classList.toggle('bad',!on);b.textContent=on?onTxt:offTxt;};
+ setBtn('tSpeech',state.voiceOn,'VOICE ON','VOICE OFF');
+ setBtn('hVoiceChip',state.voiceOn,'VOICE ON','VOICE OFF');
+ setBtn('tSfx',state.sfxOn,'SFX ON','SFX OFF');
+ setBtn('hSfxChip',state.sfxOn,'SFX ON','SFX OFF');
+ Speech.enabled=state.voiceOn;
+ state.muted=!state.sfxOn;
+ AudioSys.setMute(!state.sfxOn);
+}
+function toggleVoice(){
+ state.voiceOn=!state.voiceOn;Speech.enabled=state.voiceOn;
+ if(!state.voiceOn)Speech.stop();
+ saveAudioPrefs();syncAudioToggles();
+}
+function toggleSfx(){
+ state.sfxOn=!state.sfxOn;state.muted=!state.sfxOn;
+ AudioSys.start();AudioSys.setMute(!state.sfxOn);
+ saveAudioPrefs();syncAudioToggles();
+ if(state.sfxOn)AudioSys.click();
+}
 
 /* ============ Title screen theme ============
    A quiet, original moody blues-rock instrumental for the menu/attract
@@ -6301,7 +6390,7 @@ function resetRaceSession(){
  lightningFlash=0;lightningSeed=0;lightningTimer=rand(5,11);
  raceControl.vsc=0;raceControl.yellow=0;raceControl.reason='';raceControl.blueWarn=0;
  gbActive=0;gbCar=null;crossSign.clear();gbCool.clear();angerByDriver.clear();
- raceT=0;cdT=0;cdGo=0;cdLastOn=0;posTimer=0;lastPos=0;resultsShown=false;wwT=0;hypeLineT=-10;
+ raceT=0;cdT=0;cdGo=0;cdLastOn=0;posTimer=0;lastPos=0;resultsShown=false;wwT=0;hypeLineT=-10;fillLineT=-6;
  glassBead=0;clearSkids();
  for(const d of debris){scene.remove(d.m);if(d.dispose!==false)disposeDebrisObject(d.m);}
  debris.length=0;
@@ -6330,7 +6419,7 @@ function beginRace(){
  if($('hCamChip'))$('hCamChip').textContent='CHASE';
  state.name=$('tName').value.trim()||'YOU';
  saveDriverProfile();
- Speech.enabled=$('tSpeech').classList.contains('on');
+ Speech.enabled=state.voiceOn;
  TitleTheme.stop();
  $('title').classList.add('hidden');$('results').classList.add('hidden');$('pause').classList.add('hidden');
  $('hud').classList.remove('hidden');
@@ -6349,7 +6438,7 @@ function beginRace(){
  $('hPos').textContent='P'+player.pos;$('hPosT').textContent=' / '+cars.length;
  $('hLap').textContent='1';$('hTime').textContent='0:00.000';$('hBest').textContent='—';$('hGap').textContent='—';
  $('hGear').textContent='N';$('hSpeed').textContent='0';
- raceT=0;cdT=0;cdGo=0;cdLastOn=0;resultsShown=false;wwT=0;hypeLineT=-10;
+ raceT=0;cdT=0;cdGo=0;cdLastOn=0;resultsShown=false;wwT=0;hypeLineT=-10;fillLineT=-6;
  raceControl.vsc=0;raceControl.yellow=0;raceControl.reason='';raceControl.blueWarn=0;
  gbActive=0;gbCar=null;crossSign.clear();gbCool.clear();
  if(towerRows){towerRows.clear();}
@@ -6386,7 +6475,10 @@ function beginRace(){
  $('lights').classList.remove('hidden');
  [...$('lights').children].forEach(li=>li.className='');
  T.lampMats.forEach(m=>m.color.set(0x230c0a));
- try{speechSynthesis.cancel();}catch(e){}
+ Speech.stop();
+ // Start the broadcast immediately on the grid, then let the lights-out call
+ // interrupt naturally if the countdown reaches the release point.
+ Speech.say(raceIntroLine(),true,{rate:1.12,pitch:1.06});
 }
 function updCountdown(dt){
  cdT+=dt;
@@ -6559,10 +6651,13 @@ function updRace(dt){
   exCur=damp(exCur,exT,0.9,dt);
  }
  // Positive live colour at regular intervals, not only when somebody crashes
- // or overtakes. Vary the interval so it feels broadcast rather than looped.
- if(state.mode==='race'&&raceT-hypeLineT>(18+((Math.sin(hypeLineT*1.7)+1)*5))){
-  hypeLineT=raceT;
-  Speech.say(pick(RACE_HYPE_LINES),false,{rate:1.10+exCur*.16,pitch:1.04+exCur*.08});
+ // or overtakes. Keep it much busier when voices are enabled: generated MP3
+ // clips are short and clean, so they can fill the quiet racing phases without
+ // sounding like the old browser narrator.
+ if(state.mode==='race'&&raceT-fillLineT>(10.5+((Math.sin(fillLineT*1.7)+1)*3.2))){
+  fillLineT=raceT;
+  const pool=(exCur>0.78||Math.random()<0.35)?RACE_HYPE_LINES:RACE_FILL_LINES;
+  Speech.say(pick(pool),false,{rate:1.12+exCur*.16,pitch:1.05+exCur*.08});
  }
  const previousPlayerLat=player.lat;
  for(const c of cars){
@@ -6783,7 +6878,7 @@ let attractT=6;
 // driven by the AI under the director's cameras. Any input returns to menu.
 let demoOn=false,demoArmed=0,lastInput=nowT();
 // Commentator "excitement" meter — drives rate/pitch of emotional lines.
-let exCur=0.62,tickAcc=0,closeT=0,rainLineT=0,hypeLineT=-12;
+let exCur=0.62,tickAcc=0,closeT=0,rainLineT=0,hypeLineT=-12,fillLineT=-8;
 function exOpts(){return{rate:clamp(1.0+exCur*0.32,1.0,1.38),pitch:clamp(1.02+exCur*0.12,1.02,1.15)};}
 function startDemo(){
  demoOn=true;demoArmed=0;
@@ -6869,7 +6964,8 @@ addEventListener('keydown',e=>{
  if(k==='Minus'||k==='NumpadSubtract')zoomCam(1);
  if(k==='KeyR')resetPlayer();
  if(k==='KeyP')togglePitLimiter();
- if(k==='KeyM'){state.muted=!state.muted;AudioSys.setMute(state.muted);}
+ if(k==='KeyM')toggleSfx();
+ if(k==='KeyV')toggleVoice();
  if(k==='Escape')togglePause();
  if(AudioSys.started&&AudioSys.ctx.state==='suspended')AudioSys.ctx.resume();
 });
@@ -6944,6 +7040,8 @@ if($('hCamChip'))$('hCamChip').addEventListener('click',e=>{e.preventDefault();c
 // The readable HUD camera chip doubles as the touch "C" — tap to cycle views.
 if($('hCam'))$('hCam').addEventListener('click',e=>{e.preventDefault();cycleCam();});
 if($('hFpsChip'))$('hFpsChip').addEventListener('click',e=>{e.preventDefault();state.showFps=!state.showFps;syncFpsVisibility();});
+if($('hVoiceChip'))$('hVoiceChip').addEventListener('click',e=>{e.preventDefault();toggleVoice();});
+if($('hSfxChip'))$('hSfxChip').addEventListener('click',e=>{e.preventDefault();toggleSfx();});
 
 if($('tFs'))$('tFs').onclick=toggleFullscreen;
 if($('tFootFs'))$('tFootFs').onclick=toggleFullscreen;
@@ -7269,8 +7367,9 @@ function buildMenu(){
    if(qualityMgr){qualityMgr.current='AUTO';qualityMgr.autoLevel=null;qualityMgr.apply(state.quality);postfx.apply(effQuality());resize();}
  });
 
- $('tSpeech').onclick=()=>{AudioSys.start();AudioSys.click();const b=$('tSpeech');b.classList.toggle('on');
-  b.textContent=b.classList.contains('on')?'VOICE ON':'VOICE OFF';};
+ if($('tSpeech'))$('tSpeech').onclick=()=>{toggleVoice();if(state.sfxOn){AudioSys.start();AudioSys.click();}};
+if($('tSfx'))$('tSfx').onclick=()=>toggleSfx();
+syncAudioToggles();
  // Restore the locally persisted PWA driver identity and allow either the
  // front camera (`capture=user`) or photo library. Images are resized before
  // storage so a portrait cannot exhaust Safari's localStorage quota.
@@ -7309,7 +7408,7 @@ function buildMenu(){
   state.name=nm||'YOU';saveDriverProfile();
   if(!nm||nm===lastEncouragedName)return;
   lastEncouragedName=nm;
-  Speech.enabled=$('tSpeech').classList.contains('on');
+  Speech.enabled=state.voiceOn;
   Speech.say(pick(ENCOURAGE_LINES).replace('{name}',nm),true,{rate:0.85,pitch:1.03});
  };
  $('tName').onkeydown=e=>{if(e.key==='Enter')$('tName').blur();};

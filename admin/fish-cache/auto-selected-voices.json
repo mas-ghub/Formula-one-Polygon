@@ -1,0 +1,294 @@
+{
+  "generatedAt": "2026-09-09T15:05:58.944Z",
+  "model": "s2.1-pro-free",
+  "note": "Auto-search prefers licensed=true. If Fish returned no licensed results, selected voices are accessible public models for local testing; verify usage rights before public/commercial release.",
+  "selected": {
+    "commentator": {
+      "m": {
+        "_id": "4641ea18829c4640a2a89061a42086d6",
+        "type": "tts",
+        "title": "British Football Commentator",
+        "description": "An energetic and dynamic voice, perfect for thrilling sports commentary and engaging narratives.",
+        "cover_image": "coverimage/4641ea18829c4640a2a89061a42086d6",
+        "train_mode": "fast",
+        "state": "trained",
+        "tags": [
+          "male",
+          "middle-aged",
+          "narration",
+          "entertainment",
+          "advertisement",
+          "energetic",
+          "dynamic",
+          "expressive",
+          "clear",
+          "crisp",
+          "confident",
+          "storytelling",
+          "announcer",
+          "fast",
+          "bright",
+          "warm",
+          "professional"
+        ],
+        "samples": [
+          {
+            "title": "Default Sample",
+            "text": "The crowd is electric tonight as the players battle it out on the field. With a masterful play, they drive towards the goal, showcasing incredible skill and teamwork. What a spectacular performance!",
+            "task_id": "a59a0fc2364f4844b250935e7985d823",
+            "audio": "https://platform.r2.fish.audio/tasks/2026-07-28/a59a0fc2364f4844b250935e7985d823.mp3"
+          }
+        ],
+        "created_at": "2026-07-28T19:16:25.855000Z",
+        "updated_at": "2026-07-28T19:16:25.854000Z",
+        "languages": [
+          "en"
+        ],
+        "visibility": "public",
+        "lock_visibility": false,
+        "dmca_taken_down": false,
+        "takedown_category": null,
+        "default_text": "The crowd is electric tonight as the players battle it out on the field. With a masterful play, they drive towards the goal, showcasing incredible skill and teamwork. What a spectacular performance!",
+        "source": "web_preflight",
+        "licensed": false,
+        "pvc_release_state": null,
+        "pvc_notice_period_months": null,
+        "pvc_released_at": null,
+        "pvc_retire_requested_at": null,
+        "pvc_retire_effective_at": null,
+        "quality": {
+          "audios": [
+            {
+              "filename": "Eleven_lab_United_British_Commentator_viral_shorts_football_link_useful_elevenlabs_bit.ly_4nDETSm.mp3",
+              "duration_ms": 25450.680272108842,
+              "language": "en",
+              "quality": {
+                "truncated": 8.529146384717023e-7,
+                "multi_speaker": 0.12255240231752396,
+                "background_noise": 0.00000646032594886492,
+                "long_silence": 0.0037252039182931185,
+                "low_volume": 2.4703112819213224e-12,
+                "high_reverb": 4.358082250632833e-8,
+                "ai_voice": 0.616848349571228,
+                "normal": 0.3666153848171234,
+                "sound_effect": 0.4902140200138092
+              },
+              "quality_passed": false,
+              "quality_reason": "Audio quality issue detected: ai voice."
+            }
+          ],
+          "created_at": "2026-07-28T19:16:25.854000Z",
+          "updated_at": "2026-07-28T19:16:25.854000Z"
+        },
+        "like_count": 2,
+        "mark_count": 3,
+        "shared_count": 0,
+        "task_count": 794,
+        "unliked": false,
+        "liked": false,
+        "marked": false,
+        "author": {
+          "_id": "471816c86bd248609b2a26b8f650fa74",
+          "nickname": "[GD] Cyber",
+          "avatar": "avatars/471816c86bd248609b2a26b8f650fa74.jpg"
+        },
+        "__licensedSearch": false
+      },
+      "id": "4641ea18829c4640a2a89061a42086d6",
+      "title": "British Football Commentator",
+      "score": 410
+    },
+    "engineer": {
+      "m": {
+        "_id": "30c0f62e3e6d45d88387d1b8f84e1685",
+        "type": "tts",
+        "title": " Liam - Calm British Voice",
+        "description": "For Horror Stories",
+        "cover_image": "coverimage/30c0f62e3e6d45d88387d1b8f84e1685",
+        "train_mode": "fast",
+        "state": "trained",
+        "tags": [
+          "male",
+          "middle-aged",
+          "narration",
+          "deep",
+          "calm",
+          "measured",
+          "professional",
+          "storytelling",
+          "cinematic"
+        ],
+        "samples": [
+          {
+            "title": "Default Sample",
+            "text": "The morning mist clung to the meadow as Sarah and Michael set up their easels. The early light painted everything in soft gold, while distant church bells echoed across the valley. They were both artists, though their styles couldn't have been more different.",
+            "task_id": "5a8659a3df7f467a81630f968b06fd2f",
+            "audio": "https://platform.r2.fish.audio/task/5a8659a3df7f467a81630f968b06fd2f.mp3"
+          }
+        ],
+        "created_at": "2025-02-18T16:51:17.244000Z",
+        "updated_at": "2025-02-18T16:51:17.244000Z",
+        "languages": [
+          "en"
+        ],
+        "visibility": "public",
+        "lock_visibility": false,
+        "dmca_taken_down": false,
+        "takedown_category": null,
+        "default_text": "The morning mist clung to the meadow as Sarah and Michael set up their easels. The early light painted everything in soft gold, while distant church bells echoed across the valley. They were both artists, though their styles couldn't have been more different.",
+        "source": null,
+        "licensed": false,
+        "pvc_release_state": null,
+        "pvc_notice_period_months": null,
+        "pvc_released_at": null,
+        "pvc_retire_requested_at": null,
+        "pvc_retire_effective_at": null,
+        "quality": null,
+        "like_count": 93,
+        "mark_count": 164,
+        "shared_count": 11,
+        "task_count": 6732,
+        "unliked": false,
+        "liked": false,
+        "marked": false,
+        "author": {
+          "_id": "2ef6ce69b6ff4ce38da7dfac06e20947",
+          "nickname": "Qasim Javed",
+          "avatar": "avatars/2ef6ce69b6ff4ce38da7dfac06e20947.jpg"
+        },
+        "__licensedSearch": false
+      },
+      "id": "30c0f62e3e6d45d88387d1b8f84e1685",
+      "title": " Liam - Calm British Voice",
+      "score": 245
+    },
+    "driver_radio": {
+      "m": {
+        "_id": "6e08a10e10dd4b33aaa0450046231973",
+        "type": "tts",
+        "title": "Male British Voice",
+        "description": "This is a male British  voice created by Sammy Richard",
+        "cover_image": "coverimage/6e08a10e10dd4b33aaa0450046231973",
+        "train_mode": "fast",
+        "state": "trained",
+        "tags": [
+          "male",
+          "old",
+          "narration",
+          "educational",
+          "deep",
+          "professional",
+          "authoritative",
+          "calm",
+          "Informative"
+        ],
+        "samples": [
+          {
+            "title": "Default Sample",
+            "text": "Now, what we're seeing in the Baltic region is quite significant. NATO forces have been conducting extensive exercises there, primarily with British and American naval assets. The Russians, of course, are watching this very carefully, and it's worth noting the strategic implications for regional security.",
+            "task_id": "edb1cf06df9a4b009cb760c3d6b6d99b",
+            "audio": "https://platform.r2.fish.audio/task/edb1cf06df9a4b009cb760c3d6b6d99b.mp3"
+          }
+        ],
+        "created_at": "2025-05-02T17:51:37.426000Z",
+        "updated_at": "2026-05-03T08:55:59.125000Z",
+        "languages": [
+          "en"
+        ],
+        "visibility": "public",
+        "lock_visibility": false,
+        "dmca_taken_down": false,
+        "takedown_category": null,
+        "default_text": "Now, what we're seeing in the Baltic region is quite significant. NATO forces have been conducting extensive exercises there, primarily with British and American naval assets. The Russians, of course, are watching this very carefully, and it's worth noting the strategic implications for regional security.",
+        "source": null,
+        "licensed": false,
+        "pvc_release_state": null,
+        "pvc_notice_period_months": null,
+        "pvc_released_at": null,
+        "pvc_retire_requested_at": null,
+        "pvc_retire_effective_at": null,
+        "quality": null,
+        "like_count": 9,
+        "mark_count": 10,
+        "shared_count": 0,
+        "task_count": 845,
+        "unliked": false,
+        "liked": false,
+        "marked": false,
+        "author": {
+          "_id": "797d5855ae6d4e009306875fa0f3e17c",
+          "nickname": "blackstruggles247",
+          "avatar": "avatars/797d5855ae6d4e009306875fa0f3e17c.jpg"
+        },
+        "__licensedSearch": false
+      },
+      "id": "6e08a10e10dd4b33aaa0450046231973",
+      "title": "Male British Voice",
+      "score": 245
+    },
+    "driver_angry": {
+      "m": {
+        "_id": "9e170e771be94805bc71dd6eb8cc3a9a",
+        "type": "tts",
+        "title": "Makoto Yuki - Shouting",
+        "description": "This is a high-energy, young male voice with an intense and commanding tone, featuring shouting and expressive battle cries. It is well-suited for action-packed character roles in anime or video games.",
+        "cover_image": "coverimage/9e170e771be94805bc71dd6eb8cc3a9a",
+        "train_mode": "fast",
+        "state": "trained",
+        "tags": [
+          "male",
+          "middle-aged",
+          "character-voice",
+          "gaming",
+          "anime",
+          "energetic",
+          "dynamic",
+          "expressive",
+          "dramatic"
+        ],
+        "samples": [
+          {
+            "title": "Default Sample",
+            "text": "Come forth, Thanatos! Arise, Thor! Manifest now, Isis and Anubis! I call upon your strength in this hour of need! Show them your true power, unleash your might! Now, strike them down!",
+            "task_id": "d453e71fe85b488d9d42b463e976faa9",
+            "audio": "https://platform.r2.fish.audio/task/d453e71fe85b488d9d42b463e976faa9.mp3"
+          }
+        ],
+        "created_at": "2026-01-26T23:44:26.574000Z",
+        "updated_at": "2026-05-03T08:56:39.369000Z",
+        "languages": [
+          "en"
+        ],
+        "visibility": "public",
+        "lock_visibility": false,
+        "dmca_taken_down": false,
+        "takedown_category": null,
+        "default_text": "Come forth, Thanatos! Arise, Thor! Manifest now, Isis and Anubis! I call upon your strength in this hour of need! Show them your true power, unleash your might! Now, strike them down!",
+        "source": null,
+        "licensed": false,
+        "pvc_release_state": null,
+        "pvc_notice_period_months": null,
+        "pvc_released_at": null,
+        "pvc_retire_requested_at": null,
+        "pvc_retire_effective_at": null,
+        "quality": null,
+        "like_count": 2,
+        "mark_count": 1,
+        "shared_count": 0,
+        "task_count": 1810,
+        "unliked": false,
+        "liked": false,
+        "marked": false,
+        "author": {
+          "_id": "25b80c69bda54902b858f5f853dd83af",
+          "nickname": "Litty Teenagers",
+          "avatar": "avatars/25b80c69bda54902b858f5f853dd83af.jpg"
+        },
+        "__licensedSearch": false
+      },
+      "id": "9e170e771be94805bc71dd6eb8cc3a9a",
+      "title": "Makoto Yuki - Shouting",
+      "score": 235
+    }
+  }
+}

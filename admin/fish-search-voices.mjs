@@ -17,11 +17,20 @@ function loadEnvFile(file){
 }
 loadEnvFile('.env.local');
 loadEnvFile('.env');
+function loadFishKeyFile(file){
+  try{
+    const key=readFileSync(file,'utf8').trim();
+    if(key&&!key.includes('=')&&!process.env.FISH_AUDIO_API_KEY)process.env.FISH_AUDIO_API_KEY=key;
+  }catch{}
+}
+loadFishKeyFile('fish-key.txt');
+loadFishKeyFile('admin/fish-key.txt');
+loadFishKeyFile('.fish-key');
 import fs from 'node:fs/promises';
 
 const API = process.env.FISH_AUDIO_API_KEY;
 if (!API) {
-  console.error('Missing FISH_AUDIO_API_KEY. Create an API key in fish.audio/app and run: FISH_AUDIO_API_KEY=... node admin/fish-search-voices.mjs commentator');
+  console.error('Missing FISH_AUDIO_API_KEY. Create .env.local containing FISH_AUDIO_API_KEY=your_key, or put only the key text in fish-key.txt.');
   process.exit(1);
 }
 const q = process.argv.slice(2).join(' ') || 'commentator';
