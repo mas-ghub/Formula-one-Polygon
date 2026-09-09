@@ -1,6 +1,6 @@
 # POLYGON GP — Low-Poly Grand Prix
 
-**Current visible version:** `v0.9.9 · BUILD 20260907.8`
+**Current visible version:** `v1.0.0 · BUILD 20260908.18`
 
 The version is displayed in the title-screen footer and included automatically
 in every in-game error report, making stale deployments and cached builds easy
@@ -14,6 +14,13 @@ control, a Sky F1–style timing tower with live driver photos, track-limits
 enforcement ("give the place back" for off-track overtakes), and a title
 screen where the whole grid actually races itself under a live
 broadcast-style camera director.
+
+
+## Current handover / what's already done
+
+For a full working handover of the current game systems, latest fixes, validation commands and good next development targets, see:
+
+- [`GAME_STATUS.md`](./GAME_STATUS.md)
 
 ## Running it
 
