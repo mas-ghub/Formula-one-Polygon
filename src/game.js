@@ -63,6 +63,74 @@ const TOD={
 };
 const CAM_NAMES=['CHASE','HOOD','IMMERSIVE','HELMET','TV','ORBIT','TOP'];
 
+
+/* ============ per-circuit driving feel ============
+   The real telemetry gives each track its shape/elevation. These profiles add
+   the *drivability* character an F1 driver expects: Monaco is narrow, bumpy and
+   traction-limited; Monza is low-drag and kerb-heavy; Spa compresses the car up
+   Eau Rouge/Raidillon; Silverstone rewards high-speed aero commitment; street
+   venues punish mistakes with poor overtake confidence and wall pressure. */
+const DRIVE_DEFAULT={grip:1,top:1,drag:1,brake:1,lat:1,aero:1,bump:1,kerb:1,ai:1,risk:1,overtake:1,slip:1};
+const DRIVE_PROFILES={
+ italian_park:{top:1.045,drag:.90,grip:.99,lat:.98,aero:.96,bump:.92,kerb:1.18,ai:1.02,risk:1.00,overtake:1.22,slip:1.20},
+ british_airfield:{top:1.005,drag:.98,grip:1.03,lat:1.04,aero:1.12,bump:.86,kerb:.98,ai:1.04,risk:.88,overtake:1.05,slip:1.04},
+ ardennes:{top:1.02,drag:.96,grip:1.01,lat:1.03,aero:1.10,bump:1.15,kerb:.95,ai:1.02,risk:1.08,overtake:1.12,slip:1.14},
+ monaco:{top:.90,drag:1.10,grip:1.04,lat:.96,aero:.92,bump:1.42,kerb:.82,ai:.90,risk:1.32,overtake:.44,slip:.78},
+ alpine:{top:1.018,drag:.97,grip:1.00,lat:1.02,aero:1.04,bump:1.05,kerb:1.02,ai:1.00,risk:1.00,overtake:1.16,slip:1.13},
+ japanese:{top:.995,drag:1.00,grip:1.02,lat:1.06,aero:1.10,bump:.96,kerb:.88,ai:1.02,risk:1.10,overtake:.82,slip:.95},
+ melbourne:{top:1.005,drag:.99,grip:1.00,lat:1.01,aero:1.02,bump:1.02,kerb:.96,ai:.99,risk:1.00,overtake:.95,slip:.98},
+ shanghai:{top:1.01,drag:.98,grip:1.00,lat:1.00,aero:1.02,bump:.90,kerb:.95,ai:1.00,risk:.92,overtake:1.08,slip:1.08},
+ bahrain:{top:1.008,drag:.99,grip:.98,lat:.99,aero:1.00,bump:.98,kerb:.94,ai:.99,risk:1.02,overtake:1.12,slip:1.10},
+ jeddah:{top:1.035,drag:.94,grip:1.00,lat:1.02,aero:1.05,bump:1.08,kerb:.86,ai:.97,risk:1.24,overtake:1.02,slip:1.12},
+ miami:{top:1.005,drag:.99,grip:.99,lat:1.00,aero:1.00,bump:1.12,kerb:.92,ai:.98,risk:1.08,overtake:1.02,slip:1.05},
+ montreal:{top:1.025,drag:.95,grip:1.00,lat:1.00,aero:.99,bump:1.12,kerb:1.12,ai:.99,risk:1.15,overtake:1.16,slip:1.14},
+ barcelona:{top:.998,drag:1.00,grip:1.01,lat:1.03,aero:1.08,bump:.92,kerb:.96,ai:1.02,risk:.94,overtake:.94,slip:.98},
+ hungary:{top:.96,drag:1.03,grip:1.02,lat:1.02,aero:1.04,bump:1.00,kerb:.92,ai:.98,risk:1.04,overtake:.68,slip:.86},
+ zandvoort:{top:.985,drag:1.01,grip:1.01,lat:1.04,aero:1.06,bump:1.02,kerb:.92,ai:1.00,risk:1.05,overtake:.82,slip:.94},
+ madrid:{top:1.000,drag:.99,grip:1.00,lat:1.01,aero:1.02,bump:1.04,kerb:.94,ai:.99,risk:1.03,overtake:.96,slip:1.00},
+ baku:{top:1.045,drag:.91,grip:.99,lat:.97,aero:.96,bump:1.18,kerb:.84,ai:.94,risk:1.32,overtake:1.18,slip:1.23},
+ tropical:{top:1.005,drag:.99,grip:.995,lat:1.02,aero:1.05,bump:1.02,kerb:.95,ai:1.00,risk:1.02,overtake:1.00,slip:1.02},
+ singapore:{top:.965,drag:1.04,grip:1.01,lat:.99,aero:1.03,bump:1.30,kerb:.84,ai:.94,risk:1.28,overtake:.62,slip:.86},
+ austin:{top:1.012,drag:.98,grip:1.00,lat:1.03,aero:1.05,bump:1.03,kerb:.98,ai:1.00,risk:1.02,overtake:1.05,slip:1.06},
+ mexico:{top:1.03,drag:.94,grip:.97,lat:.98,aero:.96,bump:.94,kerb:.96,ai:.99,risk:1.00,overtake:1.14,slip:1.16},
+ sao_paulo:{top:1.012,drag:.98,grip:1.00,lat:1.02,aero:1.04,bump:1.08,kerb:1.00,ai:1.00,risk:1.05,overtake:1.08,slip:1.08},
+ vegas:{top:1.05,drag:.90,grip:.98,lat:.98,aero:.94,bump:1.10,kerb:.86,ai:.96,risk:1.18,overtake:1.20,slip:1.24},
+ qatar:{top:1.018,drag:.97,grip:1.00,lat:1.03,aero:1.08,bump:.88,kerb:.92,ai:1.02,risk:.95,overtake:.95,slip:1.02},
+ yas:{top:1.012,drag:.98,grip:1.00,lat:1.01,aero:1.03,bump:.94,kerb:.94,ai:1.00,risk:.96,overtake:1.04,slip:1.05}
+};
+const CORNER_ZONES={
+ italian_park:[{name:'Rettifilo chicane',from:.08,to:.14,top:.72,brake:1.10,kerb:1.28,overtake:1.18},{name:'Lesmo commitment',from:.34,to:.47,lat:1.04,aero:1.06},{name:'Ascari kerbs',from:.63,to:.70,kerb:1.22,risk:1.12},{name:'Parabolica',from:.82,to:.94,lat:1.06,aero:1.08}],
+ british_airfield:[{name:'Maggotts and Becketts',from:.26,to:.40,lat:1.12,aero:1.18,top:1.02,risk:1.10,overtake:.70},{name:'Stowe',from:.62,to:.70,brake:1.05,overtake:1.06},{name:'Club',from:.76,to:.84,kerb:1.05,overtake:1.08}],
+ ardennes:[{name:'La Source',from:.03,to:.09,top:.70,brake:1.08,overtake:1.18},{name:'Eau Rouge / Raidillon',from:.13,to:.23,grip:1.06,lat:1.12,aero:1.18,bump:1.35,risk:1.24,overtake:.52},{name:'Kemmel straight',from:.23,to:.34,top:1.06,drag:.90,slip:1.25},{name:'Pouhon',from:.52,to:.61,lat:1.10,aero:1.14,risk:1.12}],
+ monaco:[{name:'Sainte Devote',from:.02,to:.08,top:.72,brake:1.05,bump:1.35,overtake:.55},{name:'Casino climb',from:.13,to:.27,grip:1.03,bump:1.28,overtake:.45},{name:'Fairmont hairpin',from:.31,to:.39,top:.50,lat:.86,brake:.92,overtake:.18,risk:1.22},{name:'Tunnel',from:.505,to:.588,top:1.04,drag:.96,bump:.75,grip:1.03},{name:'Nouvelle chicane',from:.59,to:.66,top:.66,brake:1.08,kerb:.78,risk:1.28,overtake:.62}],
+ alpine:[{name:'Turn 1 climb',from:.03,to:.15,brake:1.06,overtake:1.12},{name:'Remus hairpin',from:.16,to:.26,top:.72,brake:1.08,overtake:1.18},{name:'Rindt / final sweep',from:.70,to:.88,lat:1.08,aero:1.08}],
+ japanese:[{name:'Esses rhythm',from:.08,to:.28,lat:1.08,aero:1.10,kerb:.82,risk:1.18,overtake:.44},{name:'Degner',from:.32,to:.42,brake:1.05,risk:1.16},{name:'130R',from:.72,to:.80,lat:1.13,aero:1.18,risk:1.20,overtake:.55}],
+ melbourne:[{name:'Lakeside sweep',from:.18,to:.34,lat:1.05,aero:1.06},{name:'Ascari fast chicane',from:.54,to:.63,kerb:.86,risk:1.14},{name:'Albert Park DRS run',from:.66,to:.80,top:1.04,slip:1.12}],
+ shanghai:[{name:'Snail turn',from:.02,to:.18,top:.68,brake:1.02,overtake:.68},{name:'Long back straight',from:.58,to:.74,top:1.07,drag:.90,slip:1.22},{name:'Hairpin',from:.74,to:.82,top:.62,brake:1.12,overtake:1.25}],
+ bahrain:[{name:'Turn 1 braking',from:.02,to:.09,brake:1.12,overtake:1.22},{name:'Desert traction zone',from:.18,to:.34,grip:.97,kerb:.90},{name:'Back straight attack',from:.56,to:.70,top:1.04,slip:1.16}],
+ jeddah:[{name:'High-speed walls',from:.18,to:.46,lat:1.08,aero:1.12,risk:1.28,overtake:.62},{name:'Banked T13',from:.46,to:.56,lat:1.10,aero:1.12},{name:'Corniche blast',from:.70,to:.90,top:1.06,drag:.91,slip:1.22}],
+ miami:[{name:'Stadium complex',from:.18,to:.34,bump:1.16,kerb:.88},{name:'Slow sector',from:.48,to:.64,top:.68,brake:1.02,overtake:.62},{name:'Back straight',from:.65,to:.78,top:1.06,slip:1.18}],
+ montreal:[{name:'Senna S',from:.02,to:.10,kerb:1.16,brake:1.06,overtake:1.12},{name:'Chicanes',from:.28,to:.52,kerb:1.18,risk:1.14},{name:'Wall of Champions',from:.82,to:.92,kerb:1.22,risk:1.22}],
+ barcelona:[{name:'Long Turn 3',from:.10,to:.22,lat:1.08,aero:1.12},{name:'La Caixa',from:.52,to:.62,top:.68,brake:1.07,overtake:.86},{name:'Final corner',from:.84,to:.94,aero:1.12,lat:1.08}],
+ hungary:[{name:'Turn 1 chance',from:.02,to:.10,top:.70,brake:1.08,overtake:1.10},{name:'Twisty middle sector',from:.28,to:.68,lat:1.04,top:.90,overtake:.48,risk:1.10},{name:'Final corner traction',from:.82,to:.95,grip:1.02,top:.88}],
+ zandvoort:[{name:'Tarzan',from:.02,to:.10,brake:1.08,overtake:1.05},{name:'Hugenholtz banking',from:.14,to:.24,lat:1.10,grip:1.05},{name:'Scheivlak',from:.46,to:.56,aero:1.14,lat:1.10,risk:1.16},{name:'Arie Luyendyk banking',from:.82,to:.96,lat:1.12,top:1.04}],
+ madrid:[{name:'Street stadium entry',from:.10,to:.24,bump:1.12,brake:1.04},{name:'Fast link road',from:.42,to:.58,top:1.04,slip:1.10},{name:'Final complex',from:.74,to:.90,lat:1.04,kerb:.90}],
+ baku:[{name:'Turn 1 braking',from:.02,to:.10,brake:1.12,overtake:1.25},{name:'Castle section',from:.28,to:.43,top:.54,lat:.88,bump:1.25,overtake:.16,risk:1.38},{name:'Seaside flat-out',from:.70,to:.95,top:1.08,drag:.88,slip:1.28}],
+ tropical:[{name:'Sepang sweepers',from:.12,to:.32,lat:1.07,aero:1.10},{name:'Twin straights',from:.58,to:.78,top:1.05,slip:1.16},{name:'Final hairpin',from:.78,to:.88,top:.62,brake:1.10,overtake:1.18}],
+ singapore:[{name:'Marina Bay braking',from:.08,to:.18,brake:1.08,overtake:.82},{name:'Night street rhythm',from:.22,to:.62,bump:1.28,top:.88,overtake:.45,risk:1.22},{name:'Bayfront run',from:.66,to:.78,top:1.03,slip:1.08}],
+ austin:[{name:'Turn 1 hill',from:.02,to:.10,brake:1.10,bump:1.18,overtake:1.16},{name:'Esses',from:.12,to:.32,lat:1.08,aero:1.10,risk:1.12,overtake:.62},{name:'Back straight',from:.46,to:.62,top:1.06,slip:1.20}],
+ mexico:[{name:'Turn 1 braking',from:.02,to:.10,brake:1.12,overtake:1.25},{name:'Stadium',from:.62,to:.78,top:.62,lat:.94,overtake:.55},{name:'Peraltada exit',from:.78,to:.92,lat:1.06,aero:1.06}],
+ sao_paulo:[{name:'Senna S',from:.02,to:.12,brake:1.10,overtake:1.16,kerb:1.04},{name:'Middle sector',from:.30,to:.62,lat:1.05,aero:1.06},{name:'Uphill run',from:.74,to:.96,top:1.05,slip:1.14,bump:1.12}],
+ vegas:[{name:'Strip straight',from:.18,to:.42,top:1.08,drag:.88,slip:1.28},{name:'Street braking',from:.44,to:.58,brake:1.10,bump:1.15,overtake:1.08},{name:'Final blast',from:.72,to:.92,top:1.07,slip:1.22}],
+ qatar:[{name:'High-speed desert sweep',from:.18,to:.48,lat:1.08,aero:1.12},{name:'Long DRS run',from:.54,to:.70,top:1.05,slip:1.14},{name:'Final technical sector',from:.72,to:.90,kerb:.88,risk:1.08}],
+ yas:[{name:'Turn 6 hairpin',from:.18,to:.30,top:.64,brake:1.10,overtake:1.12},{name:'Yas Marina straight',from:.30,to:.52,top:1.06,slip:1.18},{name:'Hotel section',from:.64,to:.86,bump:1.06,top:.86,overtake:.58}]
+};
+function driveKey(def){return (def&&def.venue)||((def&&def.name)||'').toLowerCase().replace(/[^a-z0-9]+/g,'_');}
+function mergeFeel(base,zone){const f={...DRIVE_DEFAULT,...base};if(zone)for(const k in zone)if(typeof zone[k]==='number')f[k]*=zone[k];if(zone&&zone.name)f.name=zone.name;return f;}
+function fracInZone(fr,zone){let a=zone.from,b=zone.to;if(a==null||b==null)return false;fr=((fr%1)+1)%1;a=((a%1)+1)%1;b=((b%1)+1)%1;return a<=b?fr>=a&&fr<=b:fr>=a||fr<=b;}
+function driveFeelFor(def,fr){const key=driveKey(def),base=DRIVE_PROFILES[key]||{};const zones=CORNER_ZONES[key]||[];for(const z of zones)if(fracInZone(fr,z))return mergeFeel(base,z);return mergeFeel(base,null);}
+function carFeel(c){if(!T||!T.samples)return DRIVE_DEFAULT;return (T.samples[((c&&c.ti)||0)%T.N]&&T.samples[((c&&c.ti)||0)%T.N].feel)||T.driveBase||DRIVE_DEFAULT;}
+
 /* ============ drivers ============ */
 // 2026 season grid — real team colours (OpenF1 / F1 live-timing hexes).
 // [name, team, skill, num, colA, colB, helmet]
@@ -1672,6 +1740,8 @@ function buildWorld(idx){
  // line feels tighter and the kerb-edge gamble is more of a real call.
  const wallDist=halfW+runoffW*0.66;
  T={N,def,samples,len,halfW,segLen:len/N,canopyMats:[],flags:[],tvCams:[],lampMats:[]};
+ T.driveBase=driveFeelFor(def,0);
+ for(let i=0;i<N;i++)samples[i].feel=driveFeelFor(def,i/N);
  T.latLimit=wallDist+0.25;
  T.collideLat=wallDist-0.45;
  // Height the banked surface adds at a signed lateral offset from the
@@ -2921,7 +2991,16 @@ function buildWorld(idx){
  {
   const nT=Math.round((groundStyle==='grass'?(def.theme==='forest'?900:def.theme==='park'?520:180):0)*propDensity);
   const weights=def.theme==='forest'?[0.55,0.3,0.15]:[0.2,0.55,0.25];
-  const txGeo=(g,x,y,z,sx=1,sy=1,sz=1)=>{g.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(x,y,z),new THREE.Quaternion(),new THREE.Vector3(sx,sy,sz)));return g;};
+  const txGeo=(g,x,y,z,sx=1,sy=1,sz=1)=>{
+   // Normalise attribute/index layout before mergeGeometries. Some Three.js
+   // primitives (notably Icosahedron vs Cone) differ by uv/index attributes;
+   // if mixed raw, mergeGeometries returns null and the next compute normals
+   // call kills the game at world-build time.
+   g=ensureUV(g);
+   if(g.index)g=g.toNonIndexed();
+   g.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(x,y,z),new THREE.Quaternion(),new THREE.Vector3(sx,sy,sz)));
+   return g;
+  };
   const treeGeo={
    conifer:mergeGeometries([
     txGeo(new THREE.ConeGeometry(2.35,3.6,8),0,-0.55,0,1.08,1,1.08),
@@ -3855,6 +3934,7 @@ function aiThink(c,dt){
   return;
  }
  const fi=Math.floor(c.f);
+ const feel=(T.samples[fi]&&T.samples[fi].feel)||T.driveBase||DRIVE_DEFAULT;
  const vF=c.vF;
  if((state.mode==='race'||state.mode==='title')&&Math.abs(vF)<1.5)c.stuck+=dt;else c.stuck=Math.max(0,c.stuck-dt*2);
  const tanA=Math.atan2(T.samples[fi].t.x,T.samples[fi].t.z);
@@ -3876,7 +3956,7 @@ function aiThink(c,dt){
  // lock-up. Pressure from a nearby car makes one more likely, but no driver
  // deliberately targets another car.
  c.mistakeT=Math.max(0,(c.mistakeT||0)-dt);
- if(c.mistakeT<=0&&Math.random()<dt*(0.004+dRk*0.008)*(c.near?1.7:1)){
+ if(c.mistakeT<=0&&Math.random()<dt*(0.004+dRk*0.008)*(c.near?1.7:1)*(feel.risk||1)){
   c.mistakeT=rand(.35,1.15);c.mistakeSteer=rand(-.28,.28);c.mistakeBrake=Math.random()<.45?rand(.12,.42):0;
  }
  const la=6+clamp(vF*0.55,0,34);
@@ -3891,7 +3971,7 @@ function aiThink(c,dt){
  const stopped=ah&&Math.abs(ah.c.vF)<6;
  const farSpot=stopped&&Math.abs(c.vF)>10;
  let passSide=0,blocked=false;
- if(ah&&(ah.dist<26||(farSpot&&ah.dist<60))){
+ if(ah&&(ah.dist<26*(feel.overtake||1)||(farSpot&&ah.dist<60))){
   // Pick the side that actually has room, not just the side we happen to
   // be on: a car is ~2 m wide, so we need ~2.7 m between the obstacle's
   // centre and the edge of the usable road. Prefer our current side when
@@ -3904,7 +3984,7 @@ function aiThink(c,dt){
   // Aggressive drivers commit to the overtake earlier and hold a tighter
   // line past the rival; cautious ones back out sooner. Past a stopped car
   // always leave a full car width.
-  const off=stopped?Math.max(lerp(4.0,2.6,dAgg),3.4):lerp(4.0,2.6,dAgg);
+  const off=stopped?Math.max(lerp(4.0,2.6,dAgg),3.4):lerp(4.3,2.8,dAgg)*(1/(feel.overtake||1));
   if(!blocked){
    let want=ah.c.lat+passSide*off;
    // Never steer *towards* the obstacle: if we are already further out on
@@ -3944,7 +4024,7 @@ function aiThink(c,dt){
  }
  // Risk-takers crack under pressure occasionally — a sloppy line that
  // opens the door for the car behind.
- if(dRk>0.5&&bh&&bh.dist<24&&Math.random()<dt*0.09*dRk){
+ if(dRk>0.5&&bh&&bh.dist<24&&Math.random()<dt*0.09*dRk*(feel.risk||1)){
   latT=clamp(latT+(Math.random()<0.5?-1:1)*rand(0.9,2.2),-(T.halfW-1.0),T.halfW-1.0);
  }
  latT=clamp(latT,-(T.halfW-1.0),T.halfW-1.0);
@@ -3973,9 +4053,10 @@ function aiThink(c,dt){
  const look=6+Math.floor(vF*0.5);
  for(let k=2;k<look;k+=3){const si=(fi+k)%T.N,smp=T.samples[si];
   cmax=Math.max(cmax,Math.abs(smp.curv));vAhead=Math.min(vAhead,smp.v);}
- const tvLim=Math.min(Math.sqrt(46*Math.max(cur.grip,0.3)/Math.max(cmax,1e-4)),vAhead);
- let tv=tvLim*(0.88+c.d.skill*0.05)*state.diffMul;
- tv=Math.min(tv,PH.top*(0.86+c.d.skill*0.13));
+ const aeroGrip=1+((feel.aero||1)-1)*clamp(Math.abs(vF)/45,0,1);
+ const tvLim=Math.min(Math.sqrt(46*Math.max(cur.grip*(feel.grip||1)*aeroGrip*(feel.lat||1),0.3)/Math.max(cmax,1e-4)),vAhead);
+ let tv=tvLim*(0.88+c.d.skill*0.05)*state.diffMul*(feel.ai||1);
+ tv=Math.min(tv,PH.top*(0.86+c.d.skill*0.13)*(feel.top||1));
  if(raceControl.vsc>0)tv=Math.min(tv,VSC_SPEED);
  else if(raceControl.yellow>0)tv=Math.min(tv,PH.top*0.72);
  if(ah&&ah.dist<20){
@@ -4243,16 +4324,18 @@ function updCar(c,dt){
  // car in hard (see the run-off patches built for corners). Kerbs, on the
  // other hand, get progressively more treacherous the wetter it gets.
  c.onGravel=!c.airborne&&c.offT&&!!T.gravelMask&&!!T.gravelMask[c.ti];
+ const feel=carFeel(c);
  // Painted kerbs retain reasonable grip when dry but become properly slick in
  // rain: at full wetness they provide roughly a third of normal-road grip.
  const onCurbSlip=(c.onCurb&&cur.wet>0.2)?(1-cur.wet*0.58):1;
- const surface=c.onGravel?0.22:(c.offT?0.45:(c.onCurb?0.78:1));
+ const surface=c.onGravel?0.22:(c.offT?0.45:(c.onCurb?0.78*(feel.kerb||1):1));
  // Banked corners genuinely help: the camber turns part of the car's weight
  // into cornering force, so a banked bowl can be taken meaningfully faster
  // than a flat corner of the same radius (capped ≈ +35% at Zandvoort-grade
  // banking). Off-track the banking has faded out, so no bonus there.
  const bankBoost=(!c.offT&&!c.airborne)?1+Math.min(Math.abs((T.samples[c.ti]&&T.samples[c.ti].bk)||0)*1.6,0.35):1;
- const grip=(c.airborne?0.04:(cur.grip*surface*bankBoost))*onCurbSlip;
+ const aeroGrip=1+((feel.aero||1)-1)*clamp(Math.abs(c.vF)/45,0,1);
+ const grip=(c.airborne?0.04:(cur.grip*(feel.grip||1)*surface*bankBoost*aeroGrip))*onCurbSlip;
  // The player's car is a competitive-but-not-dominant package: faster than
  // the midfield and backmarkers, but a couple of km/h down on the very
  // fastest drivers (who get PH.top*(0.86+skill*0.13) ≈ up to 0.99×PH.top),
@@ -4272,7 +4355,7 @@ function updCar(c,dt){
   }
  }
  const dmg=c.crash>0?(1-0.42*Math.min(c.crash/c.crashMax,1)):1;
- const top=PH.top*(c.isPlayer?0.975:(0.86+c.d.skill*0.13))*dmg;
+ const top=PH.top*(c.isPlayer?0.975:(0.86+c.d.skill*0.13))*dmg*(feel.top||1);
  const sp0=c.vF;
  /* steering → yaw rate (speed-sensitive, grip-limited, no assists) */
  const base=3.2-1.9*clamp(Math.abs(sp0)/PH.top,0,1);
@@ -4294,17 +4377,18 @@ function updCar(c,dt){
  c.wheelspin=(c.throttle>0.55&&vF<17&&vF>-1)?c.throttle*(1-clamp(vF,0,17)/17)*(1.35-grip):0;
  if(c.wheelspin>0)aF*=(1-c.wheelspin*0.45);
  if(c.brake>0){
-  if(vF>0.4)aF-=c.brake*PH.brk*grip;
+  if(vF>0.4)aF-=c.brake*PH.brk*grip*(feel.brake||1);
   else if(vF>-11)aF-=8; /* reverse */
  }
- const k=PH.drag*(c.drsOpen?0.78:1)*(c.slipstream?0.85:1);
+ const slipMul=c.slipstream?Math.max(0.72,1-0.15*(feel.slip||1)):1;
+ const k=PH.drag*(feel.drag||1)*(c.drsOpen?0.78:1)*slipMul;
  aF-=k*vF*Math.abs(vF)+vF*0.045;
  if(c.offT)aF-=vF*0.14;
  if(c.onGravel)aF-=Math.min(60,Math.abs(vF))*0.55; /* gravel traps dig in hard */
  vF+=aF*dt;
  if(c.throttle===0&&c.brake===0&&Math.abs(vF)<0.15)vF=0;
  /* lateral tyre grip pulls velocity toward the nose */
- const gLat=8.8*grip*(c.drift?0.28:1);
+ const gLat=8.8*grip*(feel.lat||1)*(c.drift?0.28:1);
  vR*=Math.exp(-gLat*dt);
  /* recompose + integrate */
  c.vx=fx*vF+rx*vR;c.vz=fz*vF+rz*vR;
@@ -4353,12 +4437,13 @@ function updCar(c,dt){
  c.drsOpen=false;c.slipstream=false;
  if(Math.abs(vF)>36&&Math.abs(T.samples[(Math.floor(c.f)+18)%T.N].curv)<0.009){
   const ah=nearestAhead(c);
-  if(ah&&ah.dist<Math.abs(vF)*1.15){c.drsOpen=true;if(ah.dist<22)c.slipstream=true;}
+  if(ah&&ah.dist<Math.abs(vF)*1.15*(feel.slip||1)){c.drsOpen=true;if(ah.dist<22*(feel.slip||1))c.slipstream=true;}
  }
  if(raceControl.vsc>0||raceControl.yellow>0){c.drsOpen=false;c.slipstream=false;}
  if(c.isPlayer){
   if(c.offT&&Math.abs(vF)>14)cam.shake=Math.max(cam.shake,0.05);
-  else if(c.onCurb&&Math.abs(vF)>22)cam.shake=Math.max(cam.shake,0.03);
+  else if(c.onCurb&&Math.abs(vF)>22)cam.shake=Math.max(cam.shake,0.03*(feel.bump||1));
+  else if((feel.bump||1)>1.12&&Math.abs(vF)>28)cam.shake=Math.max(cam.shake,0.012*((feel.bump||1)-1));
  }
  c.vF=vF;
  updatePitLane(c,dt);
@@ -4508,7 +4593,8 @@ function updCarVisual(c,dt){
  }
  // Is the car inside the covered tunnel section? Used for audio + lighting.
  c.inTunnel=!!T.tunnel&&c.ti>=T.tunnel.i0&&c.ti<=T.tunnel.i1;
- const jitter=Math.sin(timeSec*24+c.phase*7)*0.006*clamp(Math.abs(c.vF)/50,0,1);
+ const feel=carFeel(c);
+ const jitter=Math.sin(timeSec*24+c.phase*7)*0.006*(feel.bump||1)*clamp(Math.abs(c.vF)/50,0,1);
  const roadFloor=getRoadHAtCoords(c.x,c.z);
  const supportFx=Math.sin(c.hdg),supportFz=Math.cos(c.hdg);
  // Check the actual front/rear hardpoints too. On a crest, using only the
@@ -6107,6 +6193,17 @@ function updateBlueFlags(dt){
   if(player.blueT>7)issuePenalty(player,'blueFlag',5,'ignoring blue flags',10);
  }else player.blueT=0;
 }
+function updateTrackFeelCallout(dt){
+ if(!player||!T||state.mode!=='race'||player.finished)return;
+ const feel=carFeel(player);
+ const name=feel&&feel.name;
+ if(!name){player._feelName='';return;}
+ if(player._feelName!==name&&Math.abs(player.vF)>10&&(raceT-(player._feelMsgT||-99)>5.5)){
+  player._feelName=name;player._feelMsgT=raceT;
+  showMsg(name.toUpperCase(),'TRACK CHARACTER LIVE','white',1.15);
+  exCur=Math.max(exCur,0.72);
+ }else if(player._feelName!==name){player._feelName=name;}
+}
 function updRace(dt){
  raceT+=dt;
  if(raceControl.vsc>0){raceControl.vsc=Math.max(0,raceControl.vsc-dt);if(raceControl.vsc===0)showMsg('VSC ENDED','GREEN FLAG','green',1.4);}
@@ -6140,6 +6237,7 @@ function updRace(dt){
  }
  player.latChange=Math.abs(player.lat-previousPlayerLat)/Math.max(dt,0.001);
  updateBlueFlags(dt);
+ updateTrackFeelCallout(dt);
  // Demo-mode broadcast: keep the sun tracking the race leader so shadow
  // coverage follows the director's cameras.
  if(demoOn){

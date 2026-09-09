@@ -503,6 +503,8 @@ Files modified:
 - `src/game.js`
 - `src/godRays.js`
 - `src/tracks.js`
+- `README.md`
+- `GAME_STATUS.md`
 
 Summary:
 
@@ -512,7 +514,44 @@ Summary:
 4. Monaco tunnel end corrected so tunnel lights stop after the tunnel.
 5. Monaco landmark pass for Casino / Fairmont / Port Hercule.
 6. Crash ignition changed from bloomy explosion to smaller fire plus dark smoke.
-7. Build and lint both pass.
+7. Added the first full circuit-drivability pass for all 25 tracks.
+8. Fixed a runtime crash from the new merged tree canopies by normalising geometry UV/index attributes before `mergeGeometries()`.
+9. Build and lint both pass.
+
+### 2026-09-09 circuit-drivability pass
+
+Added a per-circuit driving-feel layer in `src/game.js`:
+
+- `DRIVE_PROFILES` gives each venue its baseline character.
+- `CORNER_ZONES` adds named sections and local multipliers.
+- `driveFeelFor()` bakes a feel profile onto every track sample when the world is built.
+- `carFeel()` lets physics, AI and visuals read the current section cheaply.
+
+What the new feel layer affects:
+
+- Track grip.
+- Top-speed character / drag level.
+- Braking strength.
+- Lateral grip and high-speed aero confidence.
+- Kerb harshness/effectiveness.
+- Road bump/camera shake.
+- AI confidence.
+- AI mistake risk.
+- Overtaking willingness/space.
+- Slipstream strength/range.
+
+Examples now encoded:
+
+- **Monaco**: lower top speed, more drag, bumpy street surface, weak overtaking confidence, risky kerbs, Fairmont hairpin speed restriction, tunnel relief and Nouvelle Chicane braking risk.
+- **Spa-Francorchamps**: Eau Rouge/Raidillon compression/risk, Kemmel slipstream/top-speed boost, Pouhon aero commitment and La Source overtaking.
+- **Silverstone**: Maggotts/Becketts high-speed aero commitment, Stowe braking and Club kerbs.
+- **Monza**: low drag, strong slipstream, aggressive chicane kerbs and Parabolica commitment.
+- **Baku / Vegas / Jeddah**: wall-lined high-speed street character, giant slipstream straights and punishing tight sections.
+- **Suzuka**: Esses rhythm, Degner risk and 130R high-speed aero commitment.
+
+Player-facing addition:
+
+- A small corner/section callout appears when entering named track-character zones during a race, e.g. `EAU ROUGE / RAIDILLON`, `FAIRMONT HAIRPIN`, `MAGGOTTS AND BECKETTS`.
 
 ---
 
