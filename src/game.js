@@ -410,7 +410,28 @@ mist:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1
 snow:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3v18M4.2 7.5l15.6 9M19.8 7.5l-15.6 9"/><path d="M9.4 5.2 12 7.8l2.6-2.6M9.4 18.8 12 16.2l2.6 2.6"/></svg>'};
 
 /* ============ speech / commentary ============ */
-const Speech={enabled:true,cool:0,voice:null,femaleVoice:null,
+function speechKey(text){
+ let h=2166136261>>>0;
+ const s=String(text||'').replace(/\[[^\]]+\]\s*/g,'').replace(/\s+/g,' ').trim().toLowerCase();
+ for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)>>>0;}
+ return h.toString(16).padStart(8,'0');
+}
+const Speech={enabled:true,cool:0,voice:null,femaleVoice:null,clips:null,clipAudio:null,
+async loadPack(){try{
+ const res=await fetch(`${import.meta.env.BASE_URL}audio/voicepack/manifest.json?t=${Date.now()}`,{cache:'no-store'});
+ if(!res.ok)return;const data=await res.json();const map=new Map();
+ for(const c of(data.clips||[])){if(c&&c.key&&c.file)map.set(c.key,c);}
+ this.clips=map;console.log('[voicepack] loaded',map.size,'clips');
+}catch(e){console.warn('[voicepack] unavailable',e);}},
+tryClip(text,force){
+ if(!this.clips||!this.clips.size)return false;
+ const c=this.clips.get(speechKey(text));if(!c)return false;
+ const t=nowT();if(!force&&t<this.cool)return true;this.cool=t+Math.max(1.0,Number(c.cooldown)||1.25);
+ try{if(this.clipAudio){this.clipAudio.pause();this.clipAudio=null;}try{speechSynthesis.cancel();}catch(e){}
+  const a=new Audio(`${import.meta.env.BASE_URL}audio/voicepack/${c.file}`);this.clipAudio=a;a.volume=c.volume??1.0;
+  a.onended=()=>{if(this.clipAudio===a)this.clipAudio=null;};a.play().catch(()=>{});return true;
+ }catch(e){return false;}
+},
 refresh(){try{
  const vs=speechSynthesis.getVoices();if(!vs.length)return;
  const score=v=>{let s=0;
@@ -448,9 +469,11 @@ refresh(){try{
   return s;};
  this.femaleVoice=[...vs].sort((a,b)=>fscore(b)-fscore(a))[0]||this.voice;
 }catch(e){}},
-init(){try{this.refresh();speechSynthesis.onvoiceschanged=()=>this.refresh();}catch(e){}},
+init(){try{this.refresh();speechSynthesis.onvoiceschanged=()=>this.refresh();this.loadPack();}catch(e){}},
 say(text,force,opts){
- if(!this.enabled||!('speechSynthesis'in window))return;
+ if(!this.enabled)return;
+ if(this.tryClip(text,force))return;
+ if(!('speechSynthesis'in window))return;
  const t=nowT();if(!force&&t<this.cool)return;this.cool=t+1.4;
  try{
   if(speechSynthesis.speaking){if(force)speechSynthesis.cancel();else return;}
@@ -460,8 +483,8 @@ say(text,force,opts){
   // A punchier baseline rate/pitch than a flat narrator — individual lines
   // (lights out, overtakes, crashes) already push these higher still for
   // their moment, this just raises the resting energy level between them.
-  u.rate=(opts&&opts.rate!=null)?opts.rate:1.06;
-  u.pitch=(opts&&opts.pitch!=null)?opts.pitch:1.05;
+  u.rate=(opts&&opts.rate!=null)?opts.rate:1.10;
+  u.pitch=(opts&&opts.pitch!=null)?opts.pitch:1.07;
   u.volume=1.0;
   speechSynthesis.speak(u);
  }catch(e){}},
@@ -498,9 +521,9 @@ close:['They are side by side into the corner!','This is brilliant racing — do
 rain:['The track is treacherous out there now.','Rain is lashing down — keep it on the black stuff.','This is a proper wet-weather test!'],
 finishClose:['What a finish! Absolute scenes at the line!','They cross the line together — that was a classic!'],
 giveBack:['That overtake was off the track — give the place back to {d}!','{d} is furious! You cut the corner — hand the position back!','Off track! Give {d} the place back right now!','The stewards are watching — hand that place back to {d}!','{d} is absolutely raging! That was illegal — give it back!','You gained an advantage off track — {d} wants it back!'],
-angry:['{d} is livid — he will remember that!','{d} waves his fist — that was a divebomb!','{d} is seeing red after that hit!','{d} is furious — you are on thin ice!'],
+angry:['{d} is livid — he will remember that!','{d} waves his fist — that was a divebomb!','{d} is seeing red after that hit!','{d} is furious — you are on thin ice!','{d} is on the radio immediately — he says you left no room!','{d} is absolutely raging in the cockpit!'],
 apology:['Stewards are taking a look at that one.','Getting messy out there — the stewards are onto it.'],
-contact:['A little wheel-to-wheel contact there — both cars are still going.','That was a nudge in the midfield, but they keep it pointed straight.','Light contact between the two cars — no major damage reported.'],
+contact:['A little wheel-to-wheel contact there — both cars are still going.','That was a nudge in the midfield, but they keep it pointed straight.','Light contact between the two cars — no major damage reported.','There is some angry radio after that touch. Nobody liked that one.','Elbows out through there — race control may have a look.'],
 recovery:['The car is back up to speed — systems recovered.','Good work, the damage countdown is clear. Keep pushing.'],
 animal:['Animal on the track! Eyes up through the next sector.','There is wildlife crossing ahead — stay alert and leave it room.','A small animal is running across the racing line.'],
 terminal:['Huge accident in the barriers — the driver is out of the race.','That is a terminal shunt; marshals are heading to the wreck.'],
@@ -523,14 +546,25 @@ const LEWIS_RADIO={
  animal:['Can someone get the animal off the line, man? I had no warning, man.','There was wildlife crossing, man. Can we tell the marshals, man?'],
  vsc:['Can we check the delta, man? The traffic is not making this easy, man.','I am trying to manage the VSC, man. Can we give me a clearer target, man?']
 };
+const GENERIC_DRIVER_RADIO={
+ contact:['I was alongside! He just squeezed me!','Come on, I had nowhere to go there!','That was not clean. Tell race control to look at it.','He turned in like I was not there!','I need space, I need space!'],
+ angry:['What was that? Seriously, what was that?','He cannot just drive into me like that!','That was my corner. He has to give it back.','I am not happy with that move at all.','Tell him to leave me racing room!'],
+ crash:['Big hit! I am out, I am out!','That was massive. Check the car, check the car!','I got collected there — nothing I could do!'],
+ wall:['The rear is gone. I have hit the wall.','I touched the barrier; check the front wing.','The car is damaged, I can feel it.'],
+ penalty:['That penalty is harsh. We need to review it.','I was forced into that. Tell them to check the replay.'],
+ blue:['I am trying to let them through, but this is not easy.'],
+ vsc:['I am on the delta, but they are all over the place.']
+};
 function isLewis(c){return!!c&&/lewis\s+hamilton/i.test(c.d&&c.d.name||'');}
 function driverRadio(c,event='contact'){
- if(!isLewis(c))return false;
+ if(!c||!c.d)return false;
  const now=timeSec;
- if(now-(c._radioT||-99)<2.8)return true;
+ if(now-(c._radioT||-99)<1.75)return true;
  c._radioT=now;
- const lines=LEWIS_RADIO[event]||LEWIS_RADIO.contact;
- Speech.say(pick(lines),true,{rate:1.02,pitch:1.01});
+ const special=isLewis(c);
+ const lines=(special?LEWIS_RADIO[event]:GENERIC_DRIVER_RADIO[event])||(special?LEWIS_RADIO.contact:GENERIC_DRIVER_RADIO.contact);
+ const last=(c.d.name||'Driver').split(' ').pop().toUpperCase();
+ Speech.say((special?'':last+': ')+pick(lines),true,{rate:special?1.04:1.12,pitch:special?1.01:1.08});
  return true;
 }
 const ATT_LINES=[
@@ -636,15 +670,15 @@ function mkCanvas(w,h){const c=document.createElement('canvas');c.width=w;c.heig
 // distance — the larger-scale patches, streaks and cracks are what stay
 // visible and keep the surface from reading as flat.
 const[ac,ag]=mkCanvas(768,768);
-ag.fillStyle='#3c3f43';ag.fillRect(0,0,768,768);
+ag.fillStyle='#17191b';ag.fillRect(0,0,768,768);
 // Large tonal patches — sun-bleached / resurfaced sections
 for(let i=0;i<26;i++){
-  const g=36+Math.random()*26|0;
-  ag.fillStyle=`rgba(${g+14},${g+14},${g+16},0.5)`;
+  const g=20+Math.random()*18|0;
+  ag.fillStyle=`rgba(${g+6},${g+6},${g+6},0.34)`;
   ag.beginPath();ag.ellipse(Math.random()*768,Math.random()*768,rand(40,120),rand(30,90),Math.random()*7,0,7);ag.fill();
 }
 for(let i=0;i<40000;i++){
-  const g=38+Math.random()*48|0;
+  const g=18+Math.random()*34|0;
   ag.fillStyle=`rgb(${g},${g},${g})`;
   ag.fillRect(Math.random()*768,Math.random()*768,rand(1.2,2.6),rand(1.2,2.6));
 }
@@ -657,22 +691,18 @@ for(let i=0;i<50;i++){
   ag.stroke();
 }
 // Dark rubbered racing lines (left and right tire tracks)
-ag.fillStyle='rgba(16,18,22,0.42)';
+ag.fillStyle='rgba(5,6,7,0.38)';
 ag.fillRect(195,0,126,768);
 ag.fillRect(447,0,126,768);
 // Oil/rubber staining blotches along the racing line
 for(let i=0;i<30;i++){
-  ag.fillStyle='rgba(10,11,13,0.25)';
+  ag.fillStyle='rgba(2,3,4,0.24)';
   ag.beginPath();ag.arc(pick([258,510])+rand(-40,40),Math.random()*768,rand(8,26),0,7);ag.fill();
 }
-// Crisp high-contrast white edge track boundary markings
-ag.fillStyle='#ecebe6';
-ag.fillRect(15,0,15,768);
-ag.fillRect(738,0,15,768);
-// Intermittent grid slot markings
-ag.fillStyle='rgba(235,235,230,0.45)';
-ag.fillRect(240,180,288,12);
-ag.fillRect(240,570,288,12);
+// Keep the asphalt texture itself pure road. Painted lines, grid boxes and
+// circuit-specific coloured surfaces are separate geometry elsewhere; baking
+// white markings into a repeating texture made every road look like it had a
+// wrong overlay stamped across it.
 const asphaltT=ctex(ac,true);
 
 // High-fidelity lush grass & soil texture — multi-scale: fine speckle for
@@ -1198,7 +1228,7 @@ function updWeatherFX(dt){
  snowGust=Math.max(0,snowGust-dt*0.55);
  cur.grip=cur.gripBase*(1-snowAccum*0.4);
  if(T&&T.roadMat){
-  T.roadMat.color.lerp(new THREE.Color(0xe9eef4),snowAccum*0.55);
+  T.roadMat.color.lerp(new THREE.Color(0xcfd4d7),snowAccum*0.42);
   T.roadMat.roughness=Math.min(1,T.roadMat.roughness+snowAccum*0.25);
  }
  const cx=camera.position.x,cz=camera.position.z;
@@ -1583,9 +1613,9 @@ function applyWeatherVisuals(){
   // A wet road is not merely a damp one: it goes darker, glassier and it
   // mirrors the sky, which is exactly the effect that makes rain read as
   // rain from a chase camera.
-  T.roadMat.color.copy(new THREE.Color(0x9a9da2)).lerp(new THREE.Color(0x4c5157),wet);
-  T.roadMat.roughness=0.95-wet*0.78;T.roadMat.metalness=wet*0.32;
-  T.roadMat.envMapIntensity=0.1+wet*1.5;
+  T.roadMat.color.copy(new THREE.Color(0x242629)).lerp(new THREE.Color(0x07090b),wet);
+  T.roadMat.roughness=0.86-wet*0.68;T.roadMat.metalness=wet*0.08;
+  T.roadMat.envMapIntensity=0.18+wet*1.15;
   if(T.puddleMat)T.puddleMat.opacity=clamp(wet*0.85,0,0.85);
  }
  setNightGlow();
@@ -2284,7 +2314,7 @@ function buildWorld(idx){
   g.setAttribute('position',new THREE.BufferAttribute(pos,3));
   g.setAttribute('uv',new THREE.BufferAttribute(uv,2));
   g.setIndex(index);g.computeVertexNormals();fixWinding(g);
-  const roadMat=new THREE.MeshStandardMaterial({map:asphaltT,bumpMap:asphaltBumpT,bumpScale:0.075,color:0x9a9da2,roughness:0.95,metalness:0.05,polygonOffset:true,polygonOffsetFactor:1,polygonOffsetUnits:1});
+  const roadMat=new THREE.MeshStandardMaterial({map:asphaltT,bumpMap:asphaltBumpT,bumpScale:0.055,color:0x242629,roughness:0.86,metalness:0.02,envMapIntensity:0.18,polygonOffset:true,polygonOffsetFactor:1,polygonOffsetUnits:1});
   const road=new THREE.Mesh(g,roadMat);road.receiveShadow=true;world.add(road);T.roadMat=roadMat;
  }
 
@@ -2320,8 +2350,8 @@ function buildWorld(idx){
   rGeo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(rPos),3));
   rGeo.setAttribute('uv',new THREE.BufferAttribute(new Float32Array(rUv),2));
   rGeo.setIndex(rIdx);rGeo.computeVertexNormals();
-  const rColor=def.theme==='street'?0x3f4248:(def.theme==='forest'?0x4a473e:0x4d5158);
-  const rMat=new THREE.MeshStandardMaterial({map:asphaltT,bumpMap:asphaltBumpT,bumpScale:0.075,color:rColor,roughness:0.95,polygonOffset:true,polygonOffsetFactor:2,polygonOffsetUnits:2});
+  const rColor=def.theme==='street'?0x25282c:(def.theme==='forest'?0x2b2c2a:0x303236);
+  const rMat=new THREE.MeshStandardMaterial({map:asphaltT,bumpMap:asphaltBumpT,bumpScale:0.045,color:rColor,roughness:0.9,metalness:0.01,envMapIntensity:0.12,polygonOffset:true,polygonOffsetFactor:2,polygonOffsetUnits:2});
   const rMesh=new THREE.Mesh(rGeo,rMat);rMesh.receiveShadow=true;world.add(rMesh);
  }
 
@@ -4516,10 +4546,10 @@ function carCollisions(){
         issuePenalty(A.isPlayer?A:B,'contact',5,'avoidable contact',8);
        // Keep the broadcast alive for AI-to-AI racing too: a small nudge is
        // commentary, not an automatic terminal crash.
-       if(imp<9&&timeSec-(carCollisions.lastRadio||-99)>2.8){
+       if(imp<9&&timeSec-(carCollisions.lastRadio||-99)>1.9){
         carCollisions.lastRadio=timeSec;
-        const radioCar=isLewis(A)?A:isLewis(B)?B:null;
-        if(!driverRadio(radioCar,'contact'))Speech.say(pick(LINES.contact),false,{rate:1.0,pitch:1.03});
+        const radioCar=isLewis(A)?A:isLewis(B)?B:(Math.random()<0.65?pick([A,B]):null);
+        if(!driverRadio(radioCar,'contact'))Speech.say(pick(LINES.contact),false,{rate:1.08,pitch:1.07});
        }
        // Suspension jounce so a hit visibly rocks both cars.
        A.bounceVel=(A.bounceVel||0)-Math.min(imp*0.05,0.28);
@@ -4539,7 +4569,7 @@ function carCollisions(){
         // If it was you clouting them, the other driver gets properly furious.
         if(A.isPlayer!==B.isPlayer){
          const other=A.isPlayer?B:A;
-         if(imp>5.2&&timeSec-(other.rageT||-99)>12){other.rageT=timeSec;rageFrom(other);}
+         if(imp>4.2&&timeSec-(other.rageT||-99)>5.5){other.rageT=timeSec;rageFrom(other);}
         }
        }
       }
@@ -5332,7 +5362,13 @@ function pickDirectorShot(){
  let shots;
  if(spread<180)shots=['chase','chase','cine','hood','halo','chase','tv','tv','orbit'];
  else if(spread<500)shots=['chase','chase','cine','hood','halo','tv','tv','heli','orbit'];
- else shots=['heli','heli','cine','halo','heli','chase','tv','orbit','hood'];
+ else {
+  const q=effQuality();
+  // LOW/MED aerials expose the coarser terrain the most, so favour real race
+  // cameras there. HIGH/ULTRA still get helicopters, but fewer satellite-like
+  // flyovers and more car-led shots.
+  shots=q==='LOW'?['chase','cine','tv','orbit','hood']:q==='MED'?['chase','cine','tv','orbit','hood','heli']:['heli','cine','halo','chase','tv','orbit','hood'];
+ }
  restoreDirectorDriver();
  director.shot=pick(shots);
  director.timer=director.shot==='heli'?rand(6,10):(director.shot==='hood'||director.shot==='halo')?rand(4,6):rand(3.5,6);
@@ -5588,7 +5624,9 @@ function updCamera(dt){
   // lens almost at hill height and looking over empty road. Keep a generous
   // broadcast altitude even during the swoop, then apply a second local
   // clearance below after the camera's lateral sway is known.
-  const alt=84-(swooping?Math.sin(swoopT*Math.PI)*18:0);
+  const qh=effQuality();
+  const baseAlt=qh==='ULTRA'?54:qh==='HIGH'?62:qh==='MED'?72:82;
+  const alt=baseAlt-(swooping?Math.sin(swoopT*Math.PI)*(qh==='ULTRA'?16:12):0);
   let tx,ty,tz;
   // The helicopter is still a race camera, not just a terrain flyover: keep
   // the selected car as the look target so the title screen always contains
@@ -5614,7 +5652,8 @@ function updCamera(dt){
   cam.heliLook.x=damp(cam.heliLook.x,tx,4,dt);
   cam.heliLook.y=damp(cam.heliLook.y,ty,4,dt);
   cam.heliLook.z=damp(cam.heliLook.z,tz,4,dt);
-  const swayX=Math.sin(timeSec*0.11)*30,swayZ=Math.cos(timeSec*0.077)*22;
+  const swayMul=qh==='ULTRA'?0.62:qh==='HIGH'?0.76:1;
+  const swayX=Math.sin(timeSec*0.11)*30*swayMul,swayZ=Math.cos(timeSec*0.077)*22*swayMul;
   const hx=px+swayX,hz=pz+swayZ;
   const localFloor=cameraSurfaceY(hx,hz);
   const cpx=tc?(Number.isFinite(tc.x)?tc.x:tc.mesh.g.position.x):hx;
@@ -5623,12 +5662,14 @@ function updCamera(dt){
   // Never allow damping to leave the helicopter inside a rising hillside.
   // Keeping the target car below the aircraft also guarantees a useful pitch
   // and makes the cars remain visible when the sweep crosses a crest.
-  const safeHeliY=Math.max(py+alt,localFloor+56,carFloor+48,tc?tc.mesh.g.position.y+48:0);
+  const floorClear=qh==='ULTRA'?34:qh==='HIGH'?40:50;
+  const carClear=qh==='ULTRA'?30:qh==='HIGH'?36:42;
+  const safeHeliY=Math.max(py+alt,localFloor+floorClear,carFloor+carClear,tc?tc.mesh.g.position.y+carClear:0);
   if(!cam.heliPos)cam.heliPos=V3(hx,safeHeliY,hz);
   cam.heliPos.x=damp(cam.heliPos.x,hx,3,dt);
   cam.heliPos.y=damp(cam.heliPos.y,safeHeliY,3,dt);
   cam.heliPos.z=damp(cam.heliPos.z,hz,3,dt);
-  cam.heliPos.y=Math.max(cam.heliPos.y,localFloor+50,carFloor+42,tc?tc.mesh.g.position.y+42:0);
+  cam.heliPos.y=Math.max(cam.heliPos.y,localFloor+floorClear,carFloor+carClear,tc?tc.mesh.g.position.y+carClear:0);
   camera.position.copy(cam.heliPos);
   clampCameraToSurface(1.0);
   camera.up.set(0,1,0);
@@ -5636,7 +5677,7 @@ function updCamera(dt){
   // Gentle banking via a roll around the camera's own view axis only —
   // rotateZ never touches the yaw/pitch, so it can't cause a flip.
   camera.rotateZ((swooping?Math.sin(swoopT*Math.PI)*0.14:0)+Math.sin(timeSec*0.35)*0.03);
-  camera.fov=damp(camera.fov,zf(swooping?54:50),4,dt);camera.updateProjectionMatrix();return;}
+  camera.fov=damp(camera.fov,zf(swooping?(qh==='ULTRA'?46:52):(qh==='ULTRA'?42:48)),4,dt);camera.updateProjectionMatrix();return;}
  const p=player,pp=p.mesh.g.position;
  // HELMET hides the helmet/head so it never clips the visor, but keeps the
  // steering wheel, arms and cockpit surround in frame (onboard F1 look).

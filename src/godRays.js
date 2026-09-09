@@ -37,9 +37,11 @@ varying vec2 vUv;
 varying float vPh;
 void main(){
   float edge = 1.0 - abs(vUv.x);            // soft sides
-  edge = pow(edge, 1.6);
-  float fade = pow(1.0 - vUv.y, 1.35);      // bright at the top, dying to the ground
-  float band = 0.68 + 0.32 * sin(vUv.y * 22.0 + vPh + uTime * 0.45);   // moving light fingers
+  edge = pow(edge, 1.9);
+  // Real crepuscular rays read strongest near the sun/upper canopy, then
+  // stream down and fade as they meet the track. Keep a faint lower tail.
+  float fade = 0.18 + 0.82 * pow(1.0 - vUv.y, 1.15);
+  float band = 0.72 + 0.28 * sin(vUv.y * 18.0 + vPh + uTime * 0.36);
   float a = uIntensity * edge * fade * band;
   // Do not premultiply the colour here: Three's additive blend already uses
   // alpha as the source factor. Premultiplying made the shafts almost invisible.
@@ -60,7 +62,7 @@ export class GodRays {
 
   /** Anchors run along the circuit on alternating sides, above the wall line. */
   build(world, samples, N, terrainHeightAt, wallDist) {
-    const step = Math.max(30, Math.round(N / 30));
+    const step = Math.max(24, Math.round(N / 38));
     const idx = [];
     for (let i = 6; i < N - 4; i += step) idx.push(i);
     const count = idx.length;
@@ -100,13 +102,13 @@ export class GodRays {
     for (let k = 0; k < count; k++) {
       const s = samples[idx[k] % N];
       const side = k % 2 ? 1 : -1;
-      const lat = (wallDist + 7 + (idx[k] * 7919 % 9)) * side;
+      const lat = (wallDist + 9 + (idx[k] * 7919 % 13)) * side;
       const x = s.p.x + s.n.x * lat, z = s.p.z + s.n.z * lat;
       const gy = terrainHeightAt ? terrainHeightAt(x, z) : s.p.y;
-      const h = 10 + (idx[k] * 104729 % 10);           // 10–20 m above ground
+      const h = 28 + (idx[k] * 104729 % 24);           // 28–52 m up: rays visibly start near the sun/sky
       this.anchors.push({
         x, z, gy, top: gy + h, h,
-        w: 3.0 + ((idx[k] * 31) % 17) / 10             // 3.0–4.6 beam width
+        w: 2.4 + ((idx[k] * 31) % 22) / 10             // 2.4–4.5 beam width
       });
     }
     world.add(mesh);
@@ -122,12 +124,12 @@ export class GodRays {
 
     // Low sun rakes the shafts across; keep a whisper at high sun so the
     // effect is discoverable on a clear day, full drama toward dusk.
-    const sunFactor = Math.min(1, Math.max(0.16, 1.38 - sunVec.y));
+    const sunFactor = Math.min(1, Math.max(0.22, 1.55 - sunVec.y));
     // Bloom as the camera swings toward the sun (horizontal component).
     camera.getWorldDirection(this._camFwd);
     this._camH.set(sunVec.x, 0, sunVec.z).normalize();
     const toward = Math.pow(Math.max(0, this._camFwd.x * this._camH.x + this._camFwd.z * this._camH.z), 1.6);
-    const target = 0.92 * gate * sunFactor * (0.38 + 0.62 * toward);
+    const target = 1.05 * gate * sunFactor * (0.48 + 0.52 * toward);
 
     this.intensity += (target - this.intensity) * Math.min(1, dt * 3);
     const I = this.intensity;
@@ -135,7 +137,8 @@ export class GodRays {
     this.mesh.visible = I > 0.012;
     if (!this.mesh.visible) return;
 
-    // World direction the beams run: from the sun down to the track.
+    // World direction the beams run: actual light travel, from the sun down to the track.
+    // `sunVec` points from the world toward the sun, so the visible shafts fall along -sunVec.
     this._g.copy(sunVec).negate().normalize();
     const el = Math.max(0.09, sunVec.y);
     const m = this._m, x = this._x, y = this._y, z = this._z, toCam = this._toCam;
@@ -145,9 +148,9 @@ export class GodRays {
       x.crossVectors(this._g, toCam);
       if (x.lengthSq() < 1e-6) x.set(1, 0, 0); else x.normalize();
       z.crossVectors(x, this._g).normalize();
-      const len = Math.min(a.h / el + 8, 48); // reaches the ground + margin, capped
+      const len = Math.min(a.h / el + 34, 140); // long enough to read as sky-to-track rays
       x.multiplyScalar(a.w);
-      y.copy(this._g).multiplyScalar(-len);   // local -Y runs along the beam
+      y.copy(this._g).multiplyScalar(-len);   // geometry's local -Y falls along -sunVec
       m.makeBasis(x, y, z);
       m.setPosition(a.x, a.top, a.z);
       this.mesh.setMatrixAt(k, m);

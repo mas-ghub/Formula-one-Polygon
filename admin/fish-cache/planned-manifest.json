@@ -1,0 +1,152 @@
+{
+  "version": "fish-2026-09-09T11:03:04.945Z",
+  "provider": "fish.audio",
+  "model": "s2.1-pro-free",
+  "generatedAt": "2026-09-09T11:03:04.945Z",
+  "clips": [
+    {
+      "key": "6bd805ce",
+      "id": "lights_out_01",
+      "event": "start",
+      "role": "commentator",
+      "track": null,
+      "text": "Lights out and away we go!",
+      "file": "commentator/lights_out_01.mp3",
+      "priority": 9,
+      "cooldown": 1.25,
+      "volume": 1
+    },
+    {
+      "key": "5a982fcd",
+      "id": "lights_out_02",
+      "event": "start",
+      "role": "commentator",
+      "track": null,
+      "text": "And it is lights out — we are racing!",
+      "file": "commentator/lights_out_02.mp3",
+      "priority": 9,
+      "cooldown": 1.25,
+      "volume": 1
+    },
+    {
+      "key": "ab965d01",
+      "id": "eau_rouge_raidillon_01",
+      "event": "track_section",
+      "role": "commentator",
+      "track": "Spa-Francorchamps",
+      "text": "Up Eau Rouge and Raidillon — hold your breath!",
+      "file": "commentator/eau_rouge_raidillon_01.mp3",
+      "priority": 6,
+      "cooldown": 1.25,
+      "volume": 1
+    },
+    {
+      "key": "9a51513d",
+      "id": "silverstone_maggotts_01",
+      "event": "track_section",
+      "role": "commentator",
+      "track": "Silverstone",
+      "text": "Maggotts and Becketts — this is pure commitment!",
+      "file": "commentator/silverstone_maggotts_01.mp3",
+      "priority": 6,
+      "cooldown": 1.25,
+      "volume": 1
+    },
+    {
+      "key": "0b689ff1",
+      "id": "monaco_barriers_01",
+      "event": "track_section",
+      "role": "commentator",
+      "track": "Monaco",
+      "text": "Millimetres from the barrier through Monaco!",
+      "file": "commentator/monaco_barriers_01.mp3",
+      "priority": 6,
+      "cooldown": 1.25,
+      "volume": 1
+    },
+    {
+      "key": "46b2c408",
+      "id": "monaco_fairmont_01",
+      "event": "track_section",
+      "role": "engineer",
+      "track": "Monaco",
+      "text": "Fairmont hairpin. Keep it tidy, short shift on the exit.",
+      "file": "engineer/monaco_fairmont_01.mp3",
+      "priority": 5,
+      "cooldown": 1.25,
+      "volume": 1
+    },
+    {
+      "key": "e61a9240",
+      "id": "overtake_01",
+      "event": "overtake",
+      "role": "commentator",
+      "track": null,
+      "text": "Down the inside, and it sticks!",
+      "file": "commentator/overtake_01.mp3",
+      "priority": 8,
+      "cooldown": 1.25,
+      "volume": 1
+    },
+    {
+      "key": "8543d430",
+      "id": "angry_driver_01",
+      "event": "angry",
+      "role": "driver",
+      "track": null,
+      "text": "What was that? Seriously, what was that?",
+      "file": "driver/angry_driver_01.mp3",
+      "priority": 7,
+      "cooldown": 1.25,
+      "volume": 1
+    },
+    {
+      "key": "5d660b16",
+      "id": "angry_driver_02",
+      "event": "contact",
+      "role": "driver",
+      "track": null,
+      "text": "I was alongside! He just squeezed me!",
+      "file": "driver/angry_driver_02.mp3",
+      "priority": 7,
+      "cooldown": 1.25,
+      "volume": 1
+    },
+    {
+      "key": "5ceb8f9b",
+      "id": "track_limits_engineer_01",
+      "event": "track_limits",
+      "role": "engineer",
+      "track": null,
+      "text": "Careful, track limits. Race control are watching.",
+      "file": "engineer/track_limits_engineer_01.mp3",
+      "priority": 8,
+      "cooldown": 1.25,
+      "volume": 1
+    },
+    {
+      "key": "60b2c740",
+      "id": "vsc_01",
+      "event": "vsc",
+      "role": "commentator",
+      "track": null,
+      "text": "Virtual safety car deployed. Hold the delta and no overtaking.",
+      "file": "commentator/vsc_01.mp3",
+      "priority": 9,
+      "cooldown": 1.25,
+      "volume": 1
+    },
+    {
+      "key": "50b07c9e",
+      "id": "final_lap_01",
+      "event": "final_lap",
+      "role": "commentator",
+      "track": null,
+      "text": "Final lap! Give it everything you have left.",
+      "file": "commentator/final_lap_01.mp3",
+      "priority": 8,
+      "cooldown": 1.25,
+      "volume": 1
+    }
+  ]
+}

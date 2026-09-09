@@ -1,0 +1,114 @@
+[
+  {
+    "id": "lights_out_01",
+    "role": "commentator",
+    "event": "start",
+    "text": "Lights out and away we go!",
+    "fishText": "[excited][shouting] Lights out and away we go!",
+    "voice": "commentator",
+    "priority": 9
+  },
+  {
+    "id": "lights_out_02",
+    "role": "commentator",
+    "event": "start",
+    "text": "And it is lights out — we are racing!",
+    "fishText": "[excited][shouting] And it is lights out — we are racing!",
+    "voice": "commentator",
+    "priority": 9
+  },
+  {
+    "id": "eau_rouge_raidillon_01",
+    "role": "commentator",
+    "event": "track_section",
+    "track": "Spa-Francorchamps",
+    "text": "Up Eau Rouge and Raidillon — hold your breath!",
+    "fishText": "[excited] Up Eau Rouge and Raidillon — [emphasis] hold your breath!",
+    "voice": "commentator",
+    "priority": 6
+  },
+  {
+    "id": "silverstone_maggotts_01",
+    "role": "commentator",
+    "event": "track_section",
+    "track": "Silverstone",
+    "text": "Maggotts and Becketts — this is pure commitment!",
+    "fishText": "[excited] Maggotts and Becketts — this is [emphasis] pure commitment!",
+    "voice": "commentator",
+    "priority": 6
+  },
+  {
+    "id": "monaco_barriers_01",
+    "role": "commentator",
+    "event": "track_section",
+    "track": "Monaco",
+    "text": "Millimetres from the barrier through Monaco!",
+    "fishText": "[excited][in a hurry tone] Millimetres from the barrier through Monaco!",
+    "voice": "commentator",
+    "priority": 6
+  },
+  {
+    "id": "monaco_fairmont_01",
+    "role": "engineer",
+    "event": "track_section",
+    "track": "Monaco",
+    "text": "Fairmont hairpin. Keep it tidy, short shift on the exit.",
+    "fishText": "[calm][confident] Fairmont hairpin. Keep it tidy, short shift on the exit.",
+    "voice": "engineer",
+    "priority": 5
+  },
+  {
+    "id": "overtake_01",
+    "role": "commentator",
+    "event": "overtake",
+    "text": "Down the inside, and it sticks!",
+    "fishText": "[excited][shouting] Down the inside, and it sticks!",
+    "voice": "commentator",
+    "priority": 8
+  },
+  {
+    "id": "angry_driver_01",
+    "role": "driver",
+    "event": "angry",
+    "text": "What was that? Seriously, what was that?",
+    "fishText": "[angry][shouting] What was that? Seriously, what was that?",
+    "voice": "driver_angry",
+    "priority": 7
+  },
+  {
+    "id": "angry_driver_02",
+    "role": "driver",
+    "event": "contact",
+    "text": "I was alongside! He just squeezed me!",
+    "fishText": "[angry] I was alongside! He just squeezed me!",
+    "voice": "driver_angry",
+    "priority": 7
+  },
+  {
+    "id": "track_limits_engineer_01",
+    "role": "engineer",
+    "event": "track_limits",
+    "text": "Careful, track limits. Race control are watching.",
+    "fishText": "[worried][confident] Careful, track limits. Race control are watching.",
+    "voice": "engineer",
+    "priority": 8
+  },
+  {
+    "id": "vsc_01",
+    "role": "commentator",
+    "event": "vsc",
+    "text": "Virtual safety car deployed. Hold the delta and no overtaking.",
+    "fishText": "[calm][confident] Virtual safety car deployed. Hold the delta and no overtaking.",
+    "voice": "commentator",
+    "priority": 9
+  },
+  {
+    "id": "final_lap_01",
+    "role": "commentator",
+    "event": "final_lap",
+    "text": "Final lap! Give it everything you have left.",
+    "fishText": "[excited][shouting] Final lap! Give it everything you have left.",
+    "voice": "commentator",
+    "priority": 8
+  }
+]

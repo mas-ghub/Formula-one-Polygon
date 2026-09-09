@@ -258,8 +258,9 @@ Latest fix/update:
 
 - Fixed shader colour output so rays are not double-dimmed by alpha.
 - Increased base visibility/intensity.
-- Slightly increased ray density.
+- Increased ray density slightly while keeping the system instanced.
 - Disabled depth testing for the shafts so they do not disappear too easily behind scenery.
+- Re-anchored rays higher in the sky/canopy area, lengthened them, and made every shaft fall along actual light travel direction `-sunVec` so they visually stream down from the sun toward the track.
 - Still skipped on the lowest prop-density quality tier for performance safety.
 
 Best conditions to see them:
@@ -516,7 +517,12 @@ Summary:
 6. Crash ignition changed from bloomy explosion to smaller fire plus dark smoke.
 7. Added the first full circuit-drivability pass for all 25 tracks.
 8. Fixed a runtime crash from the new merged tree canopies by normalising geometry UV/index attributes before `mergeGeometries()`.
-9. Build and lint both pass.
+9. Darkened/neutralised asphalt so normal roads read black and shiny rather than blue/grey, and removed baked repeating white/grid markings from the road texture.
+10. Increased driver radio/moaning frequency: all drivers now have generic complaint radio, not just Lewis, and rage triggers sooner after player contact.
+11. Added admin-side Fish Audio voice-pack tooling plus runtime voicepack playback/fallback support. The PWA loads generated clips from `public/audio/voicepack/manifest.json`; if none exist it falls back to Web Speech.
+12. Reworked god rays so they read as true sun shafts: higher sky anchors, longer sun-to-track shafts along `-sunVec`, stronger upper-source fade and clearer dry/dusk visibility.
+13. Improved title-screen helicopter quality behaviour: LOW/MED favour closer race cameras, while HIGH/ULTRA helicopter shots fly lower, tighter and more car-led instead of exposing ugly far-terrain flyovers.
+14. Build and lint both pass.
 
 ### 2026-09-09 circuit-drivability pass
 
@@ -593,6 +599,16 @@ These are not necessarily bugs; they are good next places to improve.
   - HUD,
   - audio.
 - README and TESTING docs can be kept shorter if this file becomes the main living status doc.
+
+### Future online / account system, no-cost first plan
+
+Keep this out of the current game pass for now, but plan it as follows:
+
+- **Login/profile:** start with a free-tier backend such as Supabase Auth, Firebase Auth, or a very small Cloudflare Workers + D1 setup. Use it for driver profile, display name, stats and saved settings.
+- **Free multiplayer prototype:** use WebRTC peer-to-peer rooms for small private races, with only a tiny signalling service on a free tier. This keeps traffic mostly off the server.
+- **Public race rooms later:** Supabase Realtime / Firebase / Cloudflare Durable Objects can work for prototypes, but real public matchmaking may eventually exceed free-tier limits. Design room messages compactly from day one.
+- **Authoritative racing:** for fairness, the long-term version should not trust every client completely. Start with ghost/time-trial leaderboards or small peer-hosted rooms, then move to server-authoritative checks only if the player base needs it.
+- **PWA/offline:** keep the current game playable without login. Login should enhance profiles/multiplayer, not block single-player.
 
 ---
 
