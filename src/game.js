@@ -5800,28 +5800,24 @@ function updCamera(dt){
   const buzz=(0.00025+sp01*0.0018)*(p.onCurb?2.0:1);
   camera.near=0.16;
   p.mesh.g.updateMatrixWorld(true);
-  // Eye sits at real visor height, ~55 cm behind the wheel: the wheel and
-  // the driver's hands fill the lower third of the frame and the road is
-  // over the top of it, instead of the LCD filling the whole screen.
-  // Eye just above the halo crown (0.985 - 0.06 offset = 0.925 world) so the
-  // road is seen OVER the front bar, and the look point dropped so the wheel
-  // sits in the bottom quarter of the frame rather than the middle.
-  // Halo-gap onboard: sit the eye lower in the cockpit so the player looks
-  // through the open gap under the halo's front hoop, not over the top of it.
-  // The look point stays just above the tarmac so the halo frames the road.
-  const eye=new THREE.Vector3(0,1.00,0.13).applyMatrix4(p.mesh.g.matrixWorld);
-  const look=new THREE.Vector3(p.steer*0.16,0.76+nod*0.12,10.5).applyMatrix4(p.mesh.g.matrixWorld);
+  // HELMET ONLY: real driver's-eyeline halo-gap view. The world halo mesh is
+  // excellent externally but too thick/close for the low-poly helmet lens, so
+  // this camera hides only the player's physical halo and uses a camera-space
+  // halo frame. That guarantees the view is through the open gap down to the
+  // top of the dashboard without altering any other camera mode.
+  const eye=new THREE.Vector3(0,0.93,-0.12).applyMatrix4(p.mesh.g.matrixWorld);
+  const look=new THREE.Vector3(p.steer*0.10,0.82+nod*0.08,12.5).applyMatrix4(p.mesh.g.matrixWorld);
   camera.position.set(eye.x+Math.sin(timeSec*49.7+p.phase)*buzz,eye.y,eye.z);
   camera.up.set(0,1,0);
   camera.lookAt(look.x,look.y,look.z);
-  camera.rotateZ(lean*0.20+p.steer*0.03);
-  tf=64;
+  camera.rotateZ(lean*0.13+p.steer*0.018);
+  tf=74;
   if(p.mesh.steering)p.mesh.steering.visible=true;
-  if(p.mesh.halo)p.mesh.halo.visible=true;
+  if(p.mesh.halo)p.mesh.halo.visible=false;
   if(p.mesh.body)p.mesh.body.visible=true;
-  if(helmOverlay&&helmOverlay.userData.v!==10){camera.remove(helmOverlay);helmOverlay=null;helmWheel=null;wingMirrors=null;}
+  if(helmOverlay&&helmOverlay.userData.v!==11){camera.remove(helmOverlay);helmOverlay=null;helmWheel=null;wingMirrors=null;}
   if(!helmOverlay){
-   helmOverlay=new THREE.Group();helmOverlay.userData.v=10;
+   helmOverlay=new THREE.Group();helmOverlay.userData.v=11;
    const hMat=new THREE.MeshStandardMaterial({color:0x171a1f,roughness:0.38,metalness:0.22,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2});
    helmWheel=p.mesh.steering||null;
    const mkRt=()=>{
@@ -5831,6 +5827,17 @@ function updCamera(dt){
     rt.texture.colorSpace=THREE.LinearSRGBColorSpace;
     return rt;
    };
+   // Camera-space halo: fixed helmet-camera framing, not a different world
+   // camera. It creates the open central sight gap the driver uses: halo rail
+   // across the upper frame, side rails down low, and one slim central pillar.
+   const haloMat=new THREE.MeshBasicMaterial({color:0x050607,depthTest:false,depthWrite:false});
+   const addHaloTube=(pts,r=0.020)=>{
+    const curve=new THREE.CatmullRomCurve3(pts.map(v=>new THREE.Vector3(v[0],v[1],v[2])),false,'centripetal',0.4);
+    const m=new THREE.Mesh(new THREE.TubeGeometry(curve,28,r,8,false),haloMat);
+    m.renderOrder=35;m.frustumCulled=false;helmOverlay.add(m);return m;
+   };
+   addHaloTube([[-0.98,-0.54,-1.04],[-0.66,-0.20,-0.92],[-0.34,0.03,-0.88],[0,0.105,-0.86],[0.34,0.03,-0.88],[0.66,-0.20,-0.92],[0.98,-0.54,-1.04]],0.023);
+   addHaloTube([[0,0.105,-0.86],[0,0.02,-0.98],[0,-0.12,-1.12],[0,-0.27,-1.30]],0.026);
    const mkGlass=(rt,sx)=>{
     const housing=new THREE.Mesh(new THREE.BoxGeometry(0.17,0.10,0.025),hMat);housing.material=hMat.clone();housing.material.depthTest=false;
     housing.position.set(sx*0.44,0.12,-0.62);   // re-placed every frame by placeWingMirrors()

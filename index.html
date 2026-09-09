@@ -750,7 +750,7 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
   
   <div id="tFoot">
-    <span>FULLSCREEN &amp; AUDIO READY · <b id="appVersion">v1.0.0 · BUILD 20260909.4</b></span>
+    <span>FULLSCREEN &amp; AUDIO READY · <b id="appVersion">v1.0.0 · BUILD 20260909.6</b></span>
     <button id="tFootFs" class="btn-mini">⛶ FULLSCREEN</button>
     <button id="tInstall" class="btn-mini" style="display:none;">⤓ INSTALL APP</button>
   </div>
@@ -1052,7 +1052,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <script>
 (function(){
-  const APP_VERSION='v1.0.0 · BUILD 20260909.4';
+  const APP_VERSION='v1.0.0 · BUILD 20260909.6';
   window.POLYGON_GP_VERSION=APP_VERSION;
   const panel=document.getElementById('runtimeErrorPanel');
   const output=document.getElementById('runtimeErrorText');
@@ -1100,7 +1100,7 @@ addEventListener('beforeinstallprompt',e=>{e.preventDefault();__pgpInstall=e;con
 addEventListener('DOMContentLoaded',()=>{const b=document.getElementById('tInstall');if(b)b.onclick=async()=>{if(!__pgpInstall)return;__pgpInstall.prompt();await __pgpInstall.userChoice;__pgpInstall=null;b.style.display='none';};});
 addEventListener('appinstalled',()=>{const b=document.getElementById('tInstall');if(b)b.style.display='none';});
 </script>
-<script type="module" src="/src/game.js?rain=20260909.4"></script>
+<script type="module" src="/src/game.js?rain=20260909.6"></script>
 </body>
 </html>
 
