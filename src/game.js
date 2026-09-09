@@ -35,7 +35,7 @@ function fmtG(t){const n=Number(t);return Number.isFinite(n)?'+'+safeFixed(n,3):
 // rendering decisions (ground resolution, prop density, rain shader, etc.).
 function effQuality(){ return (qualityMgr&&qualityMgr.resolvedLevel)?qualityMgr.resolvedLevel():state.quality; }
 
-const state={mode:'boot',trackIdx:0,wx:'sun',tod:'day',laps:3,grid:20,diffMul:0.97,name:'YOU',driverPhoto:'',camMode:0,muted:false,paused:false,zoom: 52,quality:'AUTO',ruleset:'basic'};
+const state={mode:'boot',trackIdx:0,wx:'sun',tod:'day',laps:3,grid:20,diffMul:0.97,name:'YOU',driverPhoto:'',camMode:0,muted:false,paused:false,zoom: 52,quality:'AUTO',ruleset:'basic',showFps:true};
 // Race control is intentionally a preset rather than a hidden difficulty
 // multiplier. BASIC keeps the forgiving arcade experience; SPORTING adds the
 // most visible stewarding; FULL FIA enables the complete optional rule layer.
@@ -1438,7 +1438,7 @@ function updClouds(dt){
 
 /* ============ birds ============ */
 const birds=[];
-let flybyPlane=null,planeTimer=rand(45,105);
+let flybyPlane=null,planeTimer=rand(6,14);
 function makeFlybyPlane(){
  const g=new THREE.Group();
  const bodyMat=new THREE.MeshStandardMaterial({color:0xe8edf2,roughness:.32,metalness:.55});
@@ -1451,7 +1451,7 @@ function makeFlybyPlane(){
  g.add(new THREE.Mesh(delta,accentMat));
  const tail=new THREE.Mesh(new THREE.BoxGeometry(2.35,.07,.55),accentMat);tail.position.z=-2.30;g.add(tail);
  for(const sx of[-1,1]){const fin=new THREE.Mesh(new THREE.BoxGeometry(.08,1.05,.75),accentMat);fin.position.set(sx*.28,.50,-2.20);fin.rotation.z=sx*.12;g.add(fin);}
- g.userData.bodyMat=bodyMat;g.userData.accentMat=accentMat;g.visible=false;scene.add(g);return g;
+ g.scale.set(1.85,1.85,1.85);g.userData.bodyMat=bodyMat;g.userData.accentMat=accentMat;g.visible=false;scene.add(g);return g;
 }
 function updFlybyPlane(dt){
  if(!flybyPlane)flybyPlane=makeFlybyPlane();
@@ -1460,24 +1460,31 @@ function updFlybyPlane(dt){
   const side=rand(-36,36),fx=Math.sin(a),fz=Math.cos(a),rx=Math.cos(a),rz=-Math.sin(a);
   // Start behind the driver's view and thunder over the pack into the screen,
   // then disappear down-track. This makes the fly-by an event, not a distant toy.
-  flybyPlane.position.set(px-fx*230+rx*side,(player?player.y:0)+rand(44,64),pz-fz*230+rz*side);
-  const speed=rand(185,235);flybyPlane.userData.vx=fx*speed;flybyPlane.userData.vz=fz*speed;flybyPlane.userData.smokeAcc=0;
+  flybyPlane.position.set(px-fx*170+rx*side,(player?player.y:0)+rand(26,40),pz-fz*170+rz*side);
+  const speed=rand(210,275);flybyPlane.userData.vx=fx*speed;flybyPlane.userData.vz=fz*speed;flybyPlane.userData.smokeAcc=0;flybyPlane.userData.audioPlayed=false;
   const schemes=[[0xd71920,0xffffff,0x2456d8],[0xff6a00,0xffffff,0x22a447],[0x8b2be2,0xffffff,0x00c8e8]];
   const scheme=pick(schemes);flybyPlane.userData.smoke=scheme.map(c=>new THREE.Color(c));
   flybyPlane.userData.bodyMat.color.set(pick([0xf2f4f7,0x202936,0xf0c419,0x39a7d8]));flybyPlane.userData.accentMat.color.set(scheme[0]);
   flybyPlane.rotation.y=a;flybyPlane.visible=true;
-  if(AudioSys.started)AudioSys.jetFlyby(1.45);
+  // Audio is triggered again as it nears the player below, so the roar lines up with the overflight.
  }
  flybyPlane.position.x+=flybyPlane.userData.vx*dt;flybyPlane.position.z+=flybyPlane.userData.vz*dt;
- // Red-Arrows-style three-colour smoke from three outlets. It hangs and
- // expands after the jet has gone, forming a long, readable vapour ribbon.
- flybyPlane.userData.smokeAcc+=dt;
- if(flybyPlane.userData.smokeAcc>.025){flybyPlane.userData.smokeAcc=0;
-  const a=flybyPlane.rotation.y,rx=Math.cos(a),rz=-Math.sin(a),fx=Math.sin(a),fz=Math.cos(a);
-  for(let i=0;i<3;i++){const off=(i-1)*.24,col=flybyPlane.userData.smoke[i];
-   smk(flybyPlane.position.x-fx*2.7+rx*off,flybyPlane.position.y,flybyPlane.position.z-fz*2.7+rz*off,-fx*2,rand(-.05,.18),-fz*2,rand(1.1,1.6),rand(4.5,7),col.r,col.g,col.b,.02);}
+ const px=player?player.x:0,pz=player?player.z:0;
+ const dToPlayer=Math.hypot(flybyPlane.position.x-px,flybyPlane.position.z-pz);
+ if(!flybyPlane.userData.audioPlayed&&dToPlayer<360){
+  flybyPlane.userData.audioPlayed=true;
+  if(AudioSys&&AudioSys.started)AudioSys.jetFlyby(2.2);
  }
- const px=player?player.x:0,pz=player?player.z:0;if(Math.hypot(flybyPlane.position.x-px,flybyPlane.position.z-pz)>1050){flybyPlane.visible=false;planeTimer=rand(65,145);}
+ // Subtle display smoke/vapour: visible enough to notice, but no thick hanging
+ // cartoon ropes. It expands and fades slowly via the particle life/grow pass.
+ flybyPlane.userData.smokeAcc+=dt;
+ if(flybyPlane.userData.smokeAcc>.055){flybyPlane.userData.smokeAcc=0;
+  const a=flybyPlane.rotation.y,rx=Math.cos(a),rz=-Math.sin(a),fx=Math.sin(a),fz=Math.cos(a);
+  for(let i=0;i<3;i++){const off=(i-1)*.34,col=flybyPlane.userData.smoke[i];
+   const tint=new THREE.Color(0xdde7ef).lerp(col,0.18);
+   smk(flybyPlane.position.x-fx*4.2+rx*off,flybyPlane.position.y,flybyPlane.position.z-fz*4.2+rz*off,-fx*2.4,rand(-.02,.08),-fz*2.4,rand(0.75,1.18),rand(8.0,12.5),tint.r,tint.g,tint.b,.045);}
+ }
+ if(dToPlayer>900){flybyPlane.visible=false;planeTimer=rand(18,36);}
 }
 function makeBirds(){
  const feather=new THREE.MeshStandardMaterial({color:0x252a31,roughness:0.92,side:THREE.DoubleSide});
@@ -2531,22 +2538,28 @@ function buildWorld(idx){
  // 5. (removed — the raised catch-fence girders that used to line the track
  //     here are gone; the low red/white barrier ribbon remains as the boundary)
 
- // 6. Grid Starting Slots
+ // 6. Grid Starting Slots — FIA-style upside-down U boxes.
  {
-  const slotM=new THREE.MeshBasicMaterial({color:0xf4f1ea,transparent:true,opacity:0.85,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2});
-  const barG=new THREE.PlaneGeometry(2.2,0.14).rotateX(-Math.PI/2);
-  const stemG=new THREE.PlaneGeometry(0.14,1.4).rotateX(-Math.PI/2);
-  const ib=new THREE.InstancedMesh(barG,slotM,20),ist=new THREE.InstancedMesh(stemG,slotM,20);
-  const dm=new THREE.Object3D();
+  const slotM=new THREE.MeshBasicMaterial({color:0xf4f1ea,transparent:true,opacity:0.88,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2});
+  const barG=new THREE.PlaneGeometry(2.35,0.12).rotateX(-Math.PI/2);
+  const sideG=new THREE.PlaneGeometry(0.12,1.72).rotateX(-Math.PI/2);
+  const bars=new THREE.InstancedMesh(barG,slotM,20),sides=new THREE.InstancedMesh(sideG,slotM,40);
+  const dm=new THREE.Object3D();let si=0;
+  const setPart=(mesh,idx,x,z,yaw,xOff,zOff)=>{
+   const wx=x+_sn.x*xOff+_st.x*zOff,wz=z+_sn.z*xOff+_st.z*zOff;
+   dm.position.set(wx,_sv.y+0.132,wz);dm.rotation.set(0,yaw,0);dm.updateMatrix();mesh.setMatrixAt(idx,dm.matrix);
+  };
   for(let i=0;i<20;i++){
    const f=T.N-14-i*3.6,lat=(i%2?3:-3)*0.95;
    sampleF(f);
    const yaw=Math.atan2(_st.x,_st.z);
    const x=_sv.x+_sn.x*lat,z=_sv.z+_sn.z*lat;
-   dm.position.set(x,_sv.y+0.13,z);dm.rotation.set(0,yaw,0);dm.updateMatrix();ib.setMatrixAt(i,dm.matrix);
-   dm.position.set(x-_st.x*0.9,_sv.y+0.13,z-_st.z*0.9);dm.updateMatrix();ist.setMatrixAt(i,dm.matrix);
+   // open end faces the approaching car; crossbar is at the nose end.
+   setPart(bars,i,x,z,yaw,0,0.88);
+   setPart(sides,si++,x,z,yaw,-1.12,0.02);
+   setPart(sides,si++,x,z,yaw, 1.12,0.02);
   }
-  ib.renderOrder=1;ist.renderOrder=1;world.add(ib,ist);
+  bars.renderOrder=1;sides.renderOrder=1;world.add(bars,sides);
  }
 
  // 7. Start/Finish Gantry & Overhead Lights
@@ -3014,12 +3027,13 @@ function buildWorld(idx){
    world.add(tufts);
   }
  }
- // 10. Trees & Scenery (Far away from track edges) — three distinct species
- // (conifer / round broadleaf / slender poplar) mixed by theme, instead of
- // one repeated cone, so the scenery doesn't look so uniform.
+ // 10. Trees & Scenery (Far away from track edges) — distinct species, never
+ // visually mashed together. Pines/conifers stay as their own family; normal
+ // round broadleaf trees stay separate, with spacing rules below preventing
+ // the old pine-plus-leaf-tree hybrid silhouette.
  {
   const nT=Math.round((groundStyle==='grass'?(def.theme==='forest'?900:def.theme==='park'?520:180):0)*propDensity);
-  const weights=def.theme==='forest'?[0.55,0.3,0.15]:[0.2,0.55,0.25];
+  const weights=def.theme==='forest'?[0.74,0.22,0.04]:[0.00,0.88,0.12];
   const txGeo=(g,x,y,z,sx=1,sy=1,sz=1)=>{
    // Normalise attribute/index layout before mergeGeometries. Some Three.js
    // primitives (notably Icosahedron vs Cone) differ by uv/index attributes;
@@ -3031,27 +3045,37 @@ function buildWorld(idx){
    return g;
   };
   const treeGeo={
+   // Proper pine: tiered needles only. No round leafy blob is merged into this
+   // geometry, so it can never read as a pine with a normal tree head stuck on.
    conifer:mergeGeometries([
-    txGeo(new THREE.ConeGeometry(2.35,3.6,8),0,-0.55,0,1.08,1,1.08),
-    txGeo(new THREE.ConeGeometry(1.85,3.35,8),0,1.05,0,1,1,1),
-    txGeo(new THREE.ConeGeometry(1.22,2.75,8),0,2.45,0,1,1,1)
+    txGeo(new THREE.ConeGeometry(2.30,2.55,10),0,-0.35,0,1.10,1,1.10),
+    txGeo(new THREE.ConeGeometry(1.88,2.40,10),0,0.75,0,1.04,1,1.04),
+    txGeo(new THREE.ConeGeometry(1.45,2.10,10),0,1.72,0,0.98,1,0.98),
+    txGeo(new THREE.ConeGeometry(0.95,1.65,10),0,2.54,0,0.92,1,0.92)
    ],false),
+   // Round deciduous tree: several overlapping low-poly foliage lobes give it
+   // the earlier richer look, but it remains one shared instanced geometry.
    broadleaf:mergeGeometries([
-    txGeo(new THREE.IcosahedronGeometry(1.85,1),0,0.55,0,1.12,.9,1.0),
-    txGeo(new THREE.IcosahedronGeometry(1.35,1),-1.05,0.25,.15,1,.82,.9),
-    txGeo(new THREE.IcosahedronGeometry(1.30,1),1.02,0.15,-.10,.95,.86,1),
-    txGeo(new THREE.IcosahedronGeometry(1.10,1),.12,1.48,.08,.9,.75,.9)
+    txGeo(new THREE.IcosahedronGeometry(1.65,2),0,0.58,0,1.18,.82,1.05),
+    txGeo(new THREE.IcosahedronGeometry(1.25,1),-1.02,0.32,.20,1.05,.76,.92),
+    txGeo(new THREE.IcosahedronGeometry(1.22,1),1.02,0.24,-.18,1.00,.78,.95),
+    txGeo(new THREE.IcosahedronGeometry(1.10,1),-.28,1.20,-.10,.92,.70,.86),
+    txGeo(new THREE.IcosahedronGeometry(1.00,1),.48,1.28,.18,.86,.68,.82),
+    txGeo(new THREE.IcosahedronGeometry(0.86,1),.05,1.82,.05,.78,.58,.76)
    ],false),
+   // Slender deciduous column, still leafy only — no cone hybrid.
    poplar:mergeGeometries([
-    txGeo(new THREE.ConeGeometry(1.08,5.6,7),0,0.2,0,.95,1,1.05),
-    txGeo(new THREE.IcosahedronGeometry(1.05,1),0,2.8,0,.82,1.35,.82)
+    txGeo(new THREE.IcosahedronGeometry(1.00,1),0,0.30,0,.62,1.28,.62),
+    txGeo(new THREE.IcosahedronGeometry(0.94,1),0,1.20,0,.58,1.36,.58),
+    txGeo(new THREE.IcosahedronGeometry(0.82,1),0,2.08,0,.50,1.28,.50),
+    txGeo(new THREE.IcosahedronGeometry(0.62,1),0,2.82,0,.42,1.05,.42)
    ],false)
   };
   for(const g of Object.values(treeGeo)){g.computeVertexNormals();}
   const species=[
-   {canopyGeo:treeGeo.conifer,canopyY:2.7,canopyScaleY:1,trunkH:2.6,trunkR0:0.28,trunkR1:0.52,trunkColor:0x6b4a2f,hue:[0.26,0.36],sat:[0.4,0.62],light:[0.22,0.36]},
-   {canopyGeo:treeGeo.broadleaf,canopyY:3.05,canopyScaleY:0.95,trunkH:2.4,trunkR0:0.28,trunkR1:0.48,trunkColor:0x5c4530,hue:[0.22,0.32],sat:[0.45,0.68],light:[0.28,0.44]},
-   {canopyGeo:treeGeo.poplar,canopyY:4.15,canopyScaleY:1,trunkH:3.9,trunkR0:0.2,trunkR1:0.34,trunkColor:0xcbc0a8,hue:[0.21,0.29],sat:[0.4,0.6],light:[0.3,0.42]},
+   {canopyGeo:treeGeo.conifer,canopyY:2.95,canopyScaleY:1,trunkH:3.0,trunkR0:0.24,trunkR1:0.44,trunkColor:0x5e3d27,hue:[0.27,0.38],sat:[0.44,0.66],light:[0.20,0.34]},
+   {canopyGeo:treeGeo.broadleaf,canopyY:2.95,canopyScaleY:0.98,trunkH:2.55,trunkR0:0.30,trunkR1:0.50,trunkColor:0x5c4530,hue:[0.22,0.33],sat:[0.48,0.72],light:[0.27,0.45]},
+   {canopyGeo:treeGeo.poplar,canopyY:2.55,canopyScaleY:1,trunkH:3.2,trunkR0:0.18,trunkR1:0.30,trunkColor:0x7a5a38,hue:[0.21,0.31],sat:[0.42,0.62],light:[0.28,0.42]},
   ];
   const canopyMeshes=[],trunkMeshes=[],branchMeshes=[];
   for(const sp of species){
@@ -3062,15 +3086,20 @@ function buildWorld(idx){
    canopyMeshes.push(canopy);trunkMeshes.push(trunk);branchMeshes.push(branches);
   }
   let k=0,tries=0;
+  const placedTrees=[];
   const speciesIdx=()=>{const r=Math.random();let acc=0;for(let i=0;i<weights.length;i++){acc+=weights[i];if(r<=acc)return i;}return weights.length-1;};
   // Scatter in a band alongside the track itself (by picking a point along
   // the lap and offsetting laterally a bounded amount) rather than uniformly
   // across the whole huge bounding square — otherwise nearly everything
   // lands far from the road, leaving a wide empty margin right beside it.
-  while(k<nT&&tries<4000){tries++;
+  while(k<nT&&tries<nT*14){tries++;
+   const si=speciesIdx(),sp=species[si],canopy=canopyMeshes[si],trunk=trunkMeshes[si],branches=branchMeshes[si];
    const ts=samples[Math.floor(Math.random()*N)];
    const side=Math.random()<0.5?1:-1;
-   const lat=rand(T.latLimit+3,T.latLimit+55);
+   // Keep pines and leafy trees in subtly different bands on non-forest tracks,
+   // and never place different species close enough to merge in silhouette.
+   const near=T.latLimit+(si===0?10:3),far=T.latLimit+(si===0?62:48);
+   const lat=rand(near,far);
    const x=ts.p.x+ts.n.x*lat*side,z=ts.p.z+ts.n.z*lat*side;
    // The offset above only guarantees clearance from THIS sample's own
    // stretch of track — at a hairpin or chicane, that same (x,z) can still
@@ -3078,15 +3107,22 @@ function buildWorld(idx){
    // back nearby. Validate against the true closest point on the whole
    // track before accepting it.
    if(minTrackDist(x,z)<T.latLimit+4)continue;
-   const si=speciesIdx(),sp=species[si],canopy=canopyMeshes[si],trunk=trunkMeshes[si],branches=branchMeshes[si];
-   const s=rand(0.7,1.7),yaw=rand(0,6);
-   const elevation=getTrackHAtCoords(x,z);
+   let tooClose=false;
+   for(const pt of placedTrees){
+    const dx=pt.x-x,dz=pt.z-z;
+    const minD=pt.si===si?7.0:15.0;
+    if(dx*dx+dz*dz<minD*minD){tooClose=true;break;}
+   }
+   if(tooClose)continue;
+   const s=rand(0.78,1.58),yaw=rand(0,6);
+   const elevation=terrainHeightAt(x,z);
    const ci=canopy.count;
    dummy.position.set(x,elevation+sp.canopyY*s,z);dummy.rotation.set(rand(-.025,.025),yaw,rand(-.04,.04));dummy.scale.set(s,s*sp.canopyScaleY,s);dummy.updateMatrix();
    canopy.setMatrixAt(ci,dummy.matrix);
    const c=new THREE.Color().setHSL(rand(sp.hue[0],sp.hue[1]),rand(sp.sat[0],sp.sat[1]),rand(sp.light[0],sp.light[1]));
    canopy.setColorAt(ci,c);
    canopy.count++;
+   placedTrees.push({x,z,si});
    dummy.position.set(x,elevation+sp.trunkH*0.5*s-0.1,z);dummy.rotation.set(0,yaw,0);dummy.scale.set(s,s*0.9,s);dummy.updateMatrix();
    trunk.setMatrixAt(trunk.count,dummy.matrix);trunk.count++;
    // Two cheap diagonal branch strokes break the old cone-on-a-stick silhouette
@@ -3862,12 +3898,12 @@ function projectCar(c,full){
  c.f=(bi+along/T.segLen+N)%N;
  c.lat=dx*s.n.x+dz*s.n.z;
  const al=Math.abs(c.lat);
- c.offT=al>T.halfW+1.4;
+ c.offT=al>T.halfW+2.2;
  // The painted kerb is the outer metre of tarmac (matching the rendered
  // strip), not an invisible band floating in the run-off — and it only
  // exists in actual kerb zones (corners); straights carry a flat painted
  // line now, so no kerb grip/rumble where no kerb is drawn.
- c.onCurb=al>T.halfW-1.0&&al<=T.halfW+0.08&&(!T.kerbMask||T.kerbMask[c.ti|0]);
+ c.onCurb=al>T.halfW-0.85&&al<=T.halfW+0.18&&(!T.kerbMask||T.kerbMask[c.ti|0]);
 }
 
 /* ============ physics ============ */
@@ -4360,7 +4396,7 @@ function updCar(c,dt){
  // Painted kerbs retain reasonable grip when dry but become properly slick in
  // rain: at full wetness they provide roughly a third of normal-road grip.
  const onCurbSlip=(c.onCurb&&cur.wet>0.2)?(1-cur.wet*0.58):1;
- const surface=c.onGravel?0.22:(c.offT?0.45:(c.onCurb?0.78*(feel.kerb||1):1));
+ const surface=c.onGravel?0.22:(c.offT?(c.isPlayer?0.62:0.45):(c.onCurb?0.86*(feel.kerb||1):1));
  // Banked corners genuinely help: the camber turns part of the car's weight
  // into cornering force, so a banked bowl can be taken meaningfully faster
  // than a flat corner of the same radius (capped ≈ +35% at Zandvoort-grade
@@ -4387,7 +4423,12 @@ function updCar(c,dt){
   }
  }
  const dmg=c.crash>0?(1-0.42*Math.min(c.crash/c.crashMax,1)):1;
- const top=PH.top*(c.isPlayer?0.975:(0.86+c.d.skill*0.13))*dmg*(feel.top||1);
+ // Circuit personality should not feel like an invisible speed limiter for
+ // the player. Tight sections can still be bumpy/grippy/risky, but a driver
+ // holding it flat should not feel the car randomly bog because a local zone
+ // had a low `top` value. Keep extreme local top-speed cuts for AI only.
+ const localTop=c.isPlayer?clamp(feel.top||1,0.94,1.06):(feel.top||1);
+ const top=PH.top*(c.isPlayer?1.05:(0.86+c.d.skill*0.13))*dmg*localTop;
  const sp0=c.vF;
  /* steering → yaw rate (speed-sensitive, grip-limited, no assists) */
  const base=3.2-1.9*clamp(Math.abs(sp0)/PH.top,0,1);
@@ -4413,10 +4454,19 @@ function updCar(c,dt){
   else if(vF>-11)aF-=8; /* reverse */
  }
  const slipMul=c.slipstream?Math.max(0.72,1-0.15*(feel.slip||1)):1;
- const k=PH.drag*(feel.drag||1)*(c.drsOpen?0.78:1)*slipMul;
- aF-=k*vF*Math.abs(vF)+vF*0.045;
- if(c.offT)aF-=vF*0.14;
+ const k=PH.drag*(feel.drag||1)*(c.drsOpen?0.78:1)*slipMul*(c.isPlayer?0.86:1);
+ aF-=k*vF*Math.abs(vF)+vF*(c.isPlayer?0.030:0.045);
+ if(c.offT)aF-=vF*(c.isPlayer?0.040:0.14);
  if(c.onGravel)aF-=Math.min(60,Math.abs(vF))*0.55; /* gravel traps dig in hard */
+ // Player straight-line feel: if the throttle is pinned and the car is not
+ // actually in gravel, never let tiny drag/local-surface corrections create a
+ // surprise deceleration well below top speed. It can still plateau near vmax,
+ // but it should not feel like an invisible handbrake down a straight.
+ if(c.isPlayer&&c.throttle>0.85&&!c.onGravel&&vF>18){
+  const kmhNow=vF*3.6;
+  const urge=clamp((365-kmhNow)/120,0,1);
+  aF=Math.max(aF,0.75*urge);
+ }
  vF+=aF*dt;
  if(c.throttle===0&&c.brake===0&&Math.abs(vF)<0.15)vF=0;
  /* lateral tyre grip pulls velocity toward the nose */
@@ -5100,21 +5150,21 @@ const AudioSys={started:false,
   const ng=this.ctx.createGain();ng.gain.setValueAtTime(Math.min(0.6,0.2+strength*0.5),t);
   ng.gain.exponentialRampToValueAtTime(0.001,t+0.35);
   n.connect(f);f.connect(ng);ng.connect(this.master);n.start(t);n.stop(t+0.4);},
- jetFlyby(strength=1){if(!this.started)return;const t=this.ctx.currentTime,ctx=this.ctx;
+ jetFlyby(strength=1){if(!this.started)return;try{if(this.ctx.state==='suspended')this.ctx.resume();}catch(e){}const t=this.ctx.currentTime,ctx=this.ctx;
   // Incoming jet pass: rising turbine scream, low body rumble, broadband roar,
   // and a short delayed pressure thump after the aircraft has crossed overhead.
   const n=ctx.createBufferSource();n.buffer=this.noiseBuf;n.loop=true;
   const f=ctx.createBiquadFilter();f.type='bandpass';f.frequency.setValueAtTime(260,t);f.frequency.exponentialRampToValueAtTime(2600,t+1.9);f.frequency.exponentialRampToValueAtTime(520,t+5.8);f.Q.value=.72;
-  const g=ctx.createGain();g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.18*strength,t+.45);g.gain.exponentialRampToValueAtTime(.82*strength,t+1.95);g.gain.exponentialRampToValueAtTime(.0001,t+6.2);
+  const g=ctx.createGain();g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.24*strength,t+.35);g.gain.exponentialRampToValueAtTime(1.05*strength,t+1.45);g.gain.exponentialRampToValueAtTime(.0001,t+6.2);
   const scream=ctx.createOscillator();scream.type='sawtooth';scream.frequency.setValueAtTime(310,t);scream.frequency.exponentialRampToValueAtTime(1180,t+1.8);scream.frequency.exponentialRampToValueAtTime(210,t+5.5);
   const sf=ctx.createBiquadFilter();sf.type='bandpass';sf.frequency.setValueAtTime(900,t);sf.frequency.exponentialRampToValueAtTime(3600,t+1.8);sf.frequency.exponentialRampToValueAtTime(780,t+5.5);sf.Q.value=3.2;
-  const sg=ctx.createGain();sg.gain.setValueAtTime(.0001,t);sg.gain.exponentialRampToValueAtTime(.16*strength,t+1.6);sg.gain.exponentialRampToValueAtTime(.0001,t+5.9);
+  const sg=ctx.createGain();sg.gain.setValueAtTime(.0001,t);sg.gain.exponentialRampToValueAtTime(.24*strength,t+1.35);sg.gain.exponentialRampToValueAtTime(.0001,t+5.9);
   const low=ctx.createOscillator();low.type='sine';low.frequency.setValueAtTime(38,t);low.frequency.exponentialRampToValueAtTime(94,t+1.9);low.frequency.exponentialRampToValueAtTime(31,t+6.0);
-  const lg=ctx.createGain();lg.gain.setValueAtTime(.0001,t);lg.gain.exponentialRampToValueAtTime(.30*strength,t+1.95);lg.gain.exponentialRampToValueAtTime(.0001,t+6.4);
+  const lg=ctx.createGain();lg.gain.setValueAtTime(.0001,t);lg.gain.exponentialRampToValueAtTime(.42*strength,t+1.55);lg.gain.exponentialRampToValueAtTime(.0001,t+6.4);
   n.connect(f);f.connect(g);g.connect(this.master);scream.connect(sf);sf.connect(sg);sg.connect(this.master);low.connect(lg);lg.connect(this.master);
   n.start(t);scream.start(t);low.start(t);n.stop(t+6.5);scream.stop(t+6.5);low.stop(t+6.5);
   const boom=ctx.createOscillator();boom.type='sine';boom.frequency.setValueAtTime(72,t+2.05);boom.frequency.exponentialRampToValueAtTime(24,t+2.55);
-  const bg=ctx.createGain();bg.gain.setValueAtTime(.0001,t+2.02);bg.gain.exponentialRampToValueAtTime(.32*strength,t+2.08);bg.gain.exponentialRampToValueAtTime(.0001,t+2.75);
+  const bg=ctx.createGain();bg.gain.setValueAtTime(.0001,t+2.02);bg.gain.exponentialRampToValueAtTime(.46*strength,t+2.08);bg.gain.exponentialRampToValueAtTime(.0001,t+2.75);
   boom.connect(bg);bg.connect(this.master);boom.start(t+2.02);boom.stop(t+2.8);},
  update(){if(!this.started)return;
   const t=this.ctx.currentTime;
@@ -5423,13 +5473,28 @@ function carLookY(c,lift=1.0){
  return Math.max(p.y+lift,cameraSurfaceY(c.x,c.z)+lift*0.72);
 }
 function beginCrashCamera(c){
+ if(helmOverlay)helmOverlay.visible=false;
+ camTransition.active=false;
+ if(c&&c.mesh){
+  // If the player crashed while in HELMET cam, undo helmet-only visibility
+  // overrides immediately so the crash camera never keeps the cockpit halo
+  // overlay stuck on-screen or shows a half-hidden car.
+  if(c.mesh.halo)c.mesh.halo.visible=true;
+  if(c.mesh.body)c.mesh.body.visible=true;
+  if(c.mesh.axleF)c.mesh.axleF.visible=true;
+  if(c.mesh.axleR)c.mesh.axleR.visible=true;
+  if(c.mesh.brakes)c.mesh.brakes.visible=true;
+ }
  crashCam.active=true;crashCam.timer=0;crashCam.target=c;
  crashCam.from=camera.position.clone();
  const dir=new THREE.Vector3();camera.getWorldDirection(dir);
  crashCam.fromLook=camera.position.clone().add(dir.multiplyScalar(40));
 }
 function updCrashCamera(dt){
+ if(helmOverlay)helmOverlay.visible=false;
  const c=crashCam.target;
+ if(c&&c.mesh){if(c.mesh.halo)c.mesh.halo.visible=true;if(c.mesh.body)c.mesh.body.visible=true;if(c.mesh.axleF)c.mesh.axleF.visible=true;if(c.mesh.axleR)c.mesh.axleR.visible=true;if(c.mesh.brakes)c.mesh.brakes.visible=true;}
+
  if(!c||!c.mesh){crashCam.active=false;return;}
  crashCam.timer+=dt;
  const t=clamp(crashCam.timer/crashCam.duration,0,1);
@@ -5483,6 +5548,12 @@ function cockpitFrame(speed){
 // window's aspect ratio is. They used to sit at a fixed ±0.58 m, which at a
 // 58° lens is exactly the frame edge — on most screens they were clipped
 // clean off ("where are the mirrors?").
+function setMirrorConnector(mesh,a,b){
+ if(!mesh)return;
+ const mid=a.clone().add(b).multiplyScalar(0.5),dir=b.clone().sub(a),len=dir.length()||1;
+ mesh.position.copy(mid);mesh.scale.set(1,len,1);
+ mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),dir.normalize());
+}
 function placeWingMirrors(fovDeg){
  if(!wingMirrors)return;
  const d=0.62,halfH=d*Math.tan((fovDeg||58)*Math.PI/360),halfW=halfH*camera.aspect;
@@ -5493,14 +5564,25 @@ function placeWingMirrors(fovDeg){
   // with the top of the wheel — where the real halo-mounted mirrors sit.
   m.housing.position.set(m.sx*(halfW-0.24),-halfH*0.16,-d);
   m.housing.renderOrder=30;
-  m.housing.rotation.y=-m.sx*0.22;  // angled in toward the driver a touch
+  const flex=player?clamp((player.gLat||0)*0.010+(player.steer||0)*0.006,-0.025,0.025):0;
+  m.housing.rotation.set(flex*0.20,-m.sx*0.22,m.sx*flex*0.35);  // angled in, with tiny chassis flex
+  // Visible support stalks into the cockpit/halo frame so the mirrors do not
+  // read as detached floating rectangles on helmet cam.
+  const mirrorRoot=new THREE.Vector3(m.sx*(halfW-0.30),-halfH*0.17,-d+0.01);
+  const carMount=new THREE.Vector3(m.sx*0.50,-0.60,-0.96);
+  setMirrorConnector(m.stalkA,mirrorRoot,carMount);
+  if(m.mount){m.mount.visible=true;m.mount.position.copy(carMount);m.mount.rotation.set(0,0,m.sx*0.28);}
+  if(m.stalkB)m.stalkB.visible=false;
  }
 }
 function renderWingMirrors(){
  if(!wingMirrors||!player||state.camMode!==3)return;
  const q=effQuality();
  if(q==='LOW'){
-  for(const m of wingMirrors)if(m.housing)m.housing.visible=false;
+  // LOW skips the expensive mirror scene renders, but still draw the mirror
+  // housings and their attachment arms. Hiding only the mirror boxes left the
+  // new support stalks floating with no mirrors attached.
+  for(const m of wingMirrors){if(m.housing)m.housing.visible=true;if(m.stalkA)m.stalkA.visible=true;if(m.stalkB)m.stalkB.visible=false;if(m.mount)m.mount.visible=true;}
   return;
  }
  const p=player,pp=p.mesh.g.position,yaw=p.hdg;
@@ -5547,7 +5629,24 @@ function updatePlayerSteeringDisplay(p,sp,sp01,forceDraw=false){
   tyre:Math.round(92+(p.onCurb?8:0)+sp01*12),drawLcd:forceDraw||state.camMode===1||state.camMode===2||state.camMode===3
  });
 }
+function restoreHelmetCamOverrides(c){
+ if(!c||!c.mesh)return;
+ if(c.mesh.halo)c.mesh.halo.visible=true;
+ if(c.mesh.body)c.mesh.body.visible=true;
+ if(c.mesh.axleF)c.mesh.axleF.visible=true;
+ if(c.mesh.axleR)c.mesh.axleR.visible=true;
+ if(c.mesh.brakes)c.mesh.brakes.visible=true;
+ // Put the yoke back where the shared car visual update expects it. Helmet cam
+ // lowers it only for that render, so any non-helmet/title/demo camera must not
+ // inherit the temporary position.
+ if(c.mesh.steering)c.mesh.steering.position.set(0,0.80,0.62);
+}
 function updCamera(dt){
+ const helmetLive=!!(player&&!demoOn&&state.mode!=='title'&&state.camMode===3&&!crashCam.active);
+ if(!helmetLive){
+  if(helmOverlay){helmOverlay.visible=false;helmOverlay.position.set(0,0,0);helmOverlay.rotation.set(0,0,0);}
+  restoreHelmetCamOverrides(player);
+ }
  if(crashCam.active){updCrashCamera(dt);return;}
  camera.up.set(0,1,0);
  if(!player||state.mode==='title'||demoOn){
@@ -5730,11 +5829,16 @@ function updCamera(dt){
  const suit=p.mesh.driverGroup&&p.mesh.driverGroup.userData.suit;
  if(suit)suit.visible=state.camMode!==3;
  const helm=state.camMode===3;
- if(p.mesh.steering)p.mesh.steering.visible=true;
+ if(p.mesh.steering){
+  p.mesh.steering.visible=true;
+  if(!helm)p.mesh.steering.position.set(0,0.80,0.62);
+ }
  if(p.mesh.halo)p.mesh.halo.visible=true;
  if(p.mesh.body)p.mesh.body.visible=true;
+ if(p.mesh.axleF)p.mesh.axleF.visible=!helm;
+ if(p.mesh.axleR)p.mesh.axleR.visible=!helm;
  if(p.mesh.drs)p.mesh.drs.visible=true;
- if(p.mesh.brakes)p.mesh.brakes.visible=true;
+ if(p.mesh.brakes)p.mesh.brakes.visible=!helm;
  if(p.mesh.brakeLight)p.mesh.brakeLight.visible=true;
  if(p.mesh.tailGlow)p.mesh.tailGlow.visible=!helm;
  if(helmOverlay)helmOverlay.visible=helm;
@@ -5805,16 +5909,24 @@ function updCamera(dt){
   // this camera hides only the player's physical halo and uses a camera-space
   // halo frame. That guarantees the view is through the open gap down to the
   // top of the dashboard without altering any other camera mode.
-  const eye=new THREE.Vector3(0,0.93,-0.12).applyMatrix4(p.mesh.g.matrixWorld);
-  const look=new THREE.Vector3(p.steer*0.10,0.82+nod*0.08,12.5).applyMatrix4(p.mesh.g.matrixWorld);
+  // Keep the driver's hardware in the LOWER part of the image, but do NOT
+  // delete the car. The previous attempt hid the body shell and made the view
+  // look like a floating wheel/tyre rig. Helmet cam now keeps the monocoque/nose
+  // visible, hides only the oversized world halo/front axle for this view, and
+  // lowers the yoke so the halo gap stays open above the dash.
+  const eye=new THREE.Vector3(0,1.02,-0.24).applyMatrix4(p.mesh.g.matrixWorld);
+  const look=new THREE.Vector3(p.steer*0.07,1.14+nod*0.05,18.0).applyMatrix4(p.mesh.g.matrixWorld);
   camera.position.set(eye.x+Math.sin(timeSec*49.7+p.phase)*buzz,eye.y,eye.z);
   camera.up.set(0,1,0);
   camera.lookAt(look.x,look.y,look.z);
-  camera.rotateZ(lean*0.13+p.steer*0.018);
-  tf=74;
-  if(p.mesh.steering)p.mesh.steering.visible=true;
+  camera.rotateZ(lean*0.10+p.steer*0.012);
+  tf=78;
+  if(p.mesh.steering){p.mesh.steering.visible=true;p.mesh.steering.position.set(0,0.58,0.64);}
   if(p.mesh.halo)p.mesh.halo.visible=false;
   if(p.mesh.body)p.mesh.body.visible=true;
+  if(p.mesh.axleF)p.mesh.axleF.visible=false;
+  if(p.mesh.axleR)p.mesh.axleR.visible=false;
+  if(p.mesh.brakes)p.mesh.brakes.visible=false;
   if(helmOverlay&&helmOverlay.userData.v!==11){camera.remove(helmOverlay);helmOverlay=null;helmWheel=null;wingMirrors=null;}
   if(!helmOverlay){
    helmOverlay=new THREE.Group();helmOverlay.userData.v=11;
@@ -5836,8 +5948,8 @@ function updCamera(dt){
     const m=new THREE.Mesh(new THREE.TubeGeometry(curve,28,r,8,false),haloMat);
     m.renderOrder=35;m.frustumCulled=false;helmOverlay.add(m);return m;
    };
-   addHaloTube([[-0.98,-0.54,-1.04],[-0.66,-0.20,-0.92],[-0.34,0.03,-0.88],[0,0.105,-0.86],[0.34,0.03,-0.88],[0.66,-0.20,-0.92],[0.98,-0.54,-1.04]],0.023);
-   addHaloTube([[0,0.105,-0.86],[0,0.02,-0.98],[0,-0.12,-1.12],[0,-0.27,-1.30]],0.026);
+   addHaloTube([[-1.04,-0.66,-1.08],[-0.70,-0.30,-0.96],[-0.36,-0.055,-0.90],[0,0.035,-0.88],[0.36,-0.055,-0.90],[0.70,-0.30,-0.96],[1.04,-0.66,-1.08]],0.018);
+   addHaloTube([[0,0.035,-0.88],[0,-0.08,-1.02],[0,-0.22,-1.18],[0,-0.38,-1.36]],0.020);
    const mkGlass=(rt,sx)=>{
     const housing=new THREE.Mesh(new THREE.BoxGeometry(0.17,0.10,0.025),hMat);housing.material=hMat.clone();housing.material.depthTest=false;
     housing.position.set(sx*0.44,0.12,-0.62);   // re-placed every frame by placeWingMirrors()
@@ -5850,13 +5962,36 @@ function updCamera(dt){
     glass.scale.x=-1;
     glass.position.z=0.016;housing.add(glass);
     helmOverlay.add(housing);
+    const stalkMat=hMat.clone();stalkMat.depthTest=false;
+    const stalkA=new THREE.Mesh(new THREE.CylinderGeometry(0.012,0.018,1,6),stalkMat);
+    const stalkB=new THREE.Mesh(new THREE.CylinderGeometry(0.008,0.012,1,6),stalkMat.clone());stalkB.visible=false;
+    const base=new THREE.Mesh(new THREE.BoxGeometry(0.055,0.030,0.045),stalkMat.clone());base.renderOrder=29;base.frustumCulled=false;housing.add(base);base.position.set(-sx*0.075,-0.005,-0.006);
+    const mount=new THREE.Mesh(new THREE.BoxGeometry(0.12,0.045,0.055),stalkMat.clone());mount.renderOrder=29;mount.frustumCulled=false;
+    stalkA.renderOrder=29;stalkB.renderOrder=29;stalkA.frustumCulled=false;stalkB.frustumCulled=false;helmOverlay.add(stalkA,stalkB,mount);
     const cam=new THREE.PerspectiveCamera(40,256/160,0.4,180);
-    return {rt,housing,glass,cam,sx};
+    return {rt,housing,glass,cam,sx,stalkA,stalkB,base,mount};
    };
    wingMirrors=[mkGlass(mkRt(),-1),mkGlass(mkRt(),1)];
    camera.add(helmOverlay);
   }
   helmOverlay.visible=true;
+  // The real halo and mirrors do NOT turn with the steering wheel — they are
+  // bolted to the chassis. But a totally camera-locked overlay feels dead, so
+  // give the helmet-only halo/mirror assembly subtle chassis motion from steer,
+  // lateral load, kerbs and speed buzz. This makes it feel attached to the car
+  // without incorrectly rotating it with the driver's hands.
+  const chassisFlex=clamp((p.gLat||0)*0.012+p.steer*0.010,-0.028,0.028);
+  const roadBuzz=(0.001+sp01*0.004)*(p.onCurb?2.1:1);
+  helmOverlay.position.set(
+   -chassisFlex*0.18+Math.sin(timeSec*43.1+p.phase)*roadBuzz,
+   Math.cos(timeSec*37.7+p.phase)*roadBuzz*0.55,
+   0
+  );
+  helmOverlay.rotation.set(
+   clamp((p.gLon||0)*-0.004,-0.018,0.018),
+   clamp((p.steer||0)*0.006,-0.014,0.014),
+   -chassisFlex
+  );
   placeWingMirrors(tf);
   updatePlayerSteeringDisplay(p,sp,sp01,true);
  }else if(state.camMode===1){
@@ -5900,7 +6035,16 @@ function updCamera(dt){
  if(slowMo>0&&state.camMode!==2&&state.camMode!==3)tf=Math.min(tf,46);
  if(cam.shake>0){cam.shake=Math.max(0,cam.shake-dt*1.6);
   camera.position.x+=rand(-1,1)*cam.shake*0.35;camera.position.y+=rand(-1,1)*cam.shake*0.3;}
- camera.fov=damp(camera.fov,zf(tf),8,dt);camera.updateProjectionMatrix();
+ if(camTransition.active){
+  const targetPos=camera.position.clone(),targetQuat=camera.quaternion.clone(),targetFov=zf(tf);
+  camTransition.t+=dt;
+  const u=clamp(camTransition.t/camTransition.dur,0,1),e=u*u*(3-2*u);
+  camera.position.lerpVectors(camTransition.fromPos,targetPos,e);
+  camera.quaternion.slerpQuaternions(camTransition.fromQuat,targetQuat,e);
+  camera.fov=lerp(camTransition.fromFov,targetFov,e);
+  if(u>=1)camTransition.active=false;
+ }else camera.fov=damp(camera.fov,zf(tf),8,dt);
+ camera.updateProjectionMatrix();
  // Both light and target track the car's real elevation (not a hardcoded 0),
  // so the shadow camera stays correctly aimed on hilly real-world circuits
  // instead of drifting off the actual ground and under-covering the scene.
@@ -5908,6 +6052,57 @@ function updCamera(dt){
  sunLight.target.position.set(pp.x,pp.y,pp.z);
 }
 
+
+
+/* ============ speed feeling + FPS ============ */
+const speedFxCanvas=$('speedFxCanvas'),speedFxCtx=speedFxCanvas?speedFxCanvas.getContext('2d'):null;
+let fpsAcc=0,fpsN=0,fpsShown=0,speedFxT=0;
+function sizeSpeedFx(){if(!speedFxCanvas)return;const pr=Math.min(window.devicePixelRatio||1,2);speedFxCanvas.width=Math.max(2,Math.floor(innerWidth*pr));speedFxCanvas.height=Math.max(2,Math.floor(innerHeight*pr));speedFxCanvas.style.width=innerWidth+'px';speedFxCanvas.style.height=innerHeight+'px';}
+function syncFpsVisibility(){
+ const chip=$('hFpsChip'),meter=$('hFpsMeter');
+ if(chip)chip.textContent=state.showFps?'FPS ON':'FPS OFF';
+ if(meter)meter.classList.toggle('off',!state.showFps);
+}
+function updateFpsCounter(dt){
+ fpsAcc+=1/Math.max(dt,0.0001);fpsN++;
+ if(fpsN<18)return;
+ fpsShown=Math.round(fpsAcc/fpsN);fpsAcc=0;fpsN=0;
+ const cls=fpsShown>=55?'good':fpsShown>=38?'ok':'bad';
+ const chip=$('hFpsChip');if(chip){chip.className='chip '+cls;chip.textContent=state.showFps?'FPS ON':'FPS OFF';}
+ const meter=$('hFpsMeter');if(meter){meter.textContent='FPS '+fpsShown;meter.className=cls+(state.showFps?'':' off');}
+}
+function drawSpeedSense(dt){
+ if(!speedFxCtx||!player||state.mode==='title'||state.mode==='menu'||state.mode==='boot'){if(speedFxCanvas)speedFxCanvas.style.opacity=0;return;}
+ const kmh=Math.abs(player.vF||0)*3.6;
+ const intensity=clamp((kmh-95)/190,0,1)*(player.offT?0.75:1);
+ speedFxCanvas.style.opacity=(0.06+intensity*0.38).toFixed(3);
+ const w=speedFxCanvas.width,h=speedFxCanvas.height,pr=w/Math.max(innerWidth,1);
+ speedFxCtx.clearRect(0,0,w,h);
+ if(intensity<=0.01)return;
+ speedFxT+=dt*(0.8+intensity*3.5);
+ const cx=w*0.5,cy=h*(state.camMode===3?0.48:0.53);
+ const count=Math.round(18+intensity*34);
+ speedFxCtx.save();
+ speedFxCtx.globalCompositeOperation='lighter';
+ speedFxCtx.lineCap='round';
+ for(let i=0;i<count;i++){
+  const a=(i/count)*Math.PI*2+Math.sin(speedFxT+i)*0.08;
+  const edge=0.42+0.58*((i*37.17+speedFxT*0.9)%1);
+  const r0=(Math.min(w,h)*(0.34+edge*0.12));
+  const len=(90+kmh*0.34)*pr*(0.55+((i*19.7)%1)*0.9);
+  const x0=cx+Math.cos(a)*r0,y0=cy+Math.sin(a)*r0;
+  const x1=x0+Math.cos(a)*len,y1=y0+Math.sin(a)*len;
+  const sideBias=Math.abs(Math.sin(a));
+  speedFxCtx.strokeStyle=`rgba(210,235,255,${(0.055+intensity*0.16)*sideBias})`;
+  speedFxCtx.lineWidth=(1.0+intensity*2.2)*pr;
+  speedFxCtx.beginPath();speedFxCtx.moveTo(x0,y0);speedFxCtx.lineTo(x1,y1);speedFxCtx.stroke();
+ }
+ // Subtle peripheral darkening makes flat-out feel faster without blurring HUD.
+ const g=speedFxCtx.createRadialGradient(cx,cy,Math.min(w,h)*0.18,cx,cy,Math.max(w,h)*0.78);
+ g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(1,`rgba(0,0,0,${0.10+intensity*0.20})`);
+ speedFxCtx.globalCompositeOperation='source-over';speedFxCtx.fillStyle=g;speedFxCtx.fillRect(0,0,w,h);
+ speedFxCtx.restore();
+}
 
 /* ============ HUD / minimap ============ */
 const mmCtx=$('minimap').getContext('2d');
@@ -6642,6 +6837,7 @@ addEventListener('wheel', e => {
 // scale their computed FOV target through zf(); top-down keeps its own
 // height zoom (state.zoom), which reads better there anyway.
 let camZoomF=1;
+const camTransition={active:false,t:0,dur:0.72,fromPos:new THREE.Vector3(),fromQuat:new THREE.Quaternion(),fromFov:62};
 const zf=(f)=>clamp(f*camZoomF,14,110);
 function zoomCam(dir){
  if(state.camMode===6&&(state.mode==='race'||state.mode==='finished'||demoOn)){
@@ -6650,6 +6846,8 @@ function zoomCam(dir){
  camZoomF=clamp(camZoomF*(dir>0?1.13:1/1.13),0.5,1.9);
 }
 function cycleCam(){
+ camTransition.active=true;camTransition.t=0;
+ camTransition.fromPos.copy(camera.position);camTransition.fromQuat.copy(camera.quaternion);camTransition.fromFov=camera.fov||62;
  state.camMode=(state.camMode+1)%CAM_NAMES.length;
  const n=CAM_NAMES[state.camMode];
  if($('hCam'))$('hCam').textContent=n;
@@ -6691,6 +6889,7 @@ if($('tC'))$('tC').addEventListener('pointerdown',e=>{e.preventDefault();cycleCa
 if($('hCamChip'))$('hCamChip').addEventListener('click',e=>{e.preventDefault();cycleCam();});
 // The readable HUD camera chip doubles as the touch "C" — tap to cycle views.
 if($('hCam'))$('hCam').addEventListener('click',e=>{e.preventDefault();cycleCam();});
+if($('hFpsChip'))$('hFpsChip').addEventListener('click',e=>{e.preventDefault();state.showFps=!state.showFps;syncFpsVisibility();});
 
 if($('tFs'))$('tFs').onclick=toggleFullscreen;
 if($('tFootFs'))$('tFootFs').onclick=toggleFullscreen;
@@ -7092,6 +7291,8 @@ function tick(){
  dtGlobal=state.paused?0:dt*tScale;
  // Feed the auto-quality FPS monitor (no-op unless the UI mode is AUTO).
  if(qualityMgr&&qualityMgr.current==='AUTO'&&state.mode!=='boot') qualityMgr.sample(1/Math.max(dt,0.0001));
+ updateFpsCounter(dt);
+ drawSpeedSense(dt);
  // An uncaught error anywhere in the per-mode update logic used to abort the
  // rest of tick() for every subsequent frame — including the render call
  // below — which would freeze the canvas on its last good frame with no
@@ -7199,6 +7400,7 @@ function resize(){
  renderer.setSize(innerWidth,innerHeight);
  camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();
  sizeDrops();
+ sizeSpeedFx();
  if(rainPass)rainPass.resize();
  if(snowPass)snowPass.resize();
  postfx.setSize(innerWidth,innerHeight,renderer.getPixelRatio());

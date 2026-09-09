@@ -11,12 +11,9 @@ import * as THREE from 'three';
 export const QUALITY_PRESETS = {
   ULTRA: {
     label: 'ULTRA',
-    // ULTRA spends its budget on scene detail, not a dangerously oversized
-    // framebuffer. Retina already supplies ample native resolution.
-    // 1.25 was a multiplier on devicePixelRatio: on a 2x laptop that is
-    // 2.5x = six times the pixels of a 1080p frame. Native (1.0) is
-    // already every physical pixel; spend the headroom on frame rate.
-    pixelRatio: 1.0,
+    // ULTRA should stay visibly crisp. AUTO can still dynamic-scale down, but
+    // a manual ULTRA selection asks for native-or-better render resolution.
+    pixelRatio: 1.15,
     shadows: true,
     shadowSize: 2048,
     shadowType: 'soft',           // PCFSoftShadowMap — buttery, filmic shadow edges
@@ -29,7 +26,7 @@ export const QUALITY_PRESETS = {
   },
   HIGH: {
     label: 'HIGH',
-    pixelRatio: 0.9,
+    pixelRatio: 1.0,
     shadows: true,
     shadowSize: 1536,
     shadowType: 'pcf',
@@ -42,7 +39,7 @@ export const QUALITY_PRESETS = {
   },
   MED: {
     label: 'MED',
-    pixelRatio: 0.95,
+    pixelRatio: 0.8,
     shadows: true,
     shadowSize: 1024,
     shadowType: 'pcf',
@@ -127,7 +124,7 @@ export class QualityManager {
     // Keep the main canvas itself within a conservative pixel budget as well
     // as probing framebuffer completeness. This prevents ULTRA from producing
     // a white/context-lost screen on high-DPI displays.
-    const pixelBudget=mode==='ULTRA'?9000000:mode==='HIGH'?4000000:mode==='MED'?3000000:2000000;
+    const pixelBudget=mode==='ULTRA'?18000000:mode==='HIGH'?9000000:mode==='MED'?4500000:2200000;
     ratio=Math.min(ratio,Math.sqrt(pixelBudget/Math.max(1,innerWidth*innerHeight)));
     // Test the requested allocation, then walk down until this GPU confirms a
     // complete colour/depth target. LOW is the final universally safe floor.
@@ -180,20 +177,22 @@ export class QualityManager {
 
   async init() {
     this.targetFps = await this.detectRefresh();
-    // Leave a little headroom under the panel's hard limit so the tuner has
-    // room to settle just below the refresh ceiling.
-    this.targetFps = Math.max(30, this.targetFps * 0.94);
+    // Prioritise image quality over chasing 120/144 Hz panels. Chasing the
+    // monitor's full refresh made AUTO lower internal resolution during the
+    // title/demo/race even on strong machines, which looked like ULTRA had
+    // randomly gone soft. Hold a crisp 60-ish target instead.
+    this.targetFps = Math.max(30, Math.min(60, this.targetFps) * 0.94);
   }
 
   apply(mode) {
     if (mode === 'AUTO') {
+      this.current = 'AUTO'; // stay in AUTO so the FPS autotuner keeps running
       const starting = this.autoLevel || this.autoDetect();
       this.applyConcrete(starting);
-      this.current = 'AUTO'; // stay in AUTO so the FPS autotuner keeps running
       return QUALITY_PRESETS[starting];
     }
+    this.current = mode; // manual tiers must not inherit AUTO's dynamic resScale
     this.applyConcrete(mode);
-    this.current = mode;
     return QUALITY_PRESETS[mode];
   }
 
@@ -206,7 +205,8 @@ export class QualityManager {
     // dynamic resolution scale, clamped to sane bounds. This is what lets the
     // tuner trade a little resolution to keep a 120Hz panel at 120fps.
     const dpr = window.devicePixelRatio || 1;
-    const requested=clamp(dpr*cfg.pixelRatio*this.resScale,0.5,3);
+    const dynScale=this.current==='AUTO'?this.resScale:1.0;
+    const requested=clamp(dpr*cfg.pixelRatio*dynScale,0.5,3);
     const eff=this._measuredRatio(requested,mode);
     this.renderer.setPixelRatio(eff);
     const meterChip=document.getElementById('hQualityChip');

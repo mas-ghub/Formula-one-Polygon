@@ -168,6 +168,14 @@ canvas{display:block;}
 #hTime,#hBest,#hGap,#hLap,#hLaps,#hPos,#hPosT,#hSpeed,#hGear,.tower-pos,.tower-gap{
  font-variant-numeric:tabular-nums;font-feature-settings:'tnum' 1,'lnum' 1;}
 #hud{position:fixed;inset:0;z-index:10;pointer-events:none;}
+#speedFxCanvas{position:absolute;inset:0;width:100%;height:100%;z-index:1;pointer-events:none;opacity:.0;mix-blend-mode:screen;}
+#hTL,#hTR,#hBL,#hBR,#hMsg,#camToast,#fsToast,#demoTag,#gyroPrompt,#lights,#hWrong,#slipTag,#timingTower,#facePreview{z-index:2;}
+#hFpsChip,#hFpsMeter{font-variant-numeric:tabular-nums;font-feature-settings:'tnum' 1,'lnum' 1;}
+#hFpsChip.bad,#hFpsMeter.bad{color:#ff5348;border-color:#7a2a24;}
+#hFpsChip.ok,#hFpsMeter.ok{color:#ffd23f;border-color:#726224;}
+#hFpsChip.good,#hFpsMeter.good{color:#8be08a;border-color:#3d6b3c;}
+#hFpsMeter{position:absolute;top:116px;left:14px;background:rgba(8,10,14,.78);border:1px solid rgba(255,255,255,.18);border-radius:4px;padding:6px 9px;font-size:12px;font-weight:800;letter-spacing:.13em;backdrop-filter:blur(6px);pointer-events:none;z-index:3;text-shadow:0 1px 2px #000;}
+#hFpsMeter.off{display:none;}
 #hTL{position:absolute;top:14px;left:14px;width:172px;min-width:172px;padding:10px 16px 10px 12px;}
 #hTL::before{content:'DRIVER / SESSION';display:block;padding:0 0 5px;margin:0 0 7px;border-bottom:1px solid rgba(255,255,255,.16);color:var(--red);font-size:9px;font-weight:800;letter-spacing:.18em;line-height:1;}
 #hPos{font-style:italic;font-weight:700;font-size:36px;line-height:1;}
@@ -218,8 +226,8 @@ canvas{display:block;}
 #hRpm i.on{background:#ffd23f;}#hRpm i.on.hot{background:#ff4b1f;}#hRpm i.on.max{background:#fff;}
 
 /* Minimap bottom-right */
-#hBR{position:absolute;bottom:14px;right:14px;padding:6px;}
-#minimap{border-radius:2px;display:block;}
+#hBR{position:absolute;bottom:18px;right:18px;padding:0;background:transparent!important;border:0!important;clip-path:none!important;backdrop-filter:none!important;}
+#minimap{border-radius:0;display:block;background:transparent;width:176px;height:176px;filter:drop-shadow(0 2px 5px rgba(0,0,0,.65));}
 
 /* Traffic lights */
 #lights{position:absolute;top:10%;left:0;right:0;display:flex;justify-content:center;gap:12px;}
@@ -750,7 +758,7 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
   
   <div id="tFoot">
-    <span>FULLSCREEN &amp; AUDIO READY · <b id="appVersion">v1.0.0 · BUILD 20260909.6</b></span>
+    <span>FULLSCREEN &amp; AUDIO READY · <b id="appVersion">v1.0.0 · BUILD 20260909.19</b></span>
     <button id="tFootFs" class="btn-mini">⛶ FULLSCREEN</button>
     <button id="tInstall" class="btn-mini" style="display:none;">⤓ INSTALL APP</button>
   </div>
@@ -774,6 +782,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <!-- Race HUD -->
 <div id="hud" class="hidden">
+  <canvas id="speedFxCanvas"></canvas>
   <div id="timingTower"></div>
   <canvas id="facePreview" width="160" height="112"></canvas>
   <div id="hTL" class="panel">
@@ -788,6 +797,7 @@ document.addEventListener('DOMContentLoaded', function() {
     <button class="chip" id="hWx"></button>
     <button class="chip" id="hCam">CHASE</button>
     <button class="chip" id="hQualityChip">HIGH</button>
+    <button class="chip good" id="hFpsChip" title="Toggle FPS meter">FPS ON</button>
     <button class="chip tilt-chip" id="hTiltChip">GYRO OFF</button>
     <button class="chip face-chip" id="hFaceChip" title="Webcam face driving: turn your face to steer, open your mouth for gas">FACE OFF</button>
     <button class="chip" id="hTowerChip" title="Toggle timing tower">TOWER ON</button>
@@ -798,6 +808,7 @@ document.addEventListener('DOMContentLoaded', function() {
     <button class="chip" id="hPauseChip" title="Pause Game">⏸</button>
   </div>
   
+  <div id="hFpsMeter" class="good">FPS --</div>
   <div id="hMsg"><div id="hMsgMain"></div><div id="hMsgSub"></div></div>
   <div id="camToast"></div>
   <div id="fsToast">ROTATE TO LANDSCAPE · THEN TAP THE ↺ FULLSCREEN BUTTON</div>
@@ -819,7 +830,7 @@ document.addEventListener('DOMContentLoaded', function() {
   
   <!-- Minimap -->
   <div id="hBR" class="panel">
-    <canvas id="minimap" width="160" height="160"></canvas>
+    <canvas id="minimap" width="176" height="176"></canvas>
   </div>
   
   <div id="lights"><i></i><i></i><i></i><i></i><i></i></div>
@@ -1052,7 +1063,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <script>
 (function(){
-  const APP_VERSION='v1.0.0 · BUILD 20260909.6';
+  const APP_VERSION='v1.0.0 · BUILD 20260909.19';
   window.POLYGON_GP_VERSION=APP_VERSION;
   const panel=document.getElementById('runtimeErrorPanel');
   const output=document.getElementById('runtimeErrorText');
@@ -1100,7 +1111,7 @@ addEventListener('beforeinstallprompt',e=>{e.preventDefault();__pgpInstall=e;con
 addEventListener('DOMContentLoaded',()=>{const b=document.getElementById('tInstall');if(b)b.onclick=async()=>{if(!__pgpInstall)return;__pgpInstall.prompt();await __pgpInstall.userChoice;__pgpInstall=null;b.style.display='none';};});
 addEventListener('appinstalled',()=>{const b=document.getElementById('tInstall');if(b)b.style.display='none';});
 </script>
-<script type="module" src="/src/game.js?rain=20260909.6"></script>
+<script type="module" src="/src/game.js?rain=20260909.19"></script>
 </body>
 </html>
 

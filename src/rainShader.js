@@ -329,16 +329,15 @@ export class RainShaderPass {
 
   _targetSize() {
     const el = this.renderer.domElement;
-    // The scene copy only feeds refraction; drops themselves are computed
-    // per SCREEN pixel in the composite, so a 0.8x source on ULTRA is
-    // visually identical and saves ~35% of that render.
-    const scale = this.quality === 'ULTRA' ? 0.8 : this.quality === 'HIGH' ? 0.7 : this.quality === 'MED' ? 0.6 : 0.5;
+    // Keep ULTRA rainy helmet/hood frames sharp too: the refraction source is
+    // now full renderer resolution on ULTRA. Lower tiers still scale down.
+    const scale = this.quality === 'ULTRA' ? 1.0 : this.quality === 'HIGH' ? 0.85 : this.quality === 'MED' ? 0.65 : 0.5;
     const baseW=Math.max(2,el.width||innerWidth),baseH=Math.max(2,el.height||innerHeight);
     // Never allocate an unbounded full-resolution windshield target. On a
     // Retina/4K display ULTRA used to request an enormous second RGBA buffer;
     // some drivers responded with a white canvas instead of a clean failure.
-    const budget=this.quality==='ULTRA'?9000000:this.quality==='HIGH'?4000000:this.quality==='MED'?3000000:2000000;
-    const safe=Math.min(scale,2560/baseW,Math.sqrt(budget/(baseW*baseH)));
+    const budget=this.quality==='ULTRA'?18000000:this.quality==='HIGH'?9000000:this.quality==='MED'?4500000:2200000;
+    const safe=Math.min(scale,(this.quality==='ULTRA'?4096:3072)/baseW,Math.sqrt(budget/(baseW*baseH)));
     return {w:Math.max(2,Math.floor(baseW*safe)),h:Math.max(2,Math.floor(baseH*safe))};
   }
 

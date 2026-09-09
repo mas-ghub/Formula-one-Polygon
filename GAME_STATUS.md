@@ -1,7 +1,7 @@
 # POLYGON GP — current game status / what is already done
 
 **Last updated:** 2026-09-09  
-**Visible app version in `index.html`:** `v1.0.0 · BUILD 20260909.6`  
+**Visible app version in `index.html`:** `v1.0.0 · BUILD 20260909.19`  
 **Validation after latest edits:** `npm run build` ✅, `npm run lint` ✅  
 **Note:** Playwright was not used for the latest work.
 
@@ -530,10 +530,20 @@ Summary:
 18. Fixed the 8th-gear audio/tacho drop: final gear now keeps a high rev floor so it does not sound like the engine bogs or slows by itself after the upshift.
 19. Steering wheel/yoke is now detached from the animated driver torso and hard-locked to the cockpit base transform each frame, so it only pivots/rotates from its centre rather than translating with body/head g-load motion.
 20. Steering wheel LCD has been simplified around big, readable gear and KPH speed, with shift LEDs updating for the player in all driving cameras and full LCD refresh in wheel-visible helmet/onboard views including the title halo shot.
-21. Helmet camera only corrected after screenshot feedback: it now hides the player's thick world halo only for this camera and adds a camera-space halo frame, giving a clear through-the-gap driver view down to the top of the dashboard. Other camera modes were not changed for this pass.
+21. Helmet camera only corrected after screenshot feedback: it hides the player's thick world halo and front axle/brakes only for this camera, keeps the monocoque/nose body visible again, adds a camera-space halo frame, and lowers the steering yoke only for this render so laptop-height screens see road/top-of-dash through the halo gap. Other camera modes were not changed for this pass.
 22. Road-side visuals corrected again after screenshot feedback: both edges now use one continuous, flat red/white painted strip, followed immediately by the dark run-off apron and a neutral grey barrier. The strip is no longer intermittent or ribbed/raised, so the road should not look elevated on a ledge.
 23. Added a comedy fatal-accident radio call: when a car terminally wrecks during the race, a surviving nearby/random driver may shout a line such as “Oh no, <name> has had a fatal accident! Let’s go, go, go!”
 24. Build and lint both pass.
+25. Resolution/quality pass: manual ULTRA no longer inherits AUTO dynamic downscale, ULTRA/HIGH render budgets were raised, rain refraction uses a full-resolution source on ULTRA, and AUTO now targets crisp 60-ish FPS instead of sacrificing resolution to chase 120/144 Hz displays.
+26. Tree pass: replaced the odd cone-plus-tree-head poplar silhouette with leafy column trees, reduced that species weight, placed trees on the rendered terrain height, and added spacing checks so nearby trees do not visually merge as often.
+27. Tree quality correction: conifers and normal broadleaf trees now use separate non-hybrid geometries and stricter cross-species spacing; non-forest tracks no longer randomly mix pines into the normal tree line; broadleaf canopies regained richer multi-lobed foliage while staying instanced for performance.
+28. Speed-feel/FPS pass: added a live FPS chip, a lightweight speed-line/peripheral speed overlay for race/countdown/finished driving, made player off-track detection more forgiving around the painted edge, reduced player off-track bogging unless actually in gravel, and stopped local circuit `top` zones from acting like invisible player speed limiters.
+29. Crash/camera/mirror polish: crash camera now forcibly hides the helmet overlay and restores helmet-only hidden player meshes; race camera changes now blend/morph position/quaternion/FOV over ~0.7s; helmet wing mirrors gained visible support stalks into the cockpit/halo frame so they no longer look detached.
+30. Mirror/jet correction: LOW quality helmet cam now still draws mirror housings instead of leaving stalks with no mirror; mirror supports were simplified to one short attached arm with a base pad. Display jets now spawn much sooner and more often, are scaled larger/lower/faster, and emit more visible three-colour smoke trails.
+31. Straight-line speed/mirror/jet/grid pass: player high-speed drag/friction reduced and pinned-throttle straights now keep positive urge below vmax; mirror arms extend to visible cockpit-side mount pads; jet audio triggers near overhead with louder/resumed WebAudio, while smoke trails are subtler/longer-fading; starting grid markings are now upside-down U-shaped slots.
+32. FPS visibility correction: FPS is now a visible standalone HUD meter under the timing panel, with the top-right chip changed to an FPS ON/OFF toggle rather than trying to show tiny live numbers in the crowded chip row.
+33. Minimap/helmet-overlay correction: bottom-right circuit diagram canvas now matches its 176px drawing buffer and has no clipped black panel background; helmet-only camera overlay/body visibility overrides are forcibly hidden/restored whenever leaving HELMET cam, including title, demo, helicopter and crash cameras.
+34. Helmet chassis-animation correction: halo/mirror overlay still does not incorrectly rotate with the steering wheel, but it now has subtle chassis flex, lateral-load roll and speed/kerb buzz so it no longer feels frozen or detached while steering.
 
 ### 2026-09-09 circuit-drivability pass
 
