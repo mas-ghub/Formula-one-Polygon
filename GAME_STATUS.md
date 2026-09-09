@@ -1,7 +1,7 @@
 # POLYGON GP — current game status / what is already done
 
 **Last updated:** 2026-09-09  
-**Visible app version in `index.html`:** `v1.0.0 · BUILD 20260909.37`  
+**Visible app version in `index.html`:** `v1.0.0 · BUILD 20260909.38`  
 **Validation after latest edits:** `npm run build` ✅, `npm run lint` ✅  
 **Note:** Playwright was not used for the latest work.
 
@@ -562,6 +562,7 @@ Summary:
 50. Radio-interrupt etiquette and PWA voice deploy BAT: driver-radio clips now interrupt commentator clips, and when the commentator returns he plays a short professional “back to the action” apology line; added/generated matching return clips. Added local `update-github-pages-pwa-voices.bat` to build/lint, verify the PWA voice-pack manifest/MP3 count, stage source + `public/audio/voicepack`, exclude API keys/caches/zips, commit, rebase and push to GitHub Pages.
 51. Immediate circuit intro commentary: countdown now starts with `Welcome to <circuit> for another exciting race!` from the generated voice pack, and lights out uses a new more energetic `Lights out and away we gooo!` call; generated exact intro clips for all 25 circuits so the commentator speaks from the off without browser fallback.
 52. Speech.stop race-start fix: restored the missing `Speech.stop()` method used by `beginRace()` so starting a race cannot throw `TypeError: Speech.stop is not a function`; it now pauses active voicepack audio, clears current clip/return state, and cancels browser speech before the circuit intro starts.
+53. Face-drive steering/pedals correction: webcam steering now combines head yaw with lateral movement so turning/moving head right steers right more naturally; added default `AUTO GAS` mode with head-down brake/reverse, kept optional head-tilt and mouth-gas modes, and brake now cancels face throttle so reverse is possible at low speed.
 
 ### 2026-09-09 circuit-drivability pass
 

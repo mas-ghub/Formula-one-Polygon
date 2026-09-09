@@ -729,8 +729,9 @@ document.addEventListener('DOMContentLoaded', function() {
           <button data-v="eyes">STEER: EYES</button>
         </div>
         <div class="seg" id="tFacePedal">
-          <button data-v="mouth" class="sel">GAS: OPEN MOUTH</button>
+          <button data-v="auto" class="sel">AUTO GAS</button>
           <button data-v="tilt">GAS: HEAD TILT</button>
+          <button data-v="mouth">GAS: OPEN MOUTH</button>
         </div>
       </div>
       <div class="seg" id="tFaceSens" style="margin-top:6px;">
@@ -743,7 +744,7 @@ document.addEventListener('DOMContentLoaded', function() {
         <button id="tFaceInv" class="btn-mini" style="flex:1;">MIRROR STEER: OFF</button>
       </div>
       <canvas id="tFaceCam" width="200" height="112" style="display:none;margin-top:8px;width:100%;border:1px solid var(--line);border-radius:6px;"></canvas>
-      <div id="tFaceStatus" style="margin-top:6px;color:var(--muted);font-size:10px;letter-spacing:.08em;line-height:1.4;">Camera off · loads Google’s face model once (≈4 MB, then cached)</div>
+      <div id="tFaceStatus" style="margin-top:6px;color:var(--muted);font-size:10px;letter-spacing:.08em;line-height:1.4;">Camera off · turn head to steer · auto gas default · nose down brakes/reverses</div>
     </div>
 
     <div class="sec" id="tTiltSensSec" style="margin-top: 10px;">
@@ -765,7 +766,7 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
   
   <div id="tFoot">
-    <span>FULLSCREEN &amp; AUDIO READY · <b id="appVersion">v1.0.0 · BUILD 20260909.37</b></span>
+    <span>FULLSCREEN &amp; AUDIO READY · <b id="appVersion">v1.0.0 · BUILD 20260909.38</b></span>
     <button id="tFootFs" class="btn-mini">⛶ FULLSCREEN</button>
     <button id="tInstall" class="btn-mini" style="display:none;">⤓ INSTALL APP</button>
   </div>
@@ -1072,7 +1073,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <script>
 (function(){
-  const APP_VERSION='v1.0.0 · BUILD 20260909.37';
+  const APP_VERSION='v1.0.0 · BUILD 20260909.38';
   window.POLYGON_GP_VERSION=APP_VERSION;
   const panel=document.getElementById('runtimeErrorPanel');
   const output=document.getElementById('runtimeErrorText');
@@ -1120,7 +1121,7 @@ addEventListener('beforeinstallprompt',e=>{e.preventDefault();__pgpInstall=e;con
 addEventListener('DOMContentLoaded',()=>{const b=document.getElementById('tInstall');if(b)b.onclick=async()=>{if(!__pgpInstall)return;__pgpInstall.prompt();await __pgpInstall.userChoice;__pgpInstall=null;b.style.display='none';};});
 addEventListener('appinstalled',()=>{const b=document.getElementById('tInstall');if(b)b.style.display='none';});
 </script>
-<script type="module" src="/src/game.js?rain=20260909.37"></script>
+<script type="module" src="/src/game.js?rain=20260909.38"></script>
 </body>
 </html>
 

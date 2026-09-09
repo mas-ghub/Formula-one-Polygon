@@ -52,7 +52,7 @@ export class WebcamDrive {
 
     // Settings
     this.steerSrc = 'nose';   // 'nose' | 'eyes'
-    this.pedalMode = 'mouth'; // 'mouth' | 'tilt'
+    this.pedalMode = 'auto';  // 'auto' | 'tilt' | 'mouth'
     this.sens = 1.0;          // steering sensitivity multiplier
     this.invert = false;      // for cameras that deliver a mirrored image
     this.preview = true;
@@ -76,7 +76,7 @@ export class WebcamDrive {
     try {
       const s = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
       if (s.steerSrc === 'eyes') this.steerSrc = 'eyes';
-      if (s.pedalMode === 'tilt') this.pedalMode = 'tilt';
+      if (s.pedalMode === 'tilt' || s.pedalMode === 'mouth' || s.pedalMode === 'auto') this.pedalMode = s.pedalMode;
       if (typeof s.sens === 'number') this.sens = Math.min(2, Math.max(0.4, s.sens));
       if (typeof s.invert === 'boolean') this.invert = s.invert;
       if (typeof s.preview === 'boolean') this.preview = s.preview;
@@ -125,7 +125,7 @@ export class WebcamDrive {
       this._faceLostAt = 0; this._base = null;
       this._startLoop();
       // Auto-calibrate as soon as a stable face shows up.
-      this._cal = { n: 0, x: 0, y: 0, mouth: 0, until: performance.now() + 1400 };
+      this._cal = { n: 0, x: 0, y: 0, yaw: 0, mouth: 0, until: performance.now() + 1400 };
       this._calBlink = performance.now() + 1400;
       this.onStatus('FACE DRIVE LIVE — HOLD STILL: CALIBRATING NEUTRAL');
       return true;
@@ -229,24 +229,33 @@ export class WebcamDrive {
     // Calibration: average the pose over the window, then drive.
     if (this._cal) {
       const c = this._cal;
-      c.n++; c.x += sx; c.y += ny; c.mouth += mouth;
+      const calFaceCentreX = (lms[LM.cheekL].x + lms[LM.cheekR].x) * 0.5;
+      c.n++; c.x += sx; c.y += ny; c.yaw += (calFaceCentreX - lms[LM.nose].x) / faceW; c.mouth += mouth;
       if (now > c.until && c.n >= 10) {
-        this._base = { x: c.x / c.n, y: c.y / c.n, mouth: c.mouth / c.n };
+        this._base = { x: c.x / c.n, y: c.y / c.n, yaw: c.yaw / c.n, mouth: c.mouth / c.n };
         this._cal = null;
         this.onStatus('FACE DRIVE CALIBRATED — TURN FACE TO STEER');
       }
       this._draw(lms);
       return;
     }
-    if (!this._base) { this._cal = { n: 1, x: sx, y: ny, mouth, until: now + 1400 }; return; }
+    if (!this._base) {
+      const calFaceCentreX = (lms[LM.cheekL].x + lms[LM.cheekR].x) * 0.5;
+      this._cal = { n: 1, x: sx, y: ny, yaw: (calFaceCentreX - lms[LM.nose].x) / faceW, mouth, until: now + 1400 }; return; }
     const b = this._base;
 
-    // Steering: head displacement sideways, normalised by face width.
-    // (Raw camera image: your right is the image's left, so moving your head
-    // right LOWERS x — flipping the sign makes right = right.)
-    let d = (b.x - sx) / faceW;
+    // Steering: combine actual head TURN/yaw with side movement. The previous
+    // version mainly followed lateral translation, so turning your head could
+    // feel backwards/weak depending on webcam mirroring. Yaw is measured by the
+    // nose moving relative to the cheek centre: user turns right => nose moves
+    // toward image-left on a normal selfie camera => positive steer/right.
+    const faceCentreX = (lms[LM.cheekL].x + lms[LM.cheekR].x) * 0.5;
+    const yawNow = (faceCentreX - lms[LM.nose].x) / faceW;
+    const yawBase = b.yaw || 0;
+    const moveD = (b.x - sx) / faceW;
+    let d = (yawNow - yawBase) * 1.35 + moveD * 0.35;
     if (this.invert) d = -d;
-    const dz = 0.024, span = 0.155 / this.sens;
+    const dz = 0.020, span = 0.135 / this.sens;
     let tgt = 0;
     if (Math.abs(d) > dz) tgt = Math.max(-1, Math.min(1, (Math.abs(d) - dz) / Math.max(0.04, span - dz) * Math.sign(d)));
     this.steer += (tgt - this.steer) * 0.42;
@@ -257,9 +266,15 @@ export class WebcamDrive {
     if (this.pedalMode === 'mouth') {
       gas = Math.max(0, Math.min(1, (mouth - b.mouth - 0.016) / 0.085));
       brk = Math.max(0, Math.min(1, (-pitch - 0.055) / 0.06));
-    } else {
+    } else if (this.pedalMode === 'tilt') {
       gas = Math.max(0, Math.min(1, (pitch - 0.045) / 0.075));
       brk = Math.max(0, Math.min(1, (-pitch - 0.045) / 0.065));
+    } else {
+      // Auto-gas mode is the practical face-control default: neutral/up keeps
+      // the F1 car accelerating; tip the head down to brake, and keep holding
+      // it down at low speed to use the game's reverse gear.
+      brk = Math.max(0, Math.min(1, (-pitch - 0.040) / 0.070));
+      gas = brk > 0.10 ? 0 : 1;
     }
     this.throttle += (gas - this.throttle) * 0.5;
     this.brake += (brk - this.brake) * 0.5;
@@ -276,7 +291,7 @@ export class WebcamDrive {
   /** Re-zero the neutral pose (hold your head still, mouth closed). */
   calibrate() {
     if (this.state !== 'live') { this.onStatus('START FACE DRIVE FIRST'); return; }
-    this._cal = { n: 0, x: 0, y: 0, mouth: 0, until: performance.now() + 1200 };
+    this._cal = { n: 0, x: 0, y: 0, yaw: 0, mouth: 0, until: performance.now() + 1200 };
     this._calBlink = performance.now() + 1200;
     this.onStatus('HOLD STILL — CALIBRATING NEUTRAL POSE…');
   }

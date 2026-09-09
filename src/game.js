@@ -4012,7 +4012,7 @@ function projectCar(c,full){
 const keys={};
 const tiltCtrl=new TiltController();
 const gyroLab=new GyroCalibrationLab(tiltCtrl);
-// Face driving (webcam): nose/eyes steer, open mouth or head-tilt for gas.
+// Face driving (webcam): head-yaw steering, auto/mouth/head-tilt pedals.
 const faceDrive=new WebcamDrive({onStatus:m=>{if(typeof fsToast==='function')fsToast(m);else console.log('[face]',m);}});
 
 function nearestAhead(c){
@@ -4077,7 +4077,8 @@ function playerControl(){
  if(faceDrive.state==='live'){
   const keySteer=(keys.left?-1:0)+(keys.right?1:0);
   if(Math.abs(keySteer)<=0.1&&(!tiltCtrl.enabled||Math.abs(tiltCtrl.steer)<0.15))p.steer=damp(p.steer,faceDrive.steer,22,dtGlobal);
-  if(!keys.up)p.throttle=Math.max(p.throttle,faceDrive.throttle);
+  if(faceDrive.brake>0.05&&!keys.up){p.throttle=0;}
+  else if(!keys.up)p.throttle=Math.max(p.throttle,faceDrive.throttle);
   if(!keys.down&&!tiltCtrl.handBrake)p.brake=Math.max(p.brake,faceDrive.brake);
  }
  faceDrive.updateHUD();
@@ -7097,7 +7098,7 @@ function syncFaceChip(){
  b.classList.toggle('on',st==='live');
  const fs=$('tFaceStatus');
  if(fs)fs.textContent=
-  st==='live'?(faceDrive.pedalMode==='mouth'?'Live · steer with your face · OPEN MOUTH = GAS · nose down = brake':'Live · steer with your face · nose UP = GAS · nose down = brake'):
+  st==='live'?(faceDrive.pedalMode==='mouth'?'Live · turn head to steer · OPEN MOUTH = GAS · nose down = brake/reverse':faceDrive.pedalMode==='tilt'?'Live · turn head to steer · nose UP = GAS · nose down = brake/reverse':'Live · turn head to steer · AUTO GAS · nose down = brake/reverse'):
   st==='starting'?'Starting camera + loading face model…':
   st==='error'?('⚠ '+(faceDrive.error||'Camera failed')):
   'Camera off · loads Google\u2019s face model once (≈4 MB, then cached)';
@@ -7127,7 +7128,7 @@ if($('hFaceChip')){
  };
 }
 bindSeg('tFaceSteer',v=>{faceDrive.steerSrc=v==='eyes'?'eyes':'nose';faceDrive.saveSettings();faceDrive.calibrate();});
-bindSeg('tFacePedal',v=>{faceDrive.pedalMode=v==='tilt'?'tilt':'mouth';faceDrive.saveSettings();syncFaceChip();});
+bindSeg('tFacePedal',v=>{faceDrive.pedalMode=v==='tilt'?'tilt':v==='mouth'?'mouth':'auto';faceDrive.saveSettings();syncFaceChip();});
 if($('tFaceCal'))$('tFaceCal').onclick=e=>{e.preventDefault();faceDrive.calibrate();};
 if($('tFaceInv'))$('tFaceInv').onclick=e=>{e.preventDefault();faceDrive.invert=!faceDrive.invert;faceDrive.saveSettings();$('tFaceInv').textContent='MIRROR STEER: '+(faceDrive.invert?'ON':'OFF');faceDrive.calibrate();};
 if($('tFaceSens')){

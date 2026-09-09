@@ -4,7 +4,7 @@
    HTML/JS (so a new deploy is picked up on the next launch), cache-first
    for circuit data, icons and driver images (they change rarely and are
    the bulk of the bytes). */
-const VERSION = 'pgp-20260909.37';
+const VERSION = 'pgp-20260909.38';
 const SHELL = ['./', './index.html', './manifest.webmanifest'];
 const VOICE_MANIFEST = './audio/voicepack/manifest.json';
 
