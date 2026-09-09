@@ -36,16 +36,17 @@ uniform float uTime;
 varying vec2 vUv;
 varying float vPh;
 void main(){
-  float edge = 1.0 - abs(vUv.x);            // soft sides
-  edge = pow(edge, 1.9);
-  // Real crepuscular rays read strongest near the sun/upper canopy, then
-  // stream down and fade as they meet the track. Keep a faint lower tail.
-  float fade = 0.18 + 0.82 * pow(1.0 - vUv.y, 1.15);
-  float band = 0.72 + 0.28 * sin(vUv.y * 18.0 + vPh + uTime * 0.36);
-  float a = uIntensity * edge * fade * band;
+  // Very soft sides: no hard white laser/jet-trail core.
+  float edge = smoothstep(1.0, 0.05, abs(vUv.x));
+  edge = pow(edge, 2.35);
+  // Atmospheric shafts are strongest near the high source and dissolve before
+  // they become solid streaks on the road.
+  float fade = pow(1.0 - vUv.y, 1.85);
+  float band = 0.82 + 0.18 * sin(vUv.y * 10.0 + vPh + uTime * 0.18);
+  float a = uIntensity * edge * fade * band * 0.22;
   // Do not premultiply the colour here: Three's additive blend already uses
   // alpha as the source factor. Premultiplying made the shafts almost invisible.
-  gl_FragColor = vec4(vec3(1.0, 0.946, 0.83), a);
+  gl_FragColor = vec4(vec3(1.0, 0.86, 0.58), a);
 }`;
 
 export class GodRays {
@@ -90,9 +91,9 @@ export class GodRays {
     this.mat = new THREE.ShaderMaterial({
       vertexShader: VERT, fragmentShader: FRAG,
       uniforms: { uIntensity: { value: 0 }, uTime: { value: 0 } },
-      transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide
+      transparent: true, depthWrite: false, depthTest: true, blending: THREE.NormalBlending, side: THREE.DoubleSide
     });
-    this.mat.toneMapped = false;
+    this.mat.toneMapped = true;
 
     const mesh = new THREE.InstancedMesh(geo, this.mat, count);
     mesh.frustumCulled = false;
@@ -102,13 +103,13 @@ export class GodRays {
     for (let k = 0; k < count; k++) {
       const s = samples[idx[k] % N];
       const side = k % 2 ? 1 : -1;
-      const lat = (wallDist + 9 + (idx[k] * 7919 % 13)) * side;
+      const lat = (wallDist + 14 + (idx[k] * 7919 % 22)) * side;
       const x = s.p.x + s.n.x * lat, z = s.p.z + s.n.z * lat;
       const gy = terrainHeightAt ? terrainHeightAt(x, z) : s.p.y;
-      const h = 28 + (idx[k] * 104729 % 24);           // 28–52 m up: rays visibly start near the sun/sky
+      const h = 34 + (idx[k] * 104729 % 34);           // 34–68 m up: broad shafts, not road-level streaks
       this.anchors.push({
         x, z, gy, top: gy + h, h,
-        w: 2.4 + ((idx[k] * 31) % 22) / 10             // 2.4–4.5 beam width
+        w: 7.0 + ((idx[k] * 31) % 44) / 10             // 7.0–11.3 m: broad atmospheric bands
       });
     }
     world.add(mesh);
@@ -124,17 +125,20 @@ export class GodRays {
 
     // Low sun rakes the shafts across; keep a whisper at high sun so the
     // effect is discoverable on a clear day, full drama toward dusk.
-    const sunFactor = Math.min(1, Math.max(0.22, 1.55 - sunVec.y));
+    // Natural god rays are a low-sun / misty-air effect. In full daylight they
+    // should be barely there, otherwise they read as white jet streams.
+    const lowSun = Math.max(0, Math.min(1, (0.78 - sunVec.y) / 0.66));
+    const sunFactor = 0.04 + lowSun * lowSun * 0.96;
     // Bloom as the camera swings toward the sun (horizontal component).
     camera.getWorldDirection(this._camFwd);
     this._camH.set(sunVec.x, 0, sunVec.z).normalize();
     const toward = Math.pow(Math.max(0, this._camFwd.x * this._camH.x + this._camFwd.z * this._camH.z), 1.6);
-    const target = 1.05 * gate * sunFactor * (0.48 + 0.52 * toward);
+    const target = 0.32 * gate * sunFactor * (0.42 + 0.58 * toward);
 
     this.intensity += (target - this.intensity) * Math.min(1, dt * 3);
     const I = this.intensity;
     this.mat.uniforms.uIntensity.value = I;
-    this.mesh.visible = I > 0.012;
+    this.mesh.visible = I > 0.006;
     if (!this.mesh.visible) return;
 
     // World direction the beams run: actual light travel, from the sun down to the track.
@@ -148,7 +152,7 @@ export class GodRays {
       x.crossVectors(this._g, toCam);
       if (x.lengthSq() < 1e-6) x.set(1, 0, 0); else x.normalize();
       z.crossVectors(x, this._g).normalize();
-      const len = Math.min(a.h / el + 34, 140); // long enough to read as sky-to-track rays
+      const len = Math.min(a.h / el + 24, 115); // long, soft sky-to-track shafts
       x.multiplyScalar(a.w);
       y.copy(this._g).multiplyScalar(-len);   // geometry's local -Y falls along -sunVec
       m.makeBasis(x, y, z);

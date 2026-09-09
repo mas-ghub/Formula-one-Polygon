@@ -5610,13 +5610,31 @@ function updCamera(dt){
    camera.rotateZ(lean*0.28+(tc.steerVis||0)*0.04);
    camera.fov=damp(camera.fov,zf(66),4,dt);camera.updateProjectionMatrix();return;
   }
-  // Helicopter establishing shot: sweep along the whole circuit from high
-  // above. Positions are interpolated between track samples (via sampleF)
-  // rather than snapped to the nearest one, and the whole camera position is
-  // then critically damped — real telemetry-derived tracks have some
-  // sample-to-sample noise in their local normal, and swaying the camera
-  // along that noisy, rapidly-rotating frame was what made it look "all over
-  // the place". A slow, independent world-space drift plus damping fixes it.
+  // Helicopter establishing shot: now a broadcast helicopter following the
+  // pack, not a satellite sweep over the weakest far-terrain. This makes the
+  // title page respond to the quality tier: ULTRA flies lower/tighter with
+  // clearer cars and road detail; lower tiers stay higher to hide terrain LOD.
+  if(tc){
+   const tp=tc.mesh.g.position,yaw=tc.hdg,fx=Math.sin(yaw),fz=Math.cos(yaw),rx=-fz,rz=fx,sp=Math.abs(tc.vF);
+   const qh=effQuality();
+   const tier=qh==='ULTRA'?0:qh==='HIGH'?1:qh==='MED'?2:3;
+   const back=32+tier*7+sp*0.18;
+   const side=Math.sin(timeSec*0.19)*((qh==='ULTRA')?12:18);
+   const up=(qh==='ULTRA'?23:qh==='HIGH'?29:36)+clamp(sp*0.10,0,8);
+   const hx=tp.x-fx*back+rx*side,hz=tp.z-fz*back+rz*side;
+   const floor=cameraSurfaceY(hx,hz);
+   const hy=Math.max(tp.y+up,floor+18);
+   if(!cam.heliPos)cam.heliPos=V3(hx,hy,hz);
+   cam.heliPos.x=damp(cam.heliPos.x,hx,3.8,dt);
+   cam.heliPos.y=damp(cam.heliPos.y,hy,3.4,dt);
+   cam.heliPos.z=damp(cam.heliPos.z,hz,3.8,dt);
+   camera.position.copy(cam.heliPos);
+   const look=new THREE.Vector3(tp.x+fx*(24+sp*.25),carLookY(tc,1.2),tp.z+fz*(24+sp*.25));
+   camera.lookAt(look);
+   camera.rotateZ(Math.sin(timeSec*.42)*0.025+clamp((tc.steer||0)*0.035,-.035,.035));
+   camera.fov=damp(camera.fov,zf(qh==='ULTRA'?38:qh==='HIGH'?42:48),4,dt);camera.updateProjectionMatrix();return;
+  }
+  // Fallback if no target exists: old full-circuit sweep.
   const N=T.N;
   // Purposeful sweep covering the whole lap; the helicopter banks into turns
   // like a broadcast bird, and periodically swoops low onto the lead car.

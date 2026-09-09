@@ -520,8 +520,8 @@ Summary:
 9. Darkened/neutralised asphalt so normal roads read black and shiny rather than blue/grey, and removed baked repeating white/grid markings from the road texture.
 10. Increased driver radio/moaning frequency: all drivers now have generic complaint radio, not just Lewis, and rage triggers sooner after player contact.
 11. Added admin-side Fish Audio voice-pack tooling plus runtime voicepack playback/fallback support. The PWA loads generated clips from `public/audio/voicepack/manifest.json`; if none exist it falls back to Web Speech.
-12. Reworked god rays so they read as true sun shafts: higher sky anchors, longer sun-to-track shafts along `-sunVec`, stronger upper-source fade and clearer dry/dusk visibility.
-13. Improved title-screen helicopter quality behaviour: LOW/MED favour closer race cameras, while HIGH/ULTRA helicopter shots fly lower, tighter and more car-led instead of exposing ugly far-terrain flyovers.
+12. Reworked god rays so they read as natural atmospheric shafts instead of white jet-stream streaks: normal alpha blending, tone-mapped warm colour, much softer/wider bands, lower daylight intensity, and strongest only when the sun is low.
+13. Replaced the title-screen helicopter's ugly satellite-style circuit sweep with a broadcast helicopter follow shot. ULTRA now flies lower/tighter around the pack; lower tiers stay higher to hide terrain LOD.
 14. Fixed the title rain/quality clash: helicopter/TV/orbit title cameras no longer render through the windshield rain shader; only title hood/halo shots use visor rain. World rain and wet road remain visible.
 15. Added stronger car road-height safety: physics no longer targets below the road skin, and car visuals now sample the four wheel contact patches plus centre/front/rear so cars should not sink into crests or cambered edges.
 16. Reworked display jet fly-by: it now starts behind the player/pack, screams overhead into the screen, flies faster/lower, and uses a layered turbine roar plus delayed pressure thump.
