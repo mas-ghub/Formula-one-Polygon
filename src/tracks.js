@@ -156,7 +156,7 @@ export const TRACKS = [
     // (flat sea level) with yachts moored in neat rows.
     water: [{ from: 0.63, to: 0.84, w: 30, side: 'left', boats: true, quay: true }],
     openf1CircuitKey: 22,
-    tunnel: { from: 0.505, to: 0.615 }, // the iconic Portier → Tunnel → Nouvelle Chicane covered section
+    tunnel: { from: 0.505, to: 0.588 }, // Portier → tunnel exit; ends before the Nouvelle Chicane so ceiling lights stop at daylight
     meetingName: 'Monaco Grand Prix',
     lapRecord: '1:12.909',
     lapRecordSec: 72.909,

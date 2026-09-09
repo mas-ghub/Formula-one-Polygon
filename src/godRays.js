@@ -41,7 +41,9 @@ void main(){
   float fade = pow(1.0 - vUv.y, 1.35);      // bright at the top, dying to the ground
   float band = 0.68 + 0.32 * sin(vUv.y * 22.0 + vPh + uTime * 0.45);   // moving light fingers
   float a = uIntensity * edge * fade * band;
-  gl_FragColor = vec4(vec3(1.0, 0.946, 0.83) * a, a);
+  // Do not premultiply the colour here: Three's additive blend already uses
+  // alpha as the source factor. Premultiplying made the shafts almost invisible.
+  gl_FragColor = vec4(vec3(1.0, 0.946, 0.83), a);
 }`;
 
 export class GodRays {
@@ -58,7 +60,7 @@ export class GodRays {
 
   /** Anchors run along the circuit on alternating sides, above the wall line. */
   build(world, samples, N, terrainHeightAt, wallDist) {
-    const step = Math.max(40, Math.round(N / 22));
+    const step = Math.max(30, Math.round(N / 30));
     const idx = [];
     for (let i = 6; i < N - 4; i += step) idx.push(i);
     const count = idx.length;
@@ -86,7 +88,7 @@ export class GodRays {
     this.mat = new THREE.ShaderMaterial({
       vertexShader: VERT, fragmentShader: FRAG,
       uniforms: { uIntensity: { value: 0 }, uTime: { value: 0 } },
-      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide
+      transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide
     });
     this.mat.toneMapped = false;
 
@@ -125,7 +127,7 @@ export class GodRays {
     camera.getWorldDirection(this._camFwd);
     this._camH.set(sunVec.x, 0, sunVec.z).normalize();
     const toward = Math.pow(Math.max(0, this._camFwd.x * this._camH.x + this._camFwd.z * this._camH.z), 1.6);
-    const target = 0.62 * gate * sunFactor * (0.22 + 0.78 * toward);
+    const target = 0.92 * gate * sunFactor * (0.38 + 0.62 * toward);
 
     this.intensity += (target - this.intensity) * Math.min(1, dt * 3);
     const I = this.intensity;

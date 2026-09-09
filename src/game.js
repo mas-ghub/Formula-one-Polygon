@@ -948,7 +948,9 @@ function makePointsSys(n,blending){
 }
 const smoke=makePointsSys(900,THREE.NormalBlending);smoke.pts.renderOrder=3;
 const sparks=makePointsSys(600,THREE.AdditiveBlending);
-const fire=makePointsSys(900,THREE.AdditiveBlending);fire.pts.renderOrder=5;
+// Fire uses normal alpha blending rather than additive bloom: flames stay hot,
+// but wrecks read as burning fuel with dark smoke instead of a glowing orange cloud.
+const fire=makePointsSys(900,THREE.NormalBlending);fire.pts.renderOrder=4;
 const flm=(...a)=>puff(fire,...a);
 const debris=[];
 function ejectDriverHelmet(c){
@@ -2919,17 +2921,37 @@ function buildWorld(idx){
  {
   const nT=Math.round((groundStyle==='grass'?(def.theme==='forest'?900:def.theme==='park'?520:180):0)*propDensity);
   const weights=def.theme==='forest'?[0.55,0.3,0.15]:[0.2,0.55,0.25];
+  const txGeo=(g,x,y,z,sx=1,sy=1,sz=1)=>{g.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(x,y,z),new THREE.Quaternion(),new THREE.Vector3(sx,sy,sz)));return g;};
+  const treeGeo={
+   conifer:mergeGeometries([
+    txGeo(new THREE.ConeGeometry(2.35,3.6,8),0,-0.55,0,1.08,1,1.08),
+    txGeo(new THREE.ConeGeometry(1.85,3.35,8),0,1.05,0,1,1,1),
+    txGeo(new THREE.ConeGeometry(1.22,2.75,8),0,2.45,0,1,1,1)
+   ],false),
+   broadleaf:mergeGeometries([
+    txGeo(new THREE.IcosahedronGeometry(1.85,1),0,0.55,0,1.12,.9,1.0),
+    txGeo(new THREE.IcosahedronGeometry(1.35,1),-1.05,0.25,.15,1,.82,.9),
+    txGeo(new THREE.IcosahedronGeometry(1.30,1),1.02,0.15,-.10,.95,.86,1),
+    txGeo(new THREE.IcosahedronGeometry(1.10,1),.12,1.48,.08,.9,.75,.9)
+   ],false),
+   poplar:mergeGeometries([
+    txGeo(new THREE.ConeGeometry(1.08,5.6,7),0,0.2,0,.95,1,1.05),
+    txGeo(new THREE.IcosahedronGeometry(1.05,1),0,2.8,0,.82,1.35,.82)
+   ],false)
+  };
+  for(const g of Object.values(treeGeo)){g.computeVertexNormals();}
   const species=[
-   {canopyGeo:new THREE.ConeGeometry(2.1,5.2,7),canopyY:2.5,canopyScaleY:1,trunkH:2.3,trunkR0:0.32,trunkR1:0.48,trunkColor:0x6b4a2f,hue:[0.26,0.36],sat:[0.4,0.62],light:[0.22,0.36]},
-   {canopyGeo:new THREE.IcosahedronGeometry(2.3,1),canopyY:2.7,canopyScaleY:0.82,trunkH:2.0,trunkR0:0.3,trunkR1:0.42,trunkColor:0x5c4530,hue:[0.22,0.32],sat:[0.45,0.68],light:[0.28,0.44]},
-   {canopyGeo:new THREE.ConeGeometry(1.15,7.6,6),canopyY:4.6,canopyScaleY:1,trunkH:3.6,trunkR0:0.22,trunkR1:0.3,trunkColor:0xcbc0a8,hue:[0.21,0.29],sat:[0.4,0.6],light:[0.3,0.42]},
+   {canopyGeo:treeGeo.conifer,canopyY:2.7,canopyScaleY:1,trunkH:2.6,trunkR0:0.28,trunkR1:0.52,trunkColor:0x6b4a2f,hue:[0.26,0.36],sat:[0.4,0.62],light:[0.22,0.36]},
+   {canopyGeo:treeGeo.broadleaf,canopyY:3.05,canopyScaleY:0.95,trunkH:2.4,trunkR0:0.28,trunkR1:0.48,trunkColor:0x5c4530,hue:[0.22,0.32],sat:[0.45,0.68],light:[0.28,0.44]},
+   {canopyGeo:treeGeo.poplar,canopyY:4.15,canopyScaleY:1,trunkH:3.9,trunkR0:0.2,trunkR1:0.34,trunkColor:0xcbc0a8,hue:[0.21,0.29],sat:[0.4,0.6],light:[0.3,0.42]},
   ];
-  const canopyMeshes=[],trunkMeshes=[];
+  const canopyMeshes=[],trunkMeshes=[],branchMeshes=[];
   for(const sp of species){
-   const canopy=new THREE.InstancedMesh(sp.canopyGeo,new THREE.MeshStandardMaterial({color:0xffffff,roughness:1}),nT);
-   const trunk=new THREE.InstancedMesh(new THREE.CylinderGeometry(sp.trunkR0,sp.trunkR1,sp.trunkH,6),new THREE.MeshStandardMaterial({color:sp.trunkColor,roughness:0.95}),nT);
-   canopy.count=0;trunk.count=0;
-   canopyMeshes.push(canopy);trunkMeshes.push(trunk);
+   const canopy=new THREE.InstancedMesh(sp.canopyGeo,new THREE.MeshStandardMaterial({color:0xffffff,roughness:1,flatShading:true}),nT);
+   const trunk=new THREE.InstancedMesh(new THREE.CylinderGeometry(sp.trunkR0,sp.trunkR1,sp.trunkH,7),new THREE.MeshStandardMaterial({color:sp.trunkColor,roughness:0.95}),nT);
+   const branches=new THREE.InstancedMesh(new THREE.CylinderGeometry(0.035,0.075,1,5),new THREE.MeshStandardMaterial({color:sp.trunkColor,roughness:1}),Math.max(1,nT*2));
+   canopy.count=0;trunk.count=0;branches.count=0;
+   canopyMeshes.push(canopy);trunkMeshes.push(trunk);branchMeshes.push(branches);
   }
   let k=0,tries=0;
   const speciesIdx=()=>{const r=Math.random();let acc=0;for(let i=0;i<weights.length;i++){acc+=weights[i];if(r<=acc)return i;}return weights.length-1;};
@@ -2948,26 +2970,34 @@ function buildWorld(idx){
    // back nearby. Validate against the true closest point on the whole
    // track before accepting it.
    if(minTrackDist(x,z)<T.latLimit+4)continue;
-   const si=speciesIdx(),sp=species[si],canopy=canopyMeshes[si],trunk=trunkMeshes[si];
-   const s=rand(0.7,1.7);
+   const si=speciesIdx(),sp=species[si],canopy=canopyMeshes[si],trunk=trunkMeshes[si],branches=branchMeshes[si];
+   const s=rand(0.7,1.7),yaw=rand(0,6);
    const elevation=getTrackHAtCoords(x,z);
    const ci=canopy.count;
-   dummy.position.set(x,elevation+sp.canopyY*s,z);dummy.rotation.set(0,rand(0,6),0);dummy.scale.set(s,s*sp.canopyScaleY,s);dummy.updateMatrix();
+   dummy.position.set(x,elevation+sp.canopyY*s,z);dummy.rotation.set(rand(-.025,.025),yaw,rand(-.04,.04));dummy.scale.set(s,s*sp.canopyScaleY,s);dummy.updateMatrix();
    canopy.setMatrixAt(ci,dummy.matrix);
    const c=new THREE.Color().setHSL(rand(sp.hue[0],sp.hue[1]),rand(sp.sat[0],sp.sat[1]),rand(sp.light[0],sp.light[1]));
    canopy.setColorAt(ci,c);
    canopy.count++;
-   dummy.position.set(x,elevation+sp.trunkH*0.5*s-0.1,z);dummy.scale.set(s,s*0.85,s);dummy.updateMatrix();
+   dummy.position.set(x,elevation+sp.trunkH*0.5*s-0.1,z);dummy.rotation.set(0,yaw,0);dummy.scale.set(s,s*0.9,s);dummy.updateMatrix();
    trunk.setMatrixAt(trunk.count,dummy.matrix);trunk.count++;
+   // Two cheap diagonal branch strokes break the old cone-on-a-stick silhouette
+   // without adding per-tree meshes: still instanced, still only a few draws.
+   for(let bi=0;bi<2&&branches.count<branches.instanceMatrix.count;bi++){
+    const a=yaw+bi*Math.PI+rand(-.42,.42),side=bi?1:-1,brS=s*rand(.72,1.18);
+    dummy.position.set(x+Math.cos(a)*0.34*s,elevation+(sp.trunkH*0.78+bi*.42)*s,z+Math.sin(a)*0.34*s);
+    dummy.rotation.set(Math.PI/2+rand(-.22,.22),a,side*rand(.58,.92));
+    dummy.scale.set(brS,rand(1.35,2.35)*s,brS);dummy.updateMatrix();branches.setMatrixAt(branches.count++,dummy.matrix);
+   }
    k++;
   }
   for(let i=0;i<species.length;i++){
-   const canopy=canopyMeshes[i],trunk=trunkMeshes[i];
-   canopy.instanceMatrix.needsUpdate=true;trunk.instanceMatrix.needsUpdate=true;
-   canopy.castShadow=true;
+   const canopy=canopyMeshes[i],trunk=trunkMeshes[i],branches=branchMeshes[i];
+   canopy.instanceMatrix.needsUpdate=true;trunk.instanceMatrix.needsUpdate=true;branches.instanceMatrix.needsUpdate=true;
+   canopy.castShadow=true;branches.castShadow=true;
    if(canopy.instanceColor)canopy.instanceColor.needsUpdate=true;
    canopy.userData.base=canopy.instanceColor?Float32Array.from(canopy.instanceColor.array):null;
-   T.canopyMats.push(canopy);world.add(canopy,trunk);
+   T.canopyMats.push(canopy);world.add(canopy,trunk,branches);
   }
  }
 
@@ -3223,6 +3253,17 @@ function buildWorld(idx){
    const[l,bodyC,roofC]=labelColors[venue];venueSign(l,0.08,1,bodyC,roofC);
   }
   switch(venue){
+   case'monaco':{
+    // Anchor the Monaco landmarks to recognisable lap positions: Casino on
+    // the uphill square, Fairmont around the Grand Hotel hairpin, and the port
+    // buildings down by the harbour after the tunnel/chicane sequence.
+    venueSign('CASINO SQUARE',0.235,1,0xd2bd9a,0x8f2636);
+    block(venueSpot(0.345,-1,T.latLimit+18),34,9,13,0xd8ccb6,0xb99469);
+    venueSign('FAIRMONT',0.345,-1,0xd8ccb6,0xb99469);
+    block(venueSpot(0.715,-1,T.latLimit+22),28,7,10,0xf0eee7,0x9b1d2c);
+    venueSign('PORT HERCULE',0.715,-1,0xf0eee7,0x9b1d2c);
+    break;
+   }
    case'italian_park':cypress(0.15,1,1.2);cypress(0.19,1,0.9);cypress(0.24,-1,1.1);break;
    case'british_airfield':block(venueSpot(0.32,-1,T.latLimit+22),30,5,8,0x8d969b,0x39424a);break;
    case'ardennes':mountains(0.28,1,0x405b4a,6);break;
@@ -3607,13 +3648,34 @@ function makeCar(d,isPlayer,dryCompound){
   jumpStart:false,lastBrakeMove:0,
   phase:rand(0,9),pos:1,near:null,shiftT:0,hitT:0,reactT:0,dustT:0,exT:0,dryCompound};
 }
+function raceOrderDrivers(source,count){
+ // Do not grid cars in raw team-list order. Build a qualifying-style order:
+ // broadly performance based, but with enough jitter that team-mates split up
+ // and each race starts with a believable mixed pack instead of pairs.
+ const pool=source.slice().map((d,i)=>({...d,_src:i,_gridScore:(Number(d.skill)||0.88)+rand(-0.085,0.085)}));
+ pool.sort((a,b)=>b._gridScore-a._gridScore||a._src-b._src);
+ const out=[];
+ while(pool.length&&out.length<count){
+  const last=out.length?out[out.length-1].team:null;
+  const window=Math.min(pool.length,Math.max(4,Math.ceil(pool.length*0.32)));
+  const options=[];
+  for(let i=0;i<window;i++)if(pool[i].team!==last)options.push(i);
+  // Pick mostly from the sharper end of the current window. Adjacent team-mates
+  // are still allowed only if no alternative exists, e.g. tiny custom grids.
+  const pickFrom=options.length?options:[0];
+  const rank=Math.floor(Math.pow(Math.random(),1.9)*pickFrom.length);
+  const idx=pickFrom[Math.min(rank,pickFrom.length-1)];
+  out.push(pool.splice(idx,1)[0]);
+ }
+ return out;
+}
 function setupGrid(gridSize){
  for(const c of cars)scene.remove(c.mesh.g);
  cars=[];
  const source = (openF1Drivers && openF1Drivers.length > 0) ? openF1Drivers : DRIVERS.map(d => ({
   name: d[0], team: d[1], skill: d[2], num: d[3], color: d[4], colB: d[5], helmet: d[6]
  }));
- const ais = source.slice(0, gridSize - 1);
+ const ais = raceOrderDrivers(source, gridSize - 1);
  ais.forEach((d, i) => {
   const pers=personaFor(d);
   cars.push(makeCar({
@@ -4030,41 +4092,45 @@ function updWreckFire(c,dt){
  if(!c.onFire)return;
  c.fireLife=(c.fireLife||0)-dt;
  if(c.fireLife<=0){c.onFire=false;return;}
- const nFire=28,nSkull=16;
+ const nFire=18,nSmoke=22;
  for(let i=0;i<nFire;i++){
-  const hot=Math.random();
-  flm(c.x+rand(-1.2,1.2),c.y+rand(0.05,1.4),c.z+rand(-1.6,1.2),
-   rand(-1.2,1.2),rand(3.5,12),rand(-1.2,1.2),
-   rand(2.8,7.5),rand(0.35,0.7),
-   1.0,hot>0.45?0.28:0.72,hot>0.7?0.02:0.12,-2.2);
+  const hot=Math.random(),core=hot>0.62;
+  flm(c.x+rand(-.75,.75),c.y+rand(0.05,.85),c.z+rand(-1.0,.9),
+   rand(-.75,.75),rand(2.2,7.2),rand(-.75,.75),
+   rand(1.15,3.3),rand(0.22,0.48),
+   core?1.0:0.95,core?0.78:0.32,core?0.06:0.015,-3.9);
  }
  c._skullT=(c._skullT||0)+dt;
- const rise=1.35+c._skullT*1.2,sc=1.4+Math.min(c._skullT*0.28,1.2);
+ const rise=1.15+c._skullT*1.05,sc=1.1+Math.min(c._skullT*0.22,1.0);
  const dx=camera.position.x-c.x,dz=camera.position.z-c.z;
  const ang=Math.atan2(dx,dz),ca=Math.cos(ang),sa=Math.sin(ang);
- for(let i=0;i<nSkull;i++){
+ for(let i=0;i<nSmoke;i++){
   const s=sampleSkullSmoke();
   const wx=s.x*ca+s.z*sa,wz=-s.x*sa+s.z*ca;
-  smk(c.x+wx*sc,c.y+rise+s.y*sc,c.z+wz*sc,
-   rand(-0.12,0.12),rand(0.35,1.1),rand(-0.12,0.12),
-   rand(1.15,2.0),rand(1.7,2.9),
-   0.10,0.10,0.11,0.12);
+  const grey=rand(.045,.13);
+  smk(c.x+wx*sc+rand(-.18,.18),c.y+rise+s.y*sc,c.z+wz*sc+rand(-.18,.18),
+   rand(-0.28,0.28),rand(0.65,1.8),rand(-0.28,0.28),
+   rand(1.55,3.2),rand(1.9,3.8),
+   grey,grey*0.95,grey*0.9,0.34);
  }
 }
 function wreckCar(c){
  if(c.wrecked)return;c.wrecked=true;c.throttle=0;c.brake=1;c.drsOpen=false;
  c.vx*=0.42;c.vz*=0.42;c.onFire=true;c.fireLife=11;c._skullT=0;
  shedCarParts(c);sparkBurst(c.x,c.y+.4,c.z,32);
- for(let i=0;i<220;i++){
-  const hot=Math.random();
-  flm(c.x+rand(-2.4,2.4),c.y+rand(0.05,2.8),c.z+rand(-2.8,2.8),
-   rand(-8,8),rand(8,28),rand(-8,8),
-   rand(5,16),rand(0.55,1.15),
-   1.0,hot>0.35?0.18:0.85,hot>0.7?0.02:0.16,-7);
+ // Initial ignition: a low fuel-fire lick and a soot plume, not a huge bloomy
+ // explosion. Keep particle counts similar but move the mass into dark smoke.
+ for(let i=0;i<86;i++){
+  const hot=Math.random(),core=hot>0.68;
+  flm(c.x+rand(-1.35,1.35),c.y+rand(0.02,1.15),c.z+rand(-1.55,1.45),
+   rand(-2.8,2.8),rand(3.2,12.5),rand(-2.8,2.8),
+   rand(1.4,4.2),rand(0.28,0.62),
+   core?1.0:0.92,core?0.82:0.26,core?0.07:0.015,-6.2);
  }
- for(let i=0;i<60;i++){
-  smk(c.x+rand(-2,2),c.y+rand(0.2,2),c.z+rand(-2,2),
-   rand(-3,3),rand(3,10),rand(-3,3),rand(3,6),rand(2.5,4.5),0.08,0.08,0.09,0.4);
+ for(let i=0;i<130;i++){
+  const grey=rand(.035,.12);
+  smk(c.x+rand(-1.8,1.8),c.y+rand(0.12,1.7),c.z+rand(-1.9,1.9),
+   rand(-2.2,2.2),rand(2.6,8.8),rand(-2.2,2.2),rand(2.4,6.8),rand(2.8,5.2),grey,grey*.95,grey*.9,0.48);
  }
  // Crumple the monocoque: squashed tub, drooped nose — the wreck must look
  // wrecked in the pan-out, not just parked with bits missing.
