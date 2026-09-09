@@ -522,7 +522,11 @@ Summary:
 11. Added admin-side Fish Audio voice-pack tooling plus runtime voicepack playback/fallback support. The PWA loads generated clips from `public/audio/voicepack/manifest.json`; if none exist it falls back to Web Speech.
 12. Reworked god rays so they read as true sun shafts: higher sky anchors, longer sun-to-track shafts along `-sunVec`, stronger upper-source fade and clearer dry/dusk visibility.
 13. Improved title-screen helicopter quality behaviour: LOW/MED favour closer race cameras, while HIGH/ULTRA helicopter shots fly lower, tighter and more car-led instead of exposing ugly far-terrain flyovers.
-14. Build and lint both pass.
+14. Fixed the title rain/quality clash: helicopter/TV/orbit title cameras no longer render through the windshield rain shader; only title hood/halo shots use visor rain. World rain and wet road remain visible.
+15. Added stronger car road-height safety: physics no longer targets below the road skin, and car visuals now sample the four wheel contact patches plus centre/front/rear so cars should not sink into crests or cambered edges.
+16. Reworked display jet fly-by: it now starts behind the player/pack, screams overhead into the screen, flies faster/lower, and uses a layered turbine roar plus delayed pressure thump.
+17. Retuned engine audio away from thin high-pitched sewing-machine tones toward a lower V6 body, stronger exhaust pulse, more intake load and less whiny top harmonic.
+18. Build and lint both pass.
 
 ### 2026-09-09 circuit-drivability pass
 

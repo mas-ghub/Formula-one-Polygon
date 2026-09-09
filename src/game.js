@@ -1429,17 +1429,17 @@ function makeFlybyPlane(){
 function updFlybyPlane(dt){
  if(!flybyPlane)flybyPlane=makeFlybyPlane();
  if(!flybyPlane.visible){planeTimer-=dt;if(planeTimer>0)return;
-  const px=player?player.x:0,pz=player?player.z:0,a=(player?player.hdg:rand(0,Math.PI*2))+rand(-.16,.16);
-  const side=rand(-95,95),fx=Math.sin(a),fz=Math.cos(a),rx=Math.cos(a),rz=-Math.sin(a);
-  // Appear as a close, obvious overhead pass in front of the player, then fly
-  // away along the viewing direction until perspective makes the jet tiny.
-  flybyPlane.position.set(px+fx*75+rx*side,(player?player.y:0)+rand(62,92),pz+fz*75+rz*side);
-  const speed=rand(135,175);flybyPlane.userData.vx=fx*speed;flybyPlane.userData.vz=fz*speed;flybyPlane.userData.smokeAcc=0;
+  const px=player?player.x:0,pz=player?player.z:0,a=(player?player.hdg:rand(0,Math.PI*2))+rand(-.10,.10);
+  const side=rand(-36,36),fx=Math.sin(a),fz=Math.cos(a),rx=Math.cos(a),rz=-Math.sin(a);
+  // Start behind the driver's view and thunder over the pack into the screen,
+  // then disappear down-track. This makes the fly-by an event, not a distant toy.
+  flybyPlane.position.set(px-fx*230+rx*side,(player?player.y:0)+rand(44,64),pz-fz*230+rz*side);
+  const speed=rand(185,235);flybyPlane.userData.vx=fx*speed;flybyPlane.userData.vz=fz*speed;flybyPlane.userData.smokeAcc=0;
   const schemes=[[0xd71920,0xffffff,0x2456d8],[0xff6a00,0xffffff,0x22a447],[0x8b2be2,0xffffff,0x00c8e8]];
   const scheme=pick(schemes);flybyPlane.userData.smoke=scheme.map(c=>new THREE.Color(c));
   flybyPlane.userData.bodyMat.color.set(pick([0xf2f4f7,0x202936,0xf0c419,0x39a7d8]));flybyPlane.userData.accentMat.color.set(scheme[0]);
   flybyPlane.rotation.y=a;flybyPlane.visible=true;
-  if(AudioSys.started)AudioSys.jetFlyby(1.15);
+  if(AudioSys.started)AudioSys.jetFlyby(1.45);
  }
  flybyPlane.position.x+=flybyPlane.userData.vx*dt;flybyPlane.position.z+=flybyPlane.userData.vz*dt;
  // Red-Arrows-style three-colour smoke from three outlets. It hangs and
@@ -4306,7 +4306,7 @@ function updCar(c,dt){
  // Smoother ground tracking: the car's height is pulled to the actual
  // surface height rather than just tracking the nearest sample point,
  // preventing floating over bumps and dips.
- const targetY = groundY - 0.04;
+ const targetY = groundY;
  if (c.airborne) {
   c.y += c.vy * dt;
   if (c.y <= targetY) {
@@ -4318,7 +4318,7 @@ function updCar(c,dt){
   // The car's suspension is tighter, with less bounce; ground contact is
   // maintained precisely.
   const springK = 140; const springB = 32;
-  c.y = damp(c.y, targetY, springK, dt);
+  c.y = Math.max(damp(c.y, targetY, springK, dt), groundY-0.005);
   // Vertical velocity is also damped heavily so the car settles quickly
   // onto the track.
   c.vy = damp(c.vy, 0, springB, dt);
@@ -4630,10 +4630,15 @@ function updCarVisual(c,dt){
  // Check the actual front/rear hardpoints too. On a crest, using only the
  // centreline height leaves the nose or an axle below the road for one frame;
  // that is the disappearing geometry players see just before the spark fan.
+ const supportRx=-supportFz,supportRz=supportFx,carHalf=1.05;
  const supportFloor=Math.max(roadFloor,
   getRoadHAtCoords(c.x+supportFx*2.55,c.z+supportFz*2.55),
-  getRoadHAtCoords(c.x-supportFx*2.15,c.z-supportFz*2.15));
- const physicsY=(c.y!==undefined?c.y:supportFloor)+CAR_RIDE_HEIGHT+(c.bounceOff||0)+jitter;
+  getRoadHAtCoords(c.x-supportFx*2.15,c.z-supportFz*2.15),
+  getRoadHAtCoords(c.x+supportFx*2.35+supportRx*carHalf,c.z+supportFz*2.35+supportRz*carHalf),
+  getRoadHAtCoords(c.x+supportFx*2.35-supportRx*carHalf,c.z+supportFz*2.35-supportRz*carHalf),
+  getRoadHAtCoords(c.x-supportFx*1.95+supportRx*carHalf,c.z-supportFz*1.95+supportRz*carHalf),
+  getRoadHAtCoords(c.x-supportFx*1.95-supportRx*carHalf,c.z-supportFz*1.95-supportRz*carHalf));
+ const physicsY=Math.max(c.y!==undefined?c.y:supportFloor,supportFloor)+CAR_RIDE_HEIGHT+(c.bounceOff||0)+jitter;
  // Car-to-car resolution changes x/z after physics has sampled the road. Use
  // the new contact location immediately, so the nose, axle and wheels never
  // spend a frame below a crest or road skin while the sparks are flying.
@@ -5089,18 +5094,22 @@ const AudioSys={started:false,
   const ng=this.ctx.createGain();ng.gain.setValueAtTime(Math.min(0.6,0.2+strength*0.5),t);
   ng.gain.exponentialRampToValueAtTime(0.001,t+0.35);
   n.connect(f);f.connect(ng);ng.connect(this.master);n.start(t);n.stop(t+0.4);},
- jetFlyby(strength=1){if(!this.started||state.mode==='title')return;const t=this.ctx.currentTime;
-  // Layered near-field roar and low turbine rumble sell an aircraft crossing
-  // ahead as a real fly-over instead of a short UI whoosh.
-  const n=this.ctx.createBufferSource();n.buffer=this.noiseBuf;n.loop=true;
-  const f=this.ctx.createBiquadFilter();f.type='bandpass';f.frequency.setValueAtTime(420,t);f.frequency.exponentialRampToValueAtTime(1750,t+2.7);f.frequency.exponentialRampToValueAtTime(310,t+7.2);f.Q.value=.58;
-  const g=this.ctx.createGain();g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.12*strength,t+.75);g.gain.exponentialRampToValueAtTime(.58*strength,t+2.8);g.gain.exponentialRampToValueAtTime(.0001,t+7.5);
-  const o=this.ctx.createOscillator();o.type='sawtooth';o.frequency.setValueAtTime(58,t);o.frequency.exponentialRampToValueAtTime(152,t+2.8);o.frequency.exponentialRampToValueAtTime(42,t+7.3);
-  const og=this.ctx.createGain();og.gain.value=.13*strength;
-  const low=this.ctx.createOscillator();low.type='sine';low.frequency.setValueAtTime(31,t);low.frequency.exponentialRampToValueAtTime(86,t+2.8);low.frequency.exponentialRampToValueAtTime(24,t+7.3);
-  const lg=this.ctx.createGain();lg.gain.value=.18*strength;
-  o.connect(og);og.connect(g);low.connect(lg);lg.connect(g);n.connect(f);f.connect(g);g.connect(this.master);
-  n.start(t);o.start(t);low.start(t);n.stop(t+7.6);o.stop(t+7.6);low.stop(t+7.6);},
+ jetFlyby(strength=1){if(!this.started)return;const t=this.ctx.currentTime,ctx=this.ctx;
+  // Incoming jet pass: rising turbine scream, low body rumble, broadband roar,
+  // and a short delayed pressure thump after the aircraft has crossed overhead.
+  const n=ctx.createBufferSource();n.buffer=this.noiseBuf;n.loop=true;
+  const f=ctx.createBiquadFilter();f.type='bandpass';f.frequency.setValueAtTime(260,t);f.frequency.exponentialRampToValueAtTime(2600,t+1.9);f.frequency.exponentialRampToValueAtTime(520,t+5.8);f.Q.value=.72;
+  const g=ctx.createGain();g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.18*strength,t+.45);g.gain.exponentialRampToValueAtTime(.82*strength,t+1.95);g.gain.exponentialRampToValueAtTime(.0001,t+6.2);
+  const scream=ctx.createOscillator();scream.type='sawtooth';scream.frequency.setValueAtTime(310,t);scream.frequency.exponentialRampToValueAtTime(1180,t+1.8);scream.frequency.exponentialRampToValueAtTime(210,t+5.5);
+  const sf=ctx.createBiquadFilter();sf.type='bandpass';sf.frequency.setValueAtTime(900,t);sf.frequency.exponentialRampToValueAtTime(3600,t+1.8);sf.frequency.exponentialRampToValueAtTime(780,t+5.5);sf.Q.value=3.2;
+  const sg=ctx.createGain();sg.gain.setValueAtTime(.0001,t);sg.gain.exponentialRampToValueAtTime(.16*strength,t+1.6);sg.gain.exponentialRampToValueAtTime(.0001,t+5.9);
+  const low=ctx.createOscillator();low.type='sine';low.frequency.setValueAtTime(38,t);low.frequency.exponentialRampToValueAtTime(94,t+1.9);low.frequency.exponentialRampToValueAtTime(31,t+6.0);
+  const lg=ctx.createGain();lg.gain.setValueAtTime(.0001,t);lg.gain.exponentialRampToValueAtTime(.30*strength,t+1.95);lg.gain.exponentialRampToValueAtTime(.0001,t+6.4);
+  n.connect(f);f.connect(g);g.connect(this.master);scream.connect(sf);sf.connect(sg);sg.connect(this.master);low.connect(lg);lg.connect(this.master);
+  n.start(t);scream.start(t);low.start(t);n.stop(t+6.5);scream.stop(t+6.5);low.stop(t+6.5);
+  const boom=ctx.createOscillator();boom.type='sine';boom.frequency.setValueAtTime(72,t+2.05);boom.frequency.exponentialRampToValueAtTime(24,t+2.55);
+  const bg=ctx.createGain();bg.gain.setValueAtTime(.0001,t+2.02);bg.gain.exponentialRampToValueAtTime(.32*strength,t+2.08);bg.gain.exponentialRampToValueAtTime(.0001,t+2.75);
+  boom.connect(bg);bg.connect(this.master);boom.start(t+2.02);boom.stop(t+2.8);},
  update(){if(!this.started)return;
   const t=this.ctx.currentTime;
   // The title screen is music-only. Fade every race bus, including rival
@@ -5136,31 +5145,31 @@ const AudioSys={started:false,
   // The fundamental is the firing-order bed, not a single arcade note: the
   // V6 body sits lower, harmonics rise through the high-rev band, and the
   // soft limiter repeatedly removes a little energy at the redline.
-  const load=.86+p.throttle*.14, f=(62+p.audioRpm*1040)*limiter;
+  const load=.88+p.throttle*.12, f=(54+p.audioRpm*760)*limiter;
   this.o1.frequency.setTargetAtTime(f*load,t,0.018);
-  this.o2.frequency.setTargetAtTime(f*1.5,t,0.022);
-  this.o3.frequency.setTargetAtTime(f*.75,t,0.026);
-  this.o4.frequency.setTargetAtTime(f*2.48,t,0.018);
+  this.o2.frequency.setTargetAtTime(f*1.48,t,0.022);
+  this.o3.frequency.setTargetAtTime(f*.50,t,0.026);
+  this.o4.frequency.setTargetAtTime(f*2.02,t,0.018);
   // Inside the tunnel the engine is muffled (lower low-pass) and pushed through
   // a feedback delay for an enclosed, echoing rumble — the signature Monaco
   // tunnel sound.
   const tun=player.inTunnel?1:0;
-  this.eflt.frequency.setTargetAtTime((560+p.throttle*3500+p.audioRpm*2550)*(1-tun*0.42),t,0.03);
+  this.eflt.frequency.setTargetAtTime((620+p.throttle*2500+p.audioRpm*1900)*(1-tun*0.42),t,0.03);
   this.tdFb.gain.setTargetAtTime(tun*0.45,t,0.07);
   this.tdGain.gain.setTargetAtTime(tun?0.55:0,t,0.07);
-  this.eg.gain.setTargetAtTime(run?(0.30+p.throttle*0.36+p.audioRpm*0.16)*limiterCut:0,t,0.05);
-  this.engF.frequency.setTargetAtTime(105+p.audioRpm*560+p.throttle*180,t,0.045);
-  this.eng.gain.setTargetAtTime(run?0.028+p.throttle*0.18+p.audioRpm*0.12:0,t,0.06);
-  this.intakeF.frequency.setTargetAtTime(720+p.throttle*2100+p.audioRpm*1750,t,0.04);
-  this.intakeG.gain.setTargetAtTime(run?0.008+p.throttle*0.20+p.audioRpm*0.060:0,t,0.06);
-  this.exhaustF.frequency.setTargetAtTime(120+p.audioRpm*210+p.throttle*85,t,0.05);
-  const exhaustLoad=clamp((1-p.throttle)*0.52+p.audioRpm*0.34+p.brake*0.18,0,1);
-  this.exhaustG.gain.setTargetAtTime(run?0.024+exhaustLoad*0.15:0,t,0.07);
-  this.whineO.frequency.setTargetAtTime(320+p.audioRpm*1850+(p.gear||1)*58,t,0.035);
-  this.whineG.gain.setTargetAtTime(run?0.006+p.throttle*0.018+p.audioRpm*0.030:0,t,0.06);
-  this.pulseF.frequency.setTargetAtTime(105+p.audioRpm*420,t,0.04);
+  this.eg.gain.setTargetAtTime(run?(0.34+p.throttle*0.34+p.audioRpm*0.12)*limiterCut:0,t,0.05);
+  this.engF.frequency.setTargetAtTime(85+p.audioRpm*430+p.throttle*130,t,0.045);
+  this.eng.gain.setTargetAtTime(run?0.045+p.throttle*0.24+p.audioRpm*0.14:0,t,0.06);
+  this.intakeF.frequency.setTargetAtTime(560+p.throttle*1550+p.audioRpm*1250,t,0.04);
+  this.intakeG.gain.setTargetAtTime(run?0.018+p.throttle*0.18+p.audioRpm*0.045:0,t,0.06);
+  this.exhaustF.frequency.setTargetAtTime(82+p.audioRpm*155+p.throttle*65,t,0.05);
+  const exhaustLoad=clamp((1-p.throttle)*0.45+p.audioRpm*0.36+p.brake*0.16+p.throttle*0.22,0,1);
+  this.exhaustG.gain.setTargetAtTime(run?0.055+exhaustLoad*0.22:0,t,0.07);
+  this.whineO.frequency.setTargetAtTime(380+p.audioRpm*1250+(p.gear||1)*42,t,0.035);
+  this.whineG.gain.setTargetAtTime(run?0.003+p.throttle*0.010+p.audioRpm*0.014:0,t,0.06);
+  this.pulseF.frequency.setTargetAtTime(80+p.audioRpm*310,t,0.04);
   this.pulseO.frequency.setTargetAtTime(f*.5,t,0.03);
-  this.pulseG.gain.setTargetAtTime(run?0.028+p.audioRpm*0.070+p.throttle*0.030:0,t,0.05);
+  this.pulseG.gain.setTargetAtTime(run?0.050+p.audioRpm*0.095+p.throttle*0.045:0,t,0.05);
   this.wso.frequency.setTargetAtTime(f*5.2,t,0.02);
   this.wsg.gain.setTargetAtTime(run?p.wheelspin*0.08:0,t,0.03);
   this.skg.gain.setTargetAtTime(run?p.skidAmt*0.16:0,t,0.04);
@@ -7093,11 +7102,13 @@ function tick(){
  // completely at racing speed, and when you slow for a corner the rain takes
  // a moment to re-bead and dribble down again — like a real visor.
  try{
-  const rainShaderOn=(QUALITY_PRESETS[effQuality()]||{}).rainShader!==false;
-  // Onboard director shots on the title screen clear the glass with speed
-  // exactly like the player's car would; airborne/broadcast cameras get wet.
-  const dCam=state.mode==='title'&&(director.shot==='hood'||director.shot==='halo')&&director.target&&cars.includes(director.target)?director.target:null;
-  const speedKmh=player?Math.abs(player.vF)*3.6:(dCam?Math.abs(dCam.vF)*3.6:0);
+  const titleOnboard=state.mode==='title'&&(director.shot==='hood'||director.shot==='halo');
+  const rainShaderOn=(QUALITY_PRESETS[effQuality()]||{}).rainShader!==false&&(state.mode!=='title'||titleOnboard);
+  // On the title screen, only hood/halo shots are treated as a physical visor.
+  // Helicopter/TV/orbit cameras should show rain in the world, not smear the
+  // whole menu through a low-res wet windscreen that ignores quality choices.
+  const dCam=titleOnboard&&director.target&&cars.includes(director.target)?director.target:null;
+  const speedKmh=dCam?Math.abs(dCam.vF)*3.6:(player?Math.abs(player.vF)*3.6:0);
   const speedFactor=clamp(speedKmh/300,0,1);
   // Speed clears the glass: at 300 km/h only ~25% of the water stays on,
   // then it re-beads when you brake. 0.70 made speed barely matter; 0.08
