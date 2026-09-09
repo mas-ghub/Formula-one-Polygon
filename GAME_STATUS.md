@@ -1,7 +1,7 @@
 # POLYGON GP — current game status / what is already done
 
 **Last updated:** 2026-09-09  
-**Visible app version in `index.html`:** `v1.0.0 · BUILD 20260909.20`  
+**Visible app version in `index.html`:** `v1.0.0 · BUILD 20260909.23`  
 **Validation after latest edits:** `npm run build` ✅, `npm run lint` ✅  
 **Note:** Playwright was not used for the latest work.
 
@@ -545,6 +545,9 @@ Summary:
 33. Minimap/helmet-overlay correction: bottom-right circuit diagram canvas now matches its 176px drawing buffer and has no clipped black panel background; helmet-only camera overlay/body visibility overrides are forcibly hidden/restored whenever leaving HELMET cam, including title, demo, helicopter and crash cameras.
 34. Helmet chassis-animation correction: halo/mirror overlay still does not incorrectly rotate with the steering wheel, but it now has subtle chassis flex, lateral-load roll and speed/kerb buzz so it no longer feels frozen or detached while steering.
 35. Voice-pack/admin and driver-radio pass: admin voice-lines expanded from 12 to 49 planned clips, generator supports `FISH_VOICE_DRIVER_RADIO`, admin README explains licensed classic-motorsport voice selection, driver radio now uses a separate `Speech.sayDriver()` path instead of the commentator voice, and driver face/radio popups are shown for normal driver speech as well as angry track-limits moments.
+36. Grid slot width correction: start-position upside-down U markings widened/lengthened so they remain visible around the car/tyres like real F1 grid boxes.
+37. Grid box and speed-line context correction: start grid U slots are longer again and their crossbars sit ahead of the front wheels/nose so cars do not start over the line; speed-line overlay now only appears in forward-facing driving cameras when the view aligns with travel, strongest on straights, and is hidden for side/TV/orbit/top views where it would not make sense.
+38. Camera morph correction: camera changes now compute the destination with boosted camera damping so they do not fly forward then back; helmet overlay/mirror pieces are hidden during the morph and only appear once the transition has settled into HELMET cam, preventing the halo from sitting on screen waiting for the car.
 
 ### 2026-09-09 circuit-drivability pass
 

@@ -2574,8 +2574,8 @@ function buildWorld(idx){
  // 6. Grid Starting Slots — FIA-style upside-down U boxes.
  {
   const slotM=new THREE.MeshBasicMaterial({color:0xf4f1ea,transparent:true,opacity:0.88,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2});
-  const barG=new THREE.PlaneGeometry(2.35,0.12).rotateX(-Math.PI/2);
-  const sideG=new THREE.PlaneGeometry(0.12,1.72).rotateX(-Math.PI/2);
+  const barG=new THREE.PlaneGeometry(3.55,0.14).rotateX(-Math.PI/2);
+  const sideG=new THREE.PlaneGeometry(0.14,5.20).rotateX(-Math.PI/2);
   const bars=new THREE.InstancedMesh(barG,slotM,20),sides=new THREE.InstancedMesh(sideG,slotM,40);
   const dm=new THREE.Object3D();let si=0;
   const setPart=(mesh,idx,x,z,yaw,xOff,zOff)=>{
@@ -2587,10 +2587,13 @@ function buildWorld(idx){
    sampleF(f);
    const yaw=Math.atan2(_st.x,_st.z);
    const x=_sv.x+_sn.x*lat,z=_sv.z+_sn.z*lat;
-   // open end faces the approaching car; crossbar is at the nose end.
-   setPart(bars,i,x,z,yaw,0,0.88);
-   setPart(sides,si++,x,z,yaw,-1.12,0.02);
-   setPart(sides,si++,x,z,yaw, 1.12,0.02);
+   // Open end faces the approaching car; crossbar is well AHEAD of the front
+   // wheels/nose so a car sitting on the grid never appears over the line.
+   setPart(bars,i,x,z,yaw,0,2.92);
+   // Long, wide U-shaped slots like real F1 boxes: visible along both sides of
+   // the whole car instead of disappearing under the floor/tyres.
+   setPart(sides,si++,x,z,yaw,-1.70,0.26);
+   setPart(sides,si++,x,z,yaw, 1.70,0.26);
   }
   bars.renderOrder=1;sides.renderOrder=1;world.add(bars,sides);
  }
@@ -5609,7 +5612,7 @@ function placeWingMirrors(fovDeg){
  }
 }
 function renderWingMirrors(){
- if(!wingMirrors||!player||state.camMode!==3)return;
+ if(!wingMirrors||!player||state.camMode!==3||camTransition.active)return;
  const q=effQuality();
  if(q==='LOW'){
   // LOW skips the expensive mirror scene renders, but still draw the mirror
@@ -5675,6 +5678,13 @@ function restoreHelmetCamOverrides(c){
  if(c.mesh.steering)c.mesh.steering.position.set(0,0.80,0.62);
 }
 function updCamera(dt){
+ const realCamDt=dt;
+ // While morphing between cameras, compute the destination camera with a larger
+ // internal damping step. Otherwise chase/immersive cams use their old damped
+ // state as an intermediate target, so the transition flies forward then backs
+ // up. The morph timer still uses the real frame dt below.
+ if(camTransition.active)dt=Math.max(dt,0.18);
+ const helmetSettled=!!(player&&!demoOn&&state.mode!=='title'&&state.camMode===3&&!crashCam.active&&(!camTransition.active||camTransition.t>camTransition.dur*0.82));
  const helmetLive=!!(player&&!demoOn&&state.mode!=='title'&&state.camMode===3&&!crashCam.active);
  if(!helmetLive){
   if(helmOverlay){helmOverlay.visible=false;helmOverlay.position.set(0,0,0);helmOverlay.rotation.set(0,0,0);}
@@ -5864,14 +5874,14 @@ function updCamera(dt){
  const helm=state.camMode===3;
  if(p.mesh.steering){
   p.mesh.steering.visible=true;
-  if(!helm)p.mesh.steering.position.set(0,0.80,0.62);
+  if(!helmetSettled)p.mesh.steering.position.set(0,0.80,0.62);
  }
  if(p.mesh.halo)p.mesh.halo.visible=true;
  if(p.mesh.body)p.mesh.body.visible=true;
- if(p.mesh.axleF)p.mesh.axleF.visible=!helm;
- if(p.mesh.axleR)p.mesh.axleR.visible=!helm;
+ if(p.mesh.axleF)p.mesh.axleF.visible=!helmetSettled;
+ if(p.mesh.axleR)p.mesh.axleR.visible=!helmetSettled;
  if(p.mesh.drs)p.mesh.drs.visible=true;
- if(p.mesh.brakes)p.mesh.brakes.visible=!helm;
+ if(p.mesh.brakes)p.mesh.brakes.visible=!helmetSettled;
  if(p.mesh.brakeLight)p.mesh.brakeLight.visible=true;
  if(p.mesh.tailGlow)p.mesh.tailGlow.visible=!helm;
  if(helmOverlay)helmOverlay.visible=helm;
@@ -5954,12 +5964,12 @@ function updCamera(dt){
   camera.lookAt(look.x,look.y,look.z);
   camera.rotateZ(lean*0.10+p.steer*0.012);
   tf=78;
-  if(p.mesh.steering){p.mesh.steering.visible=true;p.mesh.steering.position.set(0,0.58,0.64);}
-  if(p.mesh.halo)p.mesh.halo.visible=false;
+  if(p.mesh.steering){p.mesh.steering.visible=true;p.mesh.steering.position.set(0,helmetSettled?0.58:0.80,helmetSettled?0.64:0.62);}
+  if(p.mesh.halo)p.mesh.halo.visible=!helmetSettled;
   if(p.mesh.body)p.mesh.body.visible=true;
-  if(p.mesh.axleF)p.mesh.axleF.visible=false;
-  if(p.mesh.axleR)p.mesh.axleR.visible=false;
-  if(p.mesh.brakes)p.mesh.brakes.visible=false;
+  if(p.mesh.axleF)p.mesh.axleF.visible=!helmetSettled;
+  if(p.mesh.axleR)p.mesh.axleR.visible=!helmetSettled;
+  if(p.mesh.brakes)p.mesh.brakes.visible=!helmetSettled;
   if(helmOverlay&&helmOverlay.userData.v!==11){camera.remove(helmOverlay);helmOverlay=null;helmWheel=null;wingMirrors=null;}
   if(!helmOverlay){
    helmOverlay=new THREE.Group();helmOverlay.userData.v=11;
@@ -6007,7 +6017,7 @@ function updCamera(dt){
    wingMirrors=[mkGlass(mkRt(),-1),mkGlass(mkRt(),1)];
    camera.add(helmOverlay);
   }
-  helmOverlay.visible=true;
+  helmOverlay.visible=helmetSettled;
   // The real halo and mirrors do NOT turn with the steering wheel — they are
   // bolted to the chassis. But a totally camera-locked overlay feels dead, so
   // give the helmet-only halo/mirror assembly subtle chassis motion from steer,
@@ -6070,7 +6080,7 @@ function updCamera(dt){
   camera.position.x+=rand(-1,1)*cam.shake*0.35;camera.position.y+=rand(-1,1)*cam.shake*0.3;}
  if(camTransition.active){
   const targetPos=camera.position.clone(),targetQuat=camera.quaternion.clone(),targetFov=zf(tf);
-  camTransition.t+=dt;
+  camTransition.t+=realCamDt;
   const u=clamp(camTransition.t/camTransition.dur,0,1),e=u*u*(3-2*u);
   camera.position.lerpVectors(camTransition.fromPos,targetPos,e);
   camera.quaternion.slerpQuaternions(camTransition.fromQuat,targetQuat,e);
@@ -6106,11 +6116,20 @@ function updateFpsCounter(dt){
 }
 function drawSpeedSense(dt){
  if(!speedFxCtx||!player||state.mode==='title'||state.mode==='menu'||state.mode==='boot'){if(speedFxCanvas)speedFxCanvas.style.opacity=0;return;}
- const kmh=Math.abs(player.vF||0)*3.6;
- const intensity=clamp((kmh-95)/190,0,1)*(player.offT?0.75:1);
- speedFxCanvas.style.opacity=(0.06+intensity*0.38).toFixed(3);
  const w=speedFxCanvas.width,h=speedFxCanvas.height,pr=w/Math.max(innerWidth,1);
  speedFxCtx.clearRect(0,0,w,h);
+ // Speed streaks only make sense from cameras looking broadly in the direction
+ // of travel. Do not draw radial "go faster" lines over TV/orbit/top/side-on
+ // views where they look pinned to the screen instead of the car's motion.
+ const speedCam=state.camMode===0||state.camMode===1||state.camMode===2||state.camMode===3;
+ const vm=Math.hypot(player.vx||0,player.vz||0);
+ let align=0;
+ if(speedCam&&vm>1){const dir=new THREE.Vector3();camera.getWorldDirection(dir);align=clamp((dir.x*(player.vx/vm)+dir.z*(player.vz/vm)-0.25)/0.55,0,1);}
+ if(!speedCam||align<=0.01){speedFxCanvas.style.opacity=0;return;}
+ const kmh=Math.abs(player.vF||0)*3.6;
+ const straight=1-clamp(Math.abs((T&&T.samples&&T.samples[player.ti]&&T.samples[player.ti].curv)||0)*45,0,0.55);
+ const intensity=clamp((kmh-105)/190,0,1)*(player.offT?0.65:1)*align*straight;
+ speedFxCanvas.style.opacity=(0.04+intensity*0.34).toFixed(3);
  if(intensity<=0.01)return;
  speedFxT+=dt*(0.8+intensity*3.5);
  const cx=w*0.5,cy=h*(state.camMode===3?0.48:0.53);
@@ -6880,6 +6899,7 @@ function zoomCam(dir){
  camZoomF=clamp(camZoomF*(dir>0?1.13:1/1.13),0.5,1.9);
 }
 function cycleCam(){
+ if(helmOverlay)helmOverlay.visible=false;
  camTransition.active=true;camTransition.t=0;
  camTransition.fromPos.copy(camera.position);camTransition.fromQuat.copy(camera.quaternion);camTransition.fromFov=camera.fov||62;
  state.camMode=(state.camMode+1)%CAM_NAMES.length;
