@@ -190,10 +190,10 @@ void main() {
   // a busy carpet of static beads with clearly visible runners. Later
   // tuning had starved these to roughly a third and the glass read as
   // barely damp. Transparency is still controlled at the composite stage.
-  float layer3 = S(.62, .95, rainAmount)*0.42;
-  float staticDrops = S(-.5, 1., rainAmount)*1.7;
-  float layer1 = S(.25, .75, rainAmount)*0.94;
-  float layer2 = S(.0, .5, rainAmount)*0.78;
+  float layer3 = S(.68, .98, rainAmount)*0.22;
+  float staticDrops = S(-.5, 1., rainAmount)*1.18;
+  float layer1 = S(.25, .75, rainAmount)*0.68;
+  float layer2 = S(.0, .5, rainAmount)*0.46;
   float speedFactor = clamp(uCarSpeed / 200.0, 0.0, 1.2); // speed-driven streak elongation
 
   vec2 c = Drops(uv, t, staticDrops, layer1, layer2);
@@ -218,7 +218,7 @@ void main() {
   vec2 n = vec2(dFdx(c.x), dFdy(c.x));
   // A little more optical throw so the refraction is readable from the
   // helicopter/broadcast distances too, not just from the chase camera.
-  n=clamp(n*0.95,vec2(-0.032),vec2(0.032));
+  n=clamp(n*0.62,vec2(-0.024),vec2(0.024));
 
   // Faithful Shadertoy-style optical hierarchy: a faintly defocused wet pane,
   // a sharp refracted scene inside beads, and softer running trails. Keeping
@@ -232,9 +232,10 @@ void main() {
   // Glass between the drops stays perfectly CLEAR — the old pane-wide term
   // (0.00005 + rainAmount*0.00014 everywhere) was the "milky" haze. Only
   // the running trails get a speed-stretched smear.
-  float wetGlass = c.y * 0.00022;
-  vec2 smear = vec2(wetGlass, wetGlass * trailElong * 2.2);
-  vec2 ruv = clamp(UV + n * 0.8, 0.0, 1.0);
+  float trailMask = c.y * S(0.08, 0.42, c.x);
+  float wetGlass = trailMask * 0.00011;
+  vec2 smear = vec2(wetGlass, wetGlass * trailElong * 1.25);
+  vec2 ruv = clamp(UV + n * 0.62, 0.0, 1.0);
   vec3 refractedLin = texture2D(uScene, ruv).rgb * 2.0
     + texture2D(uScene, clamp(ruv + vec2(smear.x, 0.0), 0.0, 1.0)).rgb
     + texture2D(uScene, clamp(ruv - vec2(smear.x, 0.0), 0.0, 1.0)).rgb
@@ -245,7 +246,7 @@ void main() {
   // Beads are see-through: the refracted scene is mixed in only INSIDE the
   // bead (c.x) and faintly along trails — everything else is the untouched
   // frame, so the circuit reads at full contrast behind the water.
-  float dropletAlpha=clamp(c.x*0.72+c.y*0.10,0.0,0.62);
+  float dropletAlpha=clamp(c.x*0.46+trailMask*0.045,0.0,0.42);
   vec3 col=mix(originalScene,refractedScene,dropletAlpha);
 
   // Fresnel rim and bright pin highlight make droplets read as water rather
@@ -259,9 +260,9 @@ void main() {
   // Highlights are what make water read as water, but every additive term
   // pushes toward white. Keep the specular pin, cut the broad rim/trail
   // sheen so the glass never looks frosted.
-  col+=vec3(0.48,0.68,0.82)*edge*0.035*rainAmount;
-  col+=vec3(0.95,0.99,1.0)*glint*0.20*rainAmount;
-  col+=vec3(0.42,0.62,0.76)*c.y*0.04*rainAmount;
+  col+=vec3(0.70,0.86,0.96)*edge*0.022*rainAmount;
+  col+=vec3(0.98,1.0,1.0)*glint*0.14*rainAmount;
+  col+=vec3(0.70,0.86,0.96)*trailMask*0.014*rainAmount;
 
   // The matching Shadertoy Heartfelt effect is a glass/rain shader; lightning
   // is layered separately so it can be spectacular without making rain itself

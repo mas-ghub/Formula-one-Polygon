@@ -1268,7 +1268,7 @@ const rainGeo=new THREE.BufferGeometry();
 rainGeo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(RAIN_N*6),3).setUsage(THREE.DynamicDrawUsage));
 // Darker, glassier streaks — the old near-white 0x9db4c8 at 0.45 opacity read
 // as a curtain of white noise; real rain is mostly transparent.
-const rainMat = new THREE.LineBasicMaterial({color:0xc9d8e4,transparent:true,opacity:0.30,depthWrite:false});
+const rainMat = new THREE.LineBasicMaterial({color:0xd8e9f5,transparent:true,opacity:0.18,depthWrite:false});
 const rainMesh=new THREE.LineSegments(rainGeo,rainMat);
 rainMesh.frustumCulled=false;scene.add(rainMesh);
 const rainP=new Float32Array(RAIN_N*3);
@@ -1333,7 +1333,7 @@ function updWeatherFX(dt){
    specular pin — nothing is ever drawn as a stroked ring, so no drop can
    read as an opaque outline against the sky. */
 const dropCv=$('drops'),dropCx=dropCv.getContext('2d');
-const RAIN_RENDER_REV='20260908.2-rain-07';
+const RAIN_RENDER_REV='20260909.24-clear-rain';
 let lensStatics=[],lensRunners=[];
 function sizeDrops(){dropCv.width=innerWidth;dropCv.height=innerHeight;dropCv.dataset.renderRevision=RAIN_RENDER_REV;}
 function newStaticDrop(){const life=rand(2.4,7.5);return{

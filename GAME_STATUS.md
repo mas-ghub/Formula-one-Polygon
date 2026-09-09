@@ -1,7 +1,7 @@
 # POLYGON GP — current game status / what is already done
 
 **Last updated:** 2026-09-09  
-**Visible app version in `index.html`:** `v1.0.0 · BUILD 20260909.23`  
+**Visible app version in `index.html`:** `v1.0.0 · BUILD 20260909.25`  
 **Validation after latest edits:** `npm run build` ✅, `npm run lint` ✅  
 **Note:** Playwright was not used for the latest work.
 
@@ -548,6 +548,8 @@ Summary:
 36. Grid slot width correction: start-position upside-down U markings widened/lengthened so they remain visible around the car/tyres like real F1 grid boxes.
 37. Grid box and speed-line context correction: start grid U slots are longer again and their crossbars sit ahead of the front wheels/nose so cars do not start over the line; speed-line overlay now only appears in forward-facing driving cameras when the view aligns with travel, strongest on straights, and is hidden for side/TV/orbit/top views where it would not make sense.
 38. Camera morph correction: camera changes now compute the destination with boosted camera damping so they do not fly forward then back; helmet overlay/mirror pieces are hidden during the morph and only appear once the transition has settled into HELMET cam, preventing the halo from sitting on screen waiting for the car.
+39. Clear-water rain correction: reduced full-screen rain density, vertical trail alpha, smear length and milky blue/white sheen; droplet refraction now uses a lighter clear-water mix and world-space rain streak opacity is lower so rain reads as transparent water rather than frosted glass.
+40. Fish one-command admin helper: added `admin/fish-auto-voicepack.mjs` plus npm scripts `fish:dry`, `fish:auto`, and `fish:auto:force`; the auto helper searches licensed English voices, picks separate commentator/engineer/driver/angry-driver IDs, caches the choices, then runs the generator so the user does not have to run many small commands.
 
 ### 2026-09-09 circuit-drivability pass
 
