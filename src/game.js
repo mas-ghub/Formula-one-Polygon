@@ -2451,30 +2451,30 @@ function buildWorld(idx){
    const ribB=(Math.floor(s2.cum/1.2)%2)?0.075:0.018;
    const kerbHere=kerbMask[i]&&kerbMask[(i+1)%N];
    for(const sg of[1,-1]){
+    // Continuous painted track-limit line. Kerbs sit beside/over the line in
+    // corners, but the white edge never disappears, so the side of the road
+    // reads as: asphalt -> white line/kerb -> run-off -> barrier.
+    const lbIn=bankOffAt(s.bk||0,lineInner*sg),lbOut=bankOffAt(s.bk||0,lineOuter*sg);
+    const lbIn2=bankOffAt(s2.bk||0,lineInner*sg),lbOut2=bankOffAt(s2.bk||0,lineOuter*sg);
+    lp.push(s.p.x+s.n.x*lineInner*sg,s.p.y+0.061+lbIn,s.p.z+s.n.z*lineInner*sg,
+     s.p.x+s.n.x*lineOuter*sg,s.p.y+0.061+lbOut,s.p.z+s.n.z*lineOuter*sg,
+     s2.p.x+s2.n.x*lineInner*sg,s2.p.y+0.061+lbIn2,s2.p.z+s2.n.z*lineInner*sg,
+     s2.p.x+s2.n.x*lineOuter*sg,s2.p.y+0.061+lbOut2,s2.p.z+s2.n.z*lineOuter*sg);
+    if(sg>0)li.push(lVi,lVi+2,lVi+1,lVi+1,lVi+2,lVi+3);
+    else li.push(lVi,lVi+1,lVi+2,lVi+1,lVi+3,lVi+2);
+    lVi+=4;
     if(kerbHere){
      const bIn=bankOffAt(s.bk||0,curbInner*sg),bOut=bankOffAt(s.bk||0,curbOuter*sg);
      const bIn2=bankOffAt(s2.bk||0,curbInner*sg),bOut2=bankOffAt(s2.bk||0,curbOuter*sg);
-     pos.push(s.p.x+s.n.x*curbInner*sg,s.p.y+0.058+bIn,s.p.z+s.n.z*curbInner*sg,
-      s.p.x+s.n.x*curbOuter*sg,s.p.y+0.058+ribA+bOut,s.p.z+s.n.z*curbOuter*sg,
-      s2.p.x+s2.n.x*curbInner*sg,s2.p.y+0.058+bIn2,s2.p.z+s2.n.z*curbInner*sg,
-      s2.p.x+s2.n.x*curbOuter*sg,s2.p.y+0.058+ribB+bOut2,s2.p.z+s2.n.z*curbOuter*sg);
+     pos.push(s.p.x+s.n.x*curbInner*sg,s.p.y+0.066+bIn,s.p.z+s.n.z*curbInner*sg,
+      s.p.x+s.n.x*curbOuter*sg,s.p.y+0.066+ribA+bOut,s.p.z+s.n.z*curbOuter*sg,
+      s2.p.x+s2.n.x*curbInner*sg,s2.p.y+0.066+bIn2,s2.p.z+s2.n.z*curbInner*sg,
+      s2.p.x+s2.n.x*curbOuter*sg,s2.p.y+0.066+ribB+bOut2,s2.p.z+s2.n.z*curbOuter*sg);
      const v0=s.cum/2.4,v1=s2.cum/2.4;
      uv.push(0,v0,1,v0,0,v1,1,v1);
      if(sg>0)index.push(vi,vi+2,vi+1,vi+1,vi+2,vi+3);
      else index.push(vi,vi+1,vi+2,vi+1,vi+3,vi+2);
      vi+=4;
-    }else{
-     // Painted white track-limit line where no kerb exists — what a real F1
-     // straight edge actually looks like. Flat on the road: no rise, no rumble.
-     const bIn=bankOffAt(s.bk||0,lineInner*sg),bOut=bankOffAt(s.bk||0,lineOuter*sg);
-     const bIn2=bankOffAt(s2.bk||0,lineInner*sg),bOut2=bankOffAt(s2.bk||0,lineOuter*sg);
-     lp.push(s.p.x+s.n.x*lineInner*sg,s.p.y+0.056+bIn,s.p.z+s.n.z*lineInner*sg,
-      s.p.x+s.n.x*lineOuter*sg,s.p.y+0.056+bOut,s.p.z+s.n.z*lineOuter*sg,
-      s2.p.x+s2.n.x*lineInner*sg,s2.p.y+0.056+bIn2,s2.p.z+s2.n.z*lineInner*sg,
-      s2.p.x+s2.n.x*lineOuter*sg,s2.p.y+0.056+bOut2,s2.p.z+s2.n.z*lineOuter*sg);
-     if(sg>0)li.push(lVi,lVi+2,lVi+1,lVi+1,lVi+2,lVi+3);
-     else li.push(lVi,lVi+1,lVi+2,lVi+1,lVi+3,lVi+2);
-     lVi+=4;
     }
    }
   }
@@ -2495,17 +2495,21 @@ function buildWorld(idx){
   }
  }
 
- // 4. Continuous Smooth Curved 3D Barrier Ribbons (TechPro Red/White / Armco Barrier)
+ // 4. Continuous Smooth Curved 3D Barrier Ribbons (neutral Armco / concrete)
+ // Red/white belongs to the kerb at the track edge. The outer wall used to be
+ // red/white as well, which made the road side read as random painted chunks:
+ // kerb, blank run-off, then more red/white bits. Keep this boundary neutral.
  {
   const wPos=[],wCol=[],wIdx=[];let wVi=0;
   const wallH=0.6,wallThick=0.55;
+  const wallBase=new THREE.Color(def.theme==='street'?0x8a8d90:0x69727c);
+  const wallTop=new THREE.Color(def.theme==='street'?0xa2a4a5:0x515b66);
 
   for(let i=0;i<N;i++){
    const s=samples[i],s2=samples[(i+1)%N];
-   const blockIdx=Math.floor(s.cum/8.5);
-   const isRed=(blockIdx%2===0);
-   const col=isRed?new THREE.Color(0xd91624):new THREE.Color(0xf2f3f7);
-   const topCol=isRed?new THREE.Color(0xad0e1a):new THREE.Color(0xd2d4dc);
+   const shade=(Math.floor(s.cum/18)%2)?0.92:1.0;
+   const col=wallBase.clone().multiplyScalar(shade);
+   const topCol=wallTop.clone().multiplyScalar(shade);
 
    for(const sg of[1,-1]){
     const inX0=s.p.x+s.n.x*wallDist*sg, inZ0=s.p.z+s.n.z*wallDist*sg;
@@ -5645,15 +5649,15 @@ function updCamera(dt){
    director._hidden=tc;
    const lean=hg?hg.rotation.z*0.55:0,nod=hg?hg.rotation.x*0.4:0;
    tc.mesh.g.updateMatrixWorld(true);
-   const eye=new THREE.Vector3(0,1.24,-0.04).applyMatrix4(tc.mesh.g.matrixWorld);
-   const look=new THREE.Vector3((tc.steerVis||0)*0.14,1.04+nod*0.12,13.0).applyMatrix4(tc.mesh.g.matrixWorld);
+   const eye=new THREE.Vector3(0,1.055,0.10).applyMatrix4(tc.mesh.g.matrixWorld);
+   const look=new THREE.Vector3((tc.steerVis||0)*0.16,0.83+nod*0.14,10.5).applyMatrix4(tc.mesh.g.matrixWorld);
    camera.near=0.16;
    camera.position.copy(eye);
    camera.up.set(0,1,0);
    camera.lookAt(look);
-   camera.rotateZ(lean*0.18+(tc.steerVis||0)*0.025);
+   camera.rotateZ(lean*0.20+(tc.steerVis||0)*0.03);
    updatePlayerSteeringDisplay(tc,Math.abs(tc.vF),clamp(Math.abs(tc.vF)/PH.top,0,1),true);
-   camera.fov=damp(camera.fov,zf(58),4,dt);camera.updateProjectionMatrix();return;
+   camera.fov=damp(camera.fov,zf(64),4,dt);camera.updateProjectionMatrix();return;
   }
   // Helicopter establishing shot: now a broadcast helicopter following the
   // pack, not a satellite sweep over the weakest far-terrain. This makes the
@@ -5834,16 +5838,16 @@ function updCamera(dt){
   // Eye just above the halo crown (0.985 - 0.06 offset = 0.925 world) so the
   // road is seen OVER the front bar, and the look point dropped so the wheel
   // sits in the bottom quarter of the frame rather than the middle.
-  // Sky-style onboard/helmet view: the camera looks OVER the halo/nose, not
-  // through the gap underneath it. A slightly higher eye and higher look point
-  // keep the halo low in frame, with the wheel/LCD in the lower third.
-  const eye=new THREE.Vector3(0,1.24,-0.04).applyMatrix4(p.mesh.g.matrixWorld);
-  const look=new THREE.Vector3(p.steer*0.14,1.04+nod*0.12,13.0).applyMatrix4(p.mesh.g.matrixWorld);
+  // Halo-gap onboard: sit the eye lower in the cockpit so the player looks
+  // through the open gap under the halo's front hoop, not over the top of it.
+  // The look point stays just above the tarmac so the halo frames the road.
+  const eye=new THREE.Vector3(0,1.055,0.10).applyMatrix4(p.mesh.g.matrixWorld);
+  const look=new THREE.Vector3(p.steer*0.16,0.83+nod*0.14,10.5).applyMatrix4(p.mesh.g.matrixWorld);
   camera.position.set(eye.x+Math.sin(timeSec*49.7+p.phase)*buzz,eye.y,eye.z);
   camera.up.set(0,1,0);
   camera.lookAt(look.x,look.y,look.z);
-  camera.rotateZ(lean*0.18+p.steer*0.025);
-  tf=58;
+  camera.rotateZ(lean*0.20+p.steer*0.03);
+  tf=64;
   if(p.mesh.steering)p.mesh.steering.visible=true;
   if(p.mesh.halo)p.mesh.halo.visible=true;
   if(p.mesh.body)p.mesh.body.visible=true;
