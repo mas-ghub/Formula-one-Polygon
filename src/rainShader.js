@@ -19,6 +19,9 @@ void main(){
 `;
 
 const FRAG = `
+#ifdef GL_OES_standard_derivatives
+#extension GL_OES_standard_derivatives : enable
+#endif
 precision highp float;
 uniform sampler2D uScene;
 uniform float uTime;
@@ -183,10 +186,14 @@ void main() {
   // Keep the authored Heartfelt layer weights: the drop field itself must be
   // dense enough to see. Transparency is controlled at the composite stage,
   // not by starving the field until it becomes invisible.
-  float layer3 = S(.70, .98, rainAmount)*0.18;
-  float staticDrops = S(.0, 1., rainAmount)*0.55;
-  float layer1 = S(.30, .80, rainAmount)*0.50;
-  float layer2 = S(.15, .70, rainAmount)*0.38;
+  // Restored to the dense, authored Heartfelt field (the 20260908.4 look):
+  // a busy carpet of static beads with clearly visible runners. Later
+  // tuning had starved these to roughly a third and the glass read as
+  // barely damp. Transparency is still controlled at the composite stage.
+  float layer3 = S(.62, .95, rainAmount)*0.42;
+  float staticDrops = S(-.5, 1., rainAmount)*1.7;
+  float layer1 = S(.25, .75, rainAmount)*0.94;
+  float layer2 = S(.0, .5, rainAmount)*0.78;
   float speedFactor = clamp(uCarSpeed / 200.0, 0.0, 1.2); // speed-driven streak elongation
 
   vec2 c = Drops(uv, t, staticDrops, layer1, layer2);
@@ -205,10 +212,10 @@ void main() {
   // Heartfelt uses a one-pixel finite difference for the wet-glass normal.
   // The previous port divided this twice and reduced it to almost zero, so
   // the pass technically ran but produced no readable bead refraction.
-  vec2 e = vec2(1.0/max(uResolution.x,uResolution.y), 0.);
-  float cx = Drops(uv+e, t, staticDrops, layer1, layer2).x;
-  float cy = Drops(uv+e.yx, t, staticDrops, layer1, layer2).x;
-  vec2 n = vec2(cx-c.x, cy-c.x);
+  // Glass normal from hardware screen-space derivatives: ONE Drops() eval
+  // per pixel instead of three. Same gradient the finite difference gave,
+  // at a third of the ALU — this was the single biggest cost of the pass.
+  vec2 n = vec2(dFdx(c.x), dFdy(c.x));
   // A little more optical throw so the refraction is readable from the
   // helicopter/broadcast distances too, not just from the chase camera.
   n=clamp(n*0.95,vec2(-0.032),vec2(0.032));
@@ -218,12 +225,27 @@ void main() {
   // the background blur modest preserves braking markers for gameplay.
   // Speed-driven streak elongation applied to the blur amount: faster cars
   // stretch the drop trails horizontally as the relative wind pulls them out.
-  float wetGlass = 0.0;
-  // Grade first, then put the water on top — the drops are a screen-space
-  // effect on already-lit glass, not something inside the exposure chain.
+  // Speed-reactive wet-glass defocus: the pane softens slightly where water
+  // sits, trails smear MORE the faster you go (airflow drags the film up
+  // the visor). A 4-tap cross blur stretched along Y by speed is enough and
+  // costs half the old 8-tap ring.
+  // Glass between the drops stays perfectly CLEAR — the old pane-wide term
+  // (0.00005 + rainAmount*0.00014 everywhere) was the "milky" haze. Only
+  // the running trails get a speed-stretched smear.
+  float wetGlass = c.y * 0.00022;
+  vec2 smear = vec2(wetGlass, wetGlass * trailElong * 2.2);
+  vec2 ruv = clamp(UV + n * 0.8, 0.0, 1.0);
+  vec3 refractedLin = texture2D(uScene, ruv).rgb * 2.0
+    + texture2D(uScene, clamp(ruv + vec2(smear.x, 0.0), 0.0, 1.0)).rgb
+    + texture2D(uScene, clamp(ruv - vec2(smear.x, 0.0), 0.0, 1.0)).rgb
+    + texture2D(uScene, clamp(ruv + vec2(0.0, smear.y), 0.0, 1.0)).rgb
+    + texture2D(uScene, clamp(ruv - vec2(0.0, smear.y), 0.0, 1.0)).rgb;
   vec3 originalScene = rainAces(texture2D(uScene, UV).rgb);
-  vec3 refractedScene = rainAces(texture2D(uScene, clamp(UV + n * 0.65, 0.0, 1.0)).rgb);
-  float dropletAlpha=clamp(c.x*0.42+c.y*0.16,0.0,0.40);
+  vec3 refractedScene = rainAces(refractedLin / 6.0);
+  // Beads are see-through: the refracted scene is mixed in only INSIDE the
+  // bead (c.x) and faintly along trails — everything else is the untouched
+  // frame, so the circuit reads at full contrast behind the water.
+  float dropletAlpha=clamp(c.x*0.72+c.y*0.10,0.0,0.62);
   vec3 col=mix(originalScene,refractedScene,dropletAlpha);
 
   // Fresnel rim and bright pin highlight make droplets read as water rather
@@ -234,9 +256,12 @@ void main() {
   // short strike envelope, so wet glass never becomes a full-screen white veil.
   // Kept soft on purpose: a stronger rim/glint reads as an opaque outline
   // around every bead instead of wet glass.
-  col+=vec3(0.55,0.72,0.85)*edge*0.07*rainAmount;
-  col+=vec3(0.95,0.99,1.0)*glint*0.16*rainAmount;
-  col+=vec3(0.42,0.62,0.76)*c.y*0.06*rainAmount;
+  // Highlights are what make water read as water, but every additive term
+  // pushes toward white. Keep the specular pin, cut the broad rim/trail
+  // sheen so the glass never looks frosted.
+  col+=vec3(0.48,0.68,0.82)*edge*0.035*rainAmount;
+  col+=vec3(0.95,0.99,1.0)*glint*0.20*rainAmount;
+  col+=vec3(0.42,0.62,0.76)*c.y*0.04*rainAmount;
 
   // The matching Shadertoy Heartfelt effect is a glass/rain shader; lightning
   // is layered separately so it can be spectacular without making rain itself
@@ -254,7 +279,6 @@ void main() {
   // than highlights while preserving relative detail, and the additive term
   // gives a visible lift even to true blacks.
   col = max(col,0.0);
-  col += vec3(0.002, 0.003, 0.004)*rainAmount;
 
   gl_FragColor = vec4(rainLin2srgb(clamp(col, 0.0, 1.0)), 1.0);
 }
@@ -271,6 +295,12 @@ export class RainShaderPass {
       minFilter: THREE.LinearFilter,
       magFilter: THREE.LinearFilter,
       format: THREE.RGBAFormat,
+      // HDR scene copy. With the default 8-bit target every linear value
+      // above 1.0 (sky, wet-track sun glare, headlights) was clipped BEFORE
+      // the ACES curve ran, so highlights lost their roll-off and the whole
+      // frame read as flat, low-contrast "milky" compared with the normal
+      // (non-visor) render, which tone-maps straight from HDR.
+      type: THREE.HalfFloatType,
     });
 
     this.uniforms = {
@@ -299,7 +329,10 @@ export class RainShaderPass {
 
   _targetSize() {
     const el = this.renderer.domElement;
-    const scale = this.quality === 'ULTRA' ? 1.0 : this.quality === 'HIGH' ? 0.85 : this.quality === 'MED' ? 0.65 : 0.5;
+    // The scene copy only feeds refraction; drops themselves are computed
+    // per SCREEN pixel in the composite, so a 0.8x source on ULTRA is
+    // visually identical and saves ~35% of that render.
+    const scale = this.quality === 'ULTRA' ? 0.8 : this.quality === 'HIGH' ? 0.7 : this.quality === 'MED' ? 0.6 : 0.5;
     const baseW=Math.max(2,el.width||innerWidth),baseH=Math.max(2,el.height||innerHeight);
     // Never allocate an unbounded full-resolution windshield target. On a
     // Retina/4K display ULTRA used to request an enormous second RGBA buffer;

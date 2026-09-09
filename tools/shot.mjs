@@ -11,20 +11,21 @@ await pg.waitForTimeout(800);
 const ivl=setInterval(()=>pg.evaluate(()=>{window.__pgp&&window.__pgp.noDemo&&window.__pgp.noDemo();}).catch(()=>{}),1500);
 await pg.evaluate(()=>{const g=document.getElementById('splashGate');if(g)g.remove();});
 const clickSeg = async (id, label) => { await pg.evaluate(([id,label])=>{const s=document.getElementById(id);if(!s)return;for(const c of s.children){if(c.textContent.trim().toUpperCase().includes(label))c.click();}},[id,label]); };
+if(process.env.TRACK){await pg.evaluate(n=>window.__pgp.track(n),process.env.TRACK);await pg.waitForTimeout(3000);}
 await clickSeg('tQuality', quality);
 await pg.waitForTimeout(1500);
 await clickSeg('tWeather', {sun:'SUNNY',driz:'DRIZZLE',rain:'RAIN',mist:'FOG',snow:'SNOW'}[wx]);
 await clickSeg('tTod', tod.toUpperCase());
 if (process.env.SHOT) { await pg.waitForTimeout(3000); await pg.evaluate(n=>window.__pgp.shot(n),process.env.SHOT); }
-if (+cam >= 0) {
+if (parseInt(cam) >= 0) {
   await pg.evaluate(()=>{window.__pgp.noDemo();document.getElementById('tStart').click();});
   await pg.waitForTimeout(500);
   await pg.waitForTimeout(4500);
-  await pg.evaluate((cam)=>{window.__pgp.state.camMode=+cam;window.__pgp.keys.up=false;},cam);
+  await pg.evaluate((cam)=>{window.__pgp.state.camMode=parseInt(cam);window.__pgp.keys.up=true;if(cam.split(':')[1]==='wreck')setTimeout(()=>window.__pgp.wreckOne(),4500);},cam);
   const bi=setInterval(()=>pg.evaluate(()=>window.__pgp.behind()).catch(()=>{}),300);
 }
 for(let i=0;i<+waitS;i++){await pg.waitForTimeout(1000);if(+cam<0){await pg.mouse.move(10+i,300);await pg.mouse.down();await pg.mouse.up();}}
 await pg.screenshot({ path: `/home/user/shots/${name}.png`, timeout: 90000, animations: 'disabled' });
 const info = await pg.evaluate(()=>({ probe: window.__pgp.probe(), mirrorDark: window.__pgp.mirrorPix&&window.__pgp.mirrorPix(), mode: document.querySelector('#hCam')?.textContent, ticker: document.querySelector('#titleTicker')?.textContent, tag: document.querySelector('#shotTag')?.textContent }));
-console.log(JSON.stringify(info), errs.slice(0,8).join('\n'));
+console.log(JSON.stringify(info), errs.filter(e=>!/404|429|Madring|Sepang/.test(e)).slice(0,6).join('\n'));
 clearInterval(ivl);try{clearInterval(bi)}catch(e){}await b.close();process.exit(0);

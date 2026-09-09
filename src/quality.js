@@ -13,7 +13,10 @@ export const QUALITY_PRESETS = {
     label: 'ULTRA',
     // ULTRA spends its budget on scene detail, not a dangerously oversized
     // framebuffer. Retina already supplies ample native resolution.
-    pixelRatio: 1.25,
+    // 1.25 was a multiplier on devicePixelRatio: on a 2x laptop that is
+    // 2.5x = six times the pixels of a 1080p frame. Native (1.0) is
+    // already every physical pixel; spend the headroom on frame rate.
+    pixelRatio: 1.0,
     shadows: true,
     shadowSize: 2048,
     shadowType: 'soft',           // PCFSoftShadowMap — buttery, filmic shadow edges

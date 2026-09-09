@@ -323,7 +323,10 @@ function getRoadHAtCoords(x, z) {
 const WX={
 sun:{label:'SUNNY',skyT:0x2f6fce,skyH:0xbfd9e8,sunC:0xfff1d0,sunI:2.6,hS:0xbdd7ee,hG:0x6f9457,hI:.8,fog:0xbfd9e8,fogD:.0005,exp:1.12,grip:1,rain:0,snow:0,wet:0},
 driz:{label:'DRIZZLE',skyT:0x5f7488,skyH:0xaeb9c2,sunC:0xd9e2ea,sunI:1.8,hS:0xafc0cd,hG:0x668068,hI:.7,fog:0xaeb9c2,fogD:.0009,exp:1.04,grip:.84,rain:.35,snow:0,wet:.45},
-rain:{label:'RAIN',skyT:0x6d7b88,skyH:0xbcc6cd,sunC:0xe2e8ec,sunI:2.6,hS:0xd2dae1,hG:0x96b198,hI:1.3,fog:0xbdc6cc,fogD:.0007,exp:1.5,grip:.72,rain:1,snow:0,wet:1},
+// RAIN used to run exp 1.5 / hI 1.3 / a near-white fog to fight the visor
+// pass's missing tone-map. That pass is now graded properly, so the extra
+// exposure just washed the whole frame out ("milky"). Overcast, not bright.
+rain:{label:'RAIN',skyT:0x5c6a78,skyH:0xa9b4bc,sunC:0xd8dee4,sunI:2.0,hS:0xb9c3cc,hG:0x6f8a75,hI:.9,fog:0xa6b0b8,fogD:.0006,exp:1.08,grip:.72,rain:1,snow:0,wet:1},
  /* Fog is the opposite kind of nasty to rain: the road is nearly dry and the
     grip is there, but you cannot see the corner you are braking for. So it
     gets a thick fog, a flattened sky and no rain at all, and the lamps come
@@ -1139,7 +1142,11 @@ function updWeatherFX(dt){
  const flake=cur.snow>0.4, fall=flake?(4+cur.snow*5):(52+cur.rain*14);
  // NOTE: `flake` must be declared BEFORE this line — referencing it earlier
  // threw a TDZ ReferenceError every frame and silently killed all weather FX.
- rainMesh.visible=cur.rain>0.12&&!flake;
+ // World-space rain lines are the FALLBACK for when the visor shader is not
+ // running (LOW, or a GPU that failed the pass). On HIGH/ULTRA they were
+ // drawing as well, stacking a second, milky curtain over the refracted
+ // glass. windshieldOn is set by the render step of the previous frame.
+ rainMesh.visible=cur.rain>0.12&&!flake&&!windshieldOn;
  if(rainMesh.visible){
   for(let i=0;i<RAIN_N;i++){
    rainP[i*3+1]-=fall*dt;
@@ -1199,7 +1206,11 @@ function paintStatic(s,a){
  dropCx.beginPath();dropCx.ellipse(s.x-s.r*0.28,s.y-s.r*0.34,s.r*0.42,s.r*0.42,0,0,6.2832);dropCx.fill();
 }
 function updLens(dt){
- dropCx.clearRect(0,0,dropCv.width,dropCv.height);
+ // Cheap early-out: while the GPU windshield pass owns the water, don't
+ // even touch the fallback 2D canvas (a full-screen clearRect every frame
+ // is not free on high-DPI screens).
+ if(windshieldOn&&!updLens._dirty)return;
+ dropCx.clearRect(0,0,dropCv.width,dropCv.height);updLens._dirty=false;
  // Driven by glassBead, not raw rain: water soaks in over several seconds
  // of rain ("gets worse as it goes on"), airflow strips most of it at
  // speed but never all of it — exactly the shader's model, so both layers
@@ -1212,6 +1223,7 @@ function updLens(dt){
  // draw — mixing them in is exactly the "weak drops" look over the true
  // Shadertoy-style beads. It still covers drivers where the pass fails.
  if(amt<0.08||windshieldOn){lensStatics.length=0;lensRunners.length=0;return;}
+ updLens._dirty=true;
  // This is a guaranteed, independent glass layer. When the weather turns to
  // rain the first frame is populated across the whole screen (runners arrive
  // scattered mid-fall), instead of drops trickling in from the top.
@@ -1479,8 +1491,8 @@ function applyWeatherVisuals(){
  const el=tod.el*(1-cur.rain*0.35),az=tod.az;
  SUNDIR.set(Math.cos(az)*Math.cos(el),Math.max(0.06,Math.sin(el)),Math.sin(az)*Math.cos(el)).normalize();
  sunVec.copy(SUNDIR);
- scene.fog.color.copy(cur.fog).lerp(new THREE.Color(0x8d949c),cur.rain*0.35);
- skyMat.uniforms.haze.value=tod.haze+cur.rain*0.45;
+ scene.fog.color.copy(cur.fog).lerp(new THREE.Color(0x6e767e),cur.rain*0.35);
+ skyMat.uniforms.haze.value=tod.haze+cur.rain*0.25;
  skyMat.uniforms.stars.value=tod.stars*(1-cur.rain*0.8);
  skyMat.uniforms.night.value=state.tod==='night'?1:state.tod==='dusk'?0.35:0;
  sunLight.shadow.radius=state.tod==='day'?1.6:3.4;
@@ -3494,7 +3506,7 @@ function buildWorld(idx){
    g.position.set(s.p.x,s.p.y,s.p.z);
    g.rotation.y=Math.atan2(s.t.x,s.t.z)*1;
    const zf=out?1.05:-1.05;
-   const box=(w,h,d,mat,x,y,z)=>{const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;g.add(m);};
+   const box=(w,h,d,mat,x,y,z)=>{const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;g.add(m);return m;};
    box(2.1,6.0,1.8,stoneMat,-hw-1.05,3.0,zf);          // left jamb
    box(2.1,6.0,1.8,stoneMat, hw+1.05,3.0,zf);          // right jamb
    box(2*hw+6.4,2.0,2.0,stoneMat,0,5.85,zf);           // lintel
@@ -3744,7 +3756,9 @@ function playerControl(){
   tiltCtrl.updateHUD();
  }else{
   const st=(keys.left?-1:0)+(keys.right?1:0); /* left = -1, right = +1 */
-  p.steer=damp(p.steer,st,st!==0?10:16,dtGlobal);
+  // Snappier: 10/16 gave ~150 ms to reach lock, which read as laggy on a
+  // keyboard. 16/22 lands in ~90 ms, still smooth enough to avoid twitch.
+  p.steer=damp(p.steer,st,st!==0?16:22,dtGlobal);
   p.throttle=keys.up?1:0;
   p.brake=keys.down?1:0;
   p.drift=!!keys.space;
@@ -3783,6 +3797,13 @@ function aiThink(c,dt){
  if((state.mode==='race'||state.mode==='title')&&Math.abs(vF)<1.5)c.stuck+=dt;else c.stuck=Math.max(0,c.stuck-dt*2);
  const tanA=Math.atan2(T.samples[fi].t.x,T.samples[fi].t.z);
  const mis=wrapA(c.hdg-tanA);
+ // Stuck behind traffic is not the same as stuck in a wall: if a car is
+ // sitting a few metres ahead, spinning round on the spot (the old
+ // recovery move) only makes the pile-up worse. Keep the wheels pointed
+ // forward and let the pass logic below creep round it instead.
+ const ahQ=nearestAhead(c);
+ const queued=ahQ&&ahQ.dist<14&&Math.abs(ahQ.c.vF)<8;
+ if(queued&&Math.abs(mis)<1.2)c.stuck=Math.min(c.stuck,1.0);
  if(c.stuck>2.6||(Math.abs(mis)>2.35&&Math.abs(vF)<6)){
   c.recT=2.0;c.recPhase=0;c.recSteer=Math.random()<0.5?-0.9:0.9;c.stuck=0;return;
  }
@@ -3801,12 +3822,43 @@ function aiThink(c,dt){
  const li=Math.floor(lf);
  let latT=T.samples[li].line+Math.sin(timeSec*0.7+c.phase)*0.16;
  const ah=nearestAhead(c);
- if(ah&&ah.dist<26){
-  const side=(c.lat-ah.c.lat)>=0?1:-1;
+ // A stopped car (wreck, or someone stalled) needs to be seen from much
+ // further out than a moving rival: start moving off line at ~60 m and
+ // brake if we're still lined up on it. Drivers still get it wrong at
+ // times (the mistake timer above), which is when the pile-ups happen.
+ const stopped=ah&&Math.abs(ah.c.vF)<6;
+ const farSpot=stopped&&Math.abs(c.vF)>10;
+ let passSide=0,blocked=false;
+ if(ah&&(ah.dist<26||(farSpot&&ah.dist<60))){
+  // Pick the side that actually has room, not just the side we happen to
+  // be on: a car is ~2 m wide, so we need ~2.7 m between the obstacle's
+  // centre and the edge of the usable road. Prefer our current side when
+  // both fit; if neither does the road really is blocked and we queue.
+  const edge=T.halfW-1.1,need=2.7;
+  const roomR=edge-ah.c.lat,roomL=ah.c.lat+edge;
+  const pref=(c.lat-ah.c.lat)>=0?1:-1;
+  const fits=sd=>(sd>0?roomR:roomL)>=need;
+  if(fits(pref))passSide=pref;else if(fits(-pref))passSide=-pref;else blocked=true;
   // Aggressive drivers commit to the overtake earlier and hold a tighter
-  // line past the rival; cautious ones back out sooner.
-  const off=lerp(4.0,2.6,dAgg);
-  latT=clamp(ah.c.lat+side*off,-(T.halfW-1.1),T.halfW-1.1);
+  // line past the rival; cautious ones back out sooner. Past a stopped car
+  // always leave a full car width.
+  const off=stopped?Math.max(lerp(4.0,2.6,dAgg),3.4):lerp(4.0,2.6,dAgg);
+  if(!blocked){
+   let want=ah.c.lat+passSide*off;
+   // Never steer *towards* the obstacle: if we are already further out on
+   // the passing side than the minimum, hold what we have.
+   if(passSide>0)want=Math.max(want,Math.min(c.lat,edge));else want=Math.min(want,Math.max(c.lat,-edge));
+   latT=clamp(want,-edge,edge);
+  }
+  // Brake for a stopped car only while we are still lined up on it (or
+  // boxed in) AND our closing speed actually needs it: stopping distance
+  // at ~15 m/s^2 plus a 6 m margin. A car creeping at 5 m/s 15 m behind a
+  // stalled one has no reason to touch the brakes — that is what used to
+  // freeze whole queues at walking pace.
+  if(stopped&&(blocked||Math.abs(c.lat-ah.c.lat)<1.6)){
+   const vrel=Math.max(0,Math.abs(c.vF)-Math.abs(ah.c.vF));
+   if(ah.dist<6+vrel*vrel/30)c._stopAhead=ah.dist;
+  }
  }
  // Defensive driving: when a car is close behind and closing, block the
  // inside line into the next corner (the classic F1 move), and weave a
@@ -3864,10 +3916,30 @@ function aiThink(c,dt){
  tv=Math.min(tv,PH.top*(0.86+c.d.skill*0.13));
  if(raceControl.vsc>0)tv=Math.min(tv,VSC_SPEED);
  else if(raceControl.yellow>0)tv=Math.min(tv,PH.top*0.72);
- if(ah&&ah.dist<20)tv=Math.min(tv,Math.min(ah.c.vF*1.02,ah.c.vF+(ah.dist-9)));
+ if(ah&&ah.dist<20){
+  const sep=Math.abs(c.lat-ah.c.lat);
+  if(stopped&&!blocked){
+   // Passing a stopped/stalled car: don't match its (zero) speed — that is
+   // what used to park the whole queue behind it. Roll past at a speed
+   // that scales with how much of the gap is still to close, faster once
+   // we're alongside with clear lateral separation.
+   const pass=sep>2.4?clamp(10+ah.dist*0.8,12,26):clamp(6+ah.dist*0.5,7,15);
+   tv=Math.min(tv,pass);
+  }else if(!(sep>2.6&&ah.c.vF<c.vF)){
+   tv=Math.min(tv,Math.min(ah.c.vF*1.02,ah.c.vF+(ah.dist-9)));
+  }
+ }
  const dv=tv-vF;
  c.throttle=dv>0.5?1:dv<-1.5?0:0.45;
  c.brake=dv<-4?clamp(-dv*0.14,0,1):0;
+ if(c._stopAhead!=null){
+  // Lined up on a stopped car: scrub speed, but at crawling pace keep a
+  // little drive on so the car can still steer itself out of the queue.
+  const crawl=Math.abs(vF)<4&&c._stopAhead>5;
+  c.brake=Math.max(c.brake,crawl?0:clamp(1-c._stopAhead/30,0.3,1));
+  c.throttle=Math.min(c.throttle,crawl?0.3:0.1);
+  c._stopAhead=null;
+ }
  if(c.mistakeT>0){c.steer=clamp(c.steer+c.mistakeSteer,-1,1);c.brake=Math.max(c.brake,c.mistakeBrake);c.throttle*=.62;}
 }
 /* Slow-motion cinematic trigger for the player's big hits — a brief time
@@ -4233,7 +4305,10 @@ function carCollisions(){
   const A=cars[a];
   for(let b=a+1;b<cars.length;b++){
    const B=cars[b];
-   if(A.wrecked||B.wrecked)continue;
+   // A wreck is an OBSTACLE, not a ghost: it stays solid so the pack has to
+   // go round it (or into it). Two wrecks resting on each other are skipped
+   // - they can't move anyway.
+   if(A.wrecked&&B.wrecked)continue;
    // World-space proximity alone isn't enough: a track that loops back near
    // itself (a hairpin, or two straights running close in opposite
    // directions) can put cars a full lap-fraction apart right next to each
@@ -4253,14 +4328,33 @@ function carCollisions(){
      const d2=dx*dx+dz*dz;
      if(d2>=RR||d2===0)continue;
      const d=Math.sqrt(d2),nx=dx/d,nz=dz/d,ov=R-d;
-     A.x-=nx*ov*0.5;A.z-=nz*ov*0.5;
-     B.x+=nx*ov*0.5;B.z+=nz*ov*0.5;
+     // Mass split: a stationary wreck takes none of the separation and a
+     // moving car all of it, so you visibly stop against it (and shed
+     // parts) instead of nudging a dead car down the road.
+     const wA=A.wrecked?0:B.wrecked?1:0.5,wB=1-wA;
+     A.x-=nx*ov*wA;A.z-=nz*ov*wA;
+     B.x+=nx*ov*wB;B.z+=nz*ov*wB;
      const rvn=(B.vx-A.vx)*nx+(B.vz-A.vz)*nz;
      if(rvn<0){
       const j=-rvn*0.74; // slightly livelier rebound so impacts visibly shunt cars
-      A.vx-=j*nx;A.vz-=j*nz;
-      B.vx+=j*nx;B.vz+=j*nz;
+      A.vx-=j*nx*wA*2;A.vz-=j*nz*wA*2;
+      B.vx+=j*nx*wB*2;B.vz+=j*nz*wB*2;
       const imp=-rvn;
+      // Hitting a stopped car at speed: scatter a few extra parts off the
+      // wreck (it's already broken, so it sheds) and keep the hit car from
+      // simply carrying on. Capped so a pile-up can't spawn hundreds.
+      if((A.wrecked||B.wrecked)&&imp>6&&debris.length<90){
+       const W=A.wrecked?A:B,M=A.wrecked?B:A;
+       const kick=Math.min(imp,22);
+       for(let k=0;k<4;k++){
+        const mat=new THREE.MeshStandardMaterial({color:k%2?W.d.colA:0x17181b,roughness:0.55,metalness:0.45});
+        const m=new THREE.Mesh(new THREE.BoxGeometry(rand(.12,.4),rand(.03,.1),rand(.18,.5)),mat);
+        m.position.set((ax+bx)/2,W.y+0.6,(az+bz)/2);scene.add(m);
+        debris.push({m,vx:M.vx*0.5+rand(-6,6),vy:rand(3,8)+kick*0.15,vz:M.vz*0.5+rand(-6,6),rx:rand(-9,9),ry:rand(-7,7),rz:rand(-9,9),life:9,dispose:true});
+       }
+       // The moving car loses a big chunk of speed in a real T-bone.
+       M.vx*=0.55;M.vz*=0.55;
+      }
       if(imp>3&&timeSec-A.hitT>0.4&&timeSec-B.hitT>0.4){
        A.hitT=B.hitT=timeSec;
        // Every car-to-car contact throws sparks at the contact point, not
@@ -4679,13 +4773,25 @@ const AudioSys={started:false,
   // position and distance gain, so a pack approaches loudly and individual
   // engines naturally peel away and fade as the cars leave the player.
   this.rivals=[];
-  for(let i=0;i<4;i++){
-   const o=ctx.createOscillator();o.type=i%2?'sawtooth':'triangle';
+  for(let i=0;i<6;i++){
+   // Two detuned oscillators + a filtered noise bed per rival, through the
+   // same soft clip as the player's engine, so they sound like the SAME
+   // kind of car and not a thin test tone. Six voices: enough for a pack.
+   const o=ctx.createOscillator();o.type='sawtooth';
+   const o2=ctx.createOscillator();o2.type='triangle';o2.detune.value=i%2?7:-7;
+   const og=ctx.createGain();og.gain.value=0.6;const og2=ctx.createGain();og2.gain.value=0.45;
+   const n=ctx.createBufferSource();n.buffer=nb;n.loop=true;
+   const nf=ctx.createBiquadFilter();nf.type='bandpass';nf.frequency.value=300;nf.Q.value=0.9;
+   const ng=ctx.createGain();ng.gain.value=0.35;
+   const ws=ctx.createWaveShaper();ws.curve=cv;
    const f=ctx.createBiquadFilter();f.type='lowpass';f.frequency.value=2200;f.Q.value=.55;
    const g=ctx.createGain();g.gain.value=0;
    const pan=ctx.createStereoPanner?ctx.createStereoPanner():null;
-   o.connect(f);if(pan){f.connect(pan);pan.connect(g);}else f.connect(g);g.connect(this.master);o.start();
-   this.rivals.push({o,f,g,pan});
+   o.connect(og);o2.connect(og2);n.connect(nf);nf.connect(ng);
+   og.connect(ws);og2.connect(ws);ng.connect(ws);ws.connect(f);
+   if(pan){f.connect(pan);pan.connect(g);}else f.connect(g);g.connect(this.master);
+   o.start();o2.start();n.start();
+   this.rivals.push({o,o2,nf,f,g,pan,lastD:null});
   }
   // Whole-grid engine roar — a broadband noise bed representing the other
   // ~19 cars revving around you, not just your own engine. Loudest on the
@@ -4886,18 +4992,40 @@ const AudioSys={started:false,
   this.wfg.gain.setTargetAtTime(run?roadGain:0,t,p.onCurb?0.018:0.1);
   this.wff.frequency.setTargetAtTime(p.onCurb?180+w*720:300+w*2600,t,0.025);
   this.rag.gain.setTargetAtTime(cur.rain*0.11,t,0.2);
-  const nearby=cars.filter(c=>!c.isPlayer).map(c=>({c,d:Math.hypot(c.x-p.x,c.z-p.z)})).sort((a,b)=>a.d-b.d).slice(0,4);
-  for(let i=0;i<this.rivals.length;i++){
-   const ch=this.rivals[i],hit=nearby[i];
-   if(run&&hit&&hit.d<125){
-    const rp=hit.c.rpm||.15;
-    // Inverse-distance-like rolloff with enough near-field level to make a
-    // side-by-side pack properly loud, and a smooth tail out to 125 metres.
-    const near=1/(1+hit.d*.055),far=clamp(1-hit.d/125,0,1);
-    ch.g.gain.setTargetAtTime((.04+rp*.11)*near*far,t,.055);
-    ch.o.frequency.setTargetAtTime(74+rp*920,t,.035);
-    ch.f.frequency.setTargetAtTime(720+rp*2900,t,.06);
-    if(ch.pan){const rx=Math.cos(p.hdg),rz=-Math.sin(p.hdg);const side=((hit.c.x-p.x)*rx+(hit.c.z-p.z)*rz)/Math.max(hit.d,1);ch.pan.pan.setTargetAtTime(clamp(side,-1,1),t,.08);}
+  // Rival engines: the nearest six cars, each with real DOPPLER. The pitch
+  // shift uses the closing speed along the line between the two cars
+  // (c = 343 m/s), so a car overtaking you rises as it approaches, whips
+  // down through the crossing and drops as it pulls away - exactly the
+  // "neeeeoww" you hear at a real circuit. A car sitting alongside at your
+  // own speed has zero closing speed and simply sits there at its own pitch.
+  // Stable slot assignment (by car identity, not sort index) stops voices
+  // hopping between cars as the order changes - which used to sound like
+  // engines cutting in and out.
+  const nearby=cars.filter(c=>!c.isPlayer&&!c.wrecked).map(c=>({c,d:Math.hypot(c.x-p.x,c.z-p.z)})).sort((a,b)=>a.d-b.d).slice(0,this.rivals.length);
+  const taken=new Set();
+  for(const ch of this.rivals){const k=nearby.find(h=>h.c===ch.car);if(k){ch.hit=k;taken.add(k.c);}else ch.hit=null;}
+  for(const ch of this.rivals){if(ch.hit)continue;const k=nearby.find(h=>!taken.has(h.c));if(k){ch.hit=k;ch.car=k.c;ch.lastD=null;taken.add(k.c);}else ch.car=null;}
+  const rxs=Math.cos(p.hdg),rzs=-Math.sin(p.hdg);
+  for(const ch of this.rivals){
+   const hit=ch.hit;
+   if(run&&hit&&hit.d<160){
+    const rp=hit.c.audioRpm||hit.c.rpm||.15;
+    // Louder near field: a car alongside should be about as loud as your
+    // own engine (the old cap of ~0.15 was a third of it), tailing out to
+    // 160 m. Inverse-square-ish so it really swells as it arrives.
+    const near=1/(1+hit.d*hit.d*.0028),far=clamp(1-hit.d/160,0,1);
+    ch.g.gain.setTargetAtTime((.10+rp*.28)*near*far,t,.05);
+    // Doppler from radial closing speed (positive = approaching).
+    const dx=hit.c.x-p.x,dz=hit.c.z-p.z,dn=Math.max(hit.d,0.5);
+    const vrel=((p.vx-hit.c.vx)*dx+(p.vz-hit.c.vz)*dz)/dn;
+    const dop=clamp(343/(343-vrel),0.72,1.38);
+    const base=74+rp*920;
+    ch.o.frequency.setTargetAtTime(base*dop,t,.03);
+    ch.o2.frequency.setTargetAtTime(base*dop*0.5,t,.03);
+    ch.nf.frequency.setTargetAtTime((240+rp*380)*dop,t,.04);
+    // Air absorption: distant cars lose their top end.
+    ch.f.frequency.setTargetAtTime((900+rp*3200)*dop*clamp(1-hit.d/220,0.25,1),t,.06);
+    if(ch.pan){const side=(dx*rxs+dz*rzs)/dn;ch.pan.pan.setTargetAtTime(clamp(side*1.15,-1,1),t,.06);}
    }else ch.g.gain.setTargetAtTime(0,t,.12);
   }},
  setMute(m){if(this.started)this.master.gain.value=m?0:1.0;}
@@ -5179,8 +5307,15 @@ function renderWingMirrors(){
  const sh=renderer.shadowMap.enabled;renderer.shadowMap.enabled=false;
  const prevRT=renderer.getRenderTarget();
  const prevAuto=renderer.autoClear;renderer.autoClear=true;
+ // Two extra scene renders per frame is the most expensive thing helmet
+ // cam does. Alternate: left mirror on even frames, right on odd — each
+ // glass still updates at 30+ Hz, which is more than a real mirror needs,
+ // and it halves the cost.
+ renderWingMirrors._f=(renderWingMirrors._f||0)+1;
+ const only=wingMirrors[renderWingMirrors._f&1];
  for(const m of wingMirrors){
   if(m.housing)m.housing.visible=true;
+  if(m!==only)continue;
   const side=m.sx;
   // From the mirror itself (beside the halo), looking back down the car's
   // flank — not from a boom 5 m behind, which cut off anything close.
@@ -5450,7 +5585,7 @@ function updCamera(dt){
    const hMat=new THREE.MeshStandardMaterial({color:0x171a1f,roughness:0.38,metalness:0.22,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2});
    helmWheel=p.mesh.steering||null;
    const mkRt=()=>{
-    const rt=new THREE.WebGLRenderTarget(320,200,{minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter,format:THREE.RGBAFormat});
+    const rt=new THREE.WebGLRenderTarget(256,160,{minFilter:THREE.LinearFilter,magFilter:THREE.LinearFilter,format:THREE.RGBAFormat,depthBuffer:true,stencilBuffer:false});
     // Off-screen renders are linear (no tone map / no sRGB encode), so tag
     // the texture as linear; the screen pass then encodes it once.
     rt.texture.colorSpace=THREE.LinearSRGBColorSpace;
@@ -5468,7 +5603,7 @@ function updCamera(dt){
     glass.scale.x=-1;
     glass.position.z=0.016;housing.add(glass);
     helmOverlay.add(housing);
-    const cam=new THREE.PerspectiveCamera(40,320/200,0.4,260);
+    const cam=new THREE.PerspectiveCamera(40,256/160,0.4,180);
     return {rt,housing,glass,cam,sx};
    };
    wingMirrors=[mkGlass(mkRt(),-1),mkGlass(mkRt(),1)];
@@ -6759,13 +6894,16 @@ function tick(){
   const dCam=state.mode==='title'&&(director.shot==='hood'||director.shot==='halo')&&director.target&&cars.includes(director.target)?director.target:null;
   const speedKmh=player?Math.abs(player.vF)*3.6:(dCam?Math.abs(dCam.vF)*3.6:0);
   const speedFactor=clamp(speedKmh/300,0,1);
-  const beadTarget=cur.rain*lerp(1.0,0.70,Math.pow(speedFactor,0.8));
+  // Speed clears the glass: at 300 km/h only ~25% of the water stays on,
+  // then it re-beads when you brake. 0.70 made speed barely matter; 0.08
+  // (older) left the visor almost dry down every straight.
+  const beadTarget=cur.rain*lerp(1.0,0.25,Math.pow(speedFactor,0.8));
   // Asymmetric response: the wind blasts water off quickly (rate 3), but
   // the glass soaks in SLOWLY (rate 0.35) — the longer it rains the worse
   // the windshield gets, and braking for a corner lets it bead up again
   // over several seconds, like a real visor. The target never hits zero
   // at speed, so even flat-out there's still some water out there.
-  glassBead=damp(glassBead,beadTarget,beadTarget<glassBead?3.0:1.1,dt);
+  glassBead=damp(glassBead,beadTarget,beadTarget<glassBead?3.0:0.7,dt);
   const effRain=glassBead;
   // Not title-gated: the attract screen shows the picked weather — wet lens,
   // refraction and lightning included — so the menu is an honest preview.
@@ -6865,4 +7003,4 @@ addEventListener('pointerdown',()=>{
 
 // Minimal debug hook for automated screenshots (tools/shot.mjs). Harmless in
 // production: nothing calls it unless a script does.
-window.__pgp={state,keys,cycleCam,get cars(){return cars;},get player(){return player;},get director(){return director;},get wingMirrors(){return wingMirrors;},noDemo(){lastInput=nowT();demoArmed=0;window.__pgp._nd=true;},go(){state.mode='race';raceT=99;for(const c of cars)c.reactT=0;},mirrorPix(){if(!wingMirrors)return null;const out=[];for(const m of wingMirrors){const b=new Uint8Array(320*200*4);renderer.readRenderTargetPixels(m.rt,0,0,320,200,b);let dark=0;for(let i=0;i<b.length;i+=4){if(b[i]+b[i+1]+b[i+2]<120)dark++;}out.push(dark);}return out;},shot(n){director.shot=n;director.timer=99;director.target=director.target||cars[0];},behind(){const p=player;if(!p)return;const fx=Math.sin(p.hdg),fz=Math.cos(p.hdg);let n=0;for(const c of cars){if(c===p)continue;n++;if(n>2)break;c.x=p.x-fx*(6+n*6)+(-fz)*(n===1?2.2:-2.2);c.z=p.z-fz*(6+n*6)+fx*(n===1?2.2:-2.2);c.hdg=p.hdg;c.vx=0;c.vz=0;c.vF=0;c.throttle=0;}},probe(){return{rain:cur.rain,bead:glassBead,shader:windshieldOn,failed:rainPass&&rainPass.failed,amt:rainPass&&rainPass.uniforms.uRainAmount.value,q:effQuality(),rainMesh:rainMesh.visible,exp:renderer.toneMappingExposure,tod:state.tod};}};
+window.__pgp={state,keys,pole(){const i=cars.indexOf(player);cars.splice(i,1);cars.unshift(player);gridPlace();},get N(){return T.N;},get segLen(){return T.segLen;},cycleCam,get cars(){return cars;},get player(){return player;},get director(){return director;},get wingMirrors(){return wingMirrors;},noDemo(){lastInput=nowT();demoArmed=0;window.__pgp._nd=true;},go(){state.mode='race';raceT=99;for(const c of cars)c.reactT=0;},mirrorPix(){if(!wingMirrors)return null;const out=[];for(const m of wingMirrors){const b=new Uint8Array(256*160*4);renderer.readRenderTargetPixels(m.rt,0,0,256,160,b);let dark=0;for(let i=0;i<b.length;i+=4){if(b[i]+b[i+1]+b[i+2]<120)dark++;}out.push(dark);}return out;},track(name){const i=TRACKS.findIndex(t=>t.name===name);if(i<0)return i;const cards=document.querySelectorAll('#tTrackList .card');if(cards[i])cards[i].click();return i;},wreckOne(){const p=player;if(!p)return;const fx=Math.sin(p.hdg),fz=Math.cos(p.hdg);const o=cars.find(c=>c!==p);o.x=p.x+fx*40;o.z=p.z+fz*40;o.hdg=p.hdg;o.vx=o.vz=o.vF=0;wreckCar(o);},shot(n){director.shot=n;director.timer=99;director.target=director.target||cars[0];},behind(){const p=player;if(!p)return;const fx=Math.sin(p.hdg),fz=Math.cos(p.hdg);let n=0;for(const c of cars){if(c===p)continue;n++;if(n>2)break;c.x=p.x-fx*(6+n*6)+(-fz)*(n===1?2.2:-2.2);c.z=p.z-fz*(6+n*6)+fx*(n===1?2.2:-2.2);c.hdg=p.hdg;c.vx=0;c.vz=0;c.vF=0;c.throttle=0;}},probe(){return{rain:cur.rain,bead:glassBead,shader:windshieldOn,failed:rainPass&&rainPass.failed,amt:rainPass&&rainPass.uniforms.uRainAmount.value,q:effQuality(),rainMesh:rainMesh.visible,exp:renderer.toneMappingExposure,tod:state.tod};}};
