@@ -1,7 +1,7 @@
 # POLYGON GP — current game status / what is already done
 
 **Last updated:** 2026-09-09  
-**Visible app version in `index.html`:** `v1.0.0 · BUILD 20260908.18`  
+**Visible app version in `index.html`:** `v1.0.0 · BUILD 20260909.2`  
 **Validation after latest edits:** `npm run build` ✅, `npm run lint` ✅  
 **Note:** Playwright was not used for the latest work.
 
@@ -502,6 +502,7 @@ Do **not** use Playwright if you want to keep following the latest instruction f
 Files modified:
 
 - `src/game.js`
+- `src/carGeometry.js`
 - `src/godRays.js`
 - `src/tracks.js`
 - `README.md`
@@ -520,13 +521,18 @@ Summary:
 9. Darkened/neutralised asphalt so normal roads read black and shiny rather than blue/grey, and removed baked repeating white/grid markings from the road texture.
 10. Increased driver radio/moaning frequency: all drivers now have generic complaint radio, not just Lewis, and rage triggers sooner after player contact.
 11. Added admin-side Fish Audio voice-pack tooling plus runtime voicepack playback/fallback support. The PWA loads generated clips from `public/audio/voicepack/manifest.json`; if none exist it falls back to Web Speech.
-12. Reworked god rays so they read as natural atmospheric shafts instead of white jet-stream streaks: normal alpha blending, tone-mapped warm colour, much softer/wider bands, lower daylight intensity, and strongest only when the sun is low.
+12. Reworked god rays so they no longer appear on the title page or in normal daylight. They are now a very subtle dusk-only race effect with normal alpha blending, tone-mapped warm colour, soft/wide bands and low opacity, avoiding the previous white jet-stream look.
 13. Replaced the title-screen helicopter's ugly satellite-style circuit sweep with a broadcast helicopter follow shot. ULTRA now flies lower/tighter around the pack; lower tiers stay higher to hide terrain LOD.
-14. Fixed the title rain/quality clash: helicopter/TV/orbit title cameras no longer render through the windshield rain shader; only title hood/halo shots use visor rain. World rain and wet road remain visible.
+14. Fixed the title rain/quality clash: the title page no longer uses the windshield rain shader at all, because its separate resolution budget made rainy ULTRA look jagged. Title still shows world rain/wet road; visor refraction is now race-only.
 15. Added stronger car road-height safety: physics no longer targets below the road skin, and car visuals now sample the four wheel contact patches plus centre/front/rear so cars should not sink into crests or cambered edges.
 16. Reworked display jet fly-by: it now starts behind the player/pack, screams overhead into the screen, flies faster/lower, and uses a layered turbine roar plus delayed pressure thump.
 17. Retuned engine audio away from thin high-pitched sewing-machine tones toward a lower V6 body, stronger exhaust pulse, more intake load and less whiny top harmonic.
-18. Build and lint both pass.
+18. Fixed the 8th-gear audio/tacho drop: final gear now keeps a high rev floor so it does not sound like the engine bogs or slows by itself after the upshift.
+19. Steering wheel/yoke is now detached from the animated driver torso and hard-locked to the cockpit base transform each frame, so it only pivots/rotates from its centre rather than translating with body/head g-load motion.
+20. Steering wheel LCD has been simplified around big, readable gear and KPH speed, with shift LEDs updating for the player in all driving cameras and full LCD refresh in wheel-visible helmet/onboard views including the title halo shot.
+21. Helmet/halo camera has been raised and re-aimed to a Sky/F1-style over-halo onboard view, keeping the halo low in frame instead of looking underneath/through it.
+22. Added a comedy fatal-accident radio call: when a car terminally wrecks during the race, a surviving nearby/random driver may shout a line such as “Oh no, <name> has had a fatal accident! Let’s go, go, go!”
+23. Build and lint both pass.
 
 ### 2026-09-09 circuit-drivability pass
 

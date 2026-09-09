@@ -43,7 +43,7 @@ void main(){
   // they become solid streaks on the road.
   float fade = pow(1.0 - vUv.y, 1.85);
   float band = 0.82 + 0.18 * sin(vUv.y * 10.0 + vPh + uTime * 0.18);
-  float a = uIntensity * edge * fade * band * 0.22;
+  float a = uIntensity * edge * fade * band * 0.14;
   // Do not premultiply the colour here: Three's additive blend already uses
   // alpha as the source factor. Premultiplying made the shafts almost invisible.
   gl_FragColor = vec4(vec3(1.0, 0.86, 0.58), a);
@@ -133,7 +133,7 @@ export class GodRays {
     camera.getWorldDirection(this._camFwd);
     this._camH.set(sunVec.x, 0, sunVec.z).normalize();
     const toward = Math.pow(Math.max(0, this._camFwd.x * this._camH.x + this._camFwd.z * this._camH.z), 1.6);
-    const target = 0.32 * gate * sunFactor * (0.42 + 0.58 * toward);
+    const target = 0.22 * gate * sunFactor * (0.42 + 0.58 * toward);
 
     this.intensity += (target - this.intensity) * Math.min(1, dt * 3);
     const I = this.intensity;

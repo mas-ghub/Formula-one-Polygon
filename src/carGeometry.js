@@ -333,23 +333,23 @@ export function updateSteeringHUD(steering, info){
     cx.fillStyle=i<litT?(i>8?'#e10600':i>5?'#ffd23f':'#1ad15a'):'#1a2228';
     cx.fillRect(18+i*18,10,14,6);
   }
-  cx.fillStyle='#8fa0aa';cx.font='700 11px sans-serif';cx.textAlign='left';
-  cx.fillText((info.speed|0)+' KPH',16,36);
-  cx.textAlign='right';cx.fillText(info.pos||'P–',240,36);
-  cx.fillStyle='#f4f4f0';cx.font='800 52px sans-serif';cx.textAlign='center';
-  cx.fillText(String(info.gear??'N'),128,86);
-  cx.fillStyle='#6a7880';cx.font='700 10px sans-serif';
-  cx.fillText('L'+(info.lap||1),48,86);
-  cx.fillStyle=info.drs?'#1ad15a':'#334048';
-  cx.fillText(info.drs?'DRS':'DRS',208,86);
-  // Tyre temps
+  // Big, readable F1 wheel display: gear dominates, speed sits directly under
+  // it so helmet/onboard cameras can read both at a glance.
+  cx.fillStyle='#45e7ff';cx.font='900 64px sans-serif';cx.textAlign='center';
+  cx.fillText(String(info.gear??'N'),128,78);
+  cx.fillStyle='#f4f4f0';cx.font='800 22px sans-serif';
+  cx.fillText(String(info.speed|0),128,105);
+  cx.fillStyle='#8fa0aa';cx.font='800 10px sans-serif';
+  cx.fillText('KPH',128,119);
+  cx.fillStyle='#6a7880';cx.font='700 10px sans-serif';cx.textAlign='left';
+  cx.fillText(info.pos||'P–',16,50);
+  cx.fillText('L'+(info.lap||1),16,66);
+  cx.textAlign='right';cx.fillStyle=info.drs?'#1ad15a':'#334048';
+  cx.fillText('DRS',240,58);
+  // Small auxiliary data is pushed to the edges so it never competes with
+  // speed/gear legibility on the in-car camera.
   cx.fillStyle='#e24a2a';cx.font='700 9px sans-serif';cx.textAlign='left';
-  cx.fillText((info.tyre||98)+'°C',16,112);
-  cx.textAlign='right';cx.fillText((info.tyre||98)+'°C',240,112);
-  // Energy bar
-  cx.fillStyle='#1a2228';cx.fillRect(48,104,160,12);
-  cx.fillStyle='#7adf3a';cx.fillRect(48,104,160*Math.max(0,Math.min(1,info.ers??1)),12);
-  cx.fillStyle='#070b10';cx.font='700 9px sans-serif';cx.textAlign='center';
-  cx.fillText(((info.ers??1)*100|0)+'%',128,114);
+  cx.fillText((info.tyre||98)+'°C',16,116);
+  cx.textAlign='right';cx.fillText('ERS '+(((info.ers??1)*100|0))+'%',240,116);
   lcd.tex.needsUpdate=true;
 }

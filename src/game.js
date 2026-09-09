@@ -567,6 +567,28 @@ function driverRadio(c,event='contact'){
  Speech.say((special?'':last+': ')+pick(lines),true,{rate:special?1.04:1.12,pitch:special?1.01:1.08});
  return true;
 }
+const FATAL_BANTER_LINES=[
+ "Oh no, {victim} has had a fatal accident! Let's go, go, go!",
+ "Oh no, {victim} has exploded! Fatal accident! Let's go, go, go!",
+ 'That is {victim} gone! Fatal accident! Go, go, go!',
+ 'Oh my days, {victim} has had a fatal accident! Keep pushing, go, go, go!'
+];
+function lastName(c){return ((c&&c.d&&c.d.name)||'Driver').split(' ').pop();}
+function fatalAccidentBanter(victim,wasRace){
+ if(!wasRace||!victim||!Array.isArray(cars))return;
+ if(timeSec-(fatalAccidentBanter.lastT||-99)<4.5)return;
+ const candidates=cars.filter(c=>c&&c!==victim&&!c.wrecked&&c.d);
+ if(!candidates.length)return;
+ candidates.sort((a,b)=>Math.hypot(a.x-victim.x,a.z-victim.z)-Math.hypot(b.x-victim.x,b.z-victim.z));
+ const close=candidates.filter(c=>Math.hypot(c.x-victim.x,c.z-victim.z)<120);
+ const speaker=pick(close.length?close:candidates.slice(0,Math.min(6,candidates.length)));
+ fatalAccidentBanter.lastT=timeSec;
+ const line=pick(FATAL_BANTER_LINES).replace('{victim}',lastName(victim));
+ setTimeout(()=>{
+  if(!speaker||speaker.wrecked||!speaker.d)return;
+  Speech.say(lastName(speaker).toUpperCase()+': '+line,true,{rate:1.18,pitch:1.10});
+ },650);
+}
 const ATT_LINES=[
 'Welcome to {track}, for the Polygon Grand Prix.',
 '{leader} leads the field around {track} this afternoon.',
@@ -1021,8 +1043,13 @@ function makeCarMesh(d,compound){
   p.position.set(sx*0.885,0.44,-0.25);p.rotation.y=sx*Math.PI/2;g.add(p);}
  const dmgSprite=makeDamageSprite();
  g.add(dmgSprite);
+ const steering=driverGroup.userData.steering||null;
+ // Steering wheel/yoke is bolted to the cockpit, not to the driver's torso.
+ // Adding it to the car root detaches it from driverGroup so body/helmet g-load
+ // animation cannot slide it around; only its own centre-pivot lock rotates.
+ if(steering)g.add(steering);
  g.add(body,driverGroup,axleF,axleR,brakes,drs,brakeLight);
- return{g,body,driverGroup,helmetGroup,halo,axleF,axleR,brakes,brakeMat,drs,brakeLight,tailGlow,dmgSprite,steering:driverGroup.userData.steering||null};
+ return{g,body,driverGroup,helmetGroup,halo,axleF,axleR,brakes,brakeMat,drs,brakeLight,tailGlow,dmgSprite,steering};
 }
 
 /* ============ particles ============ */
@@ -4226,7 +4253,9 @@ function updWreckFire(c,dt){
  }
 }
 function wreckCar(c){
- if(c.wrecked)return;c.wrecked=true;c.throttle=0;c.brake=1;c.drsOpen=false;
+ if(c.wrecked)return;
+ const wasRace=state.mode==='race'||state.mode==='finished';
+ c.wrecked=true;c.throttle=0;c.brake=1;c.drsOpen=false;
  c.vx*=0.42;c.vz*=0.42;c.onFire=true;c.fireLife=11;c._skullT=0;
  shedCarParts(c);sparkBurst(c.x,c.y+.4,c.z,32);
  // Initial ignition: a low fuel-fire lick and a soot plume, not a huge bloomy
@@ -4259,6 +4288,7 @@ function wreckCar(c){
  }else if(player&&Math.hypot(player.x-c.x,player.z-c.z)<95){
   if(!driverRadio(c,'crash'))Speech.say(pick(LINES.crash),false,{rate:1.04,pitch:1.02});
  }
+ fatalAccidentBanter(c,wasRace);
  if(!c.isPlayer)deployVSC('WRECK',8);
 }
 function triggerDamage(c,sev){
@@ -4458,6 +4488,10 @@ function updCar(c,dt){
  if(g!==c.gear&&c.isPlayer&&kmh>8){AudioSys.shift();c.shiftT=0.09;}
  c.gear=g;
  let rpm=clamp((kmh-bands[g-1])/(bands[g]-bands[g-1]),0.12,1);
+ // The final upshift should not sound like the engine bogs or the car is
+ // slowing. 8th is a long overdrive, but at 240+ km/h an F1 engine is already
+ // high in the rev range, so keep the audio/tacho floor high and continuous.
+ if(g===GEAR_COUNT)rpm=clamp(0.68+(kmh-bands[g-1])/Math.max(1,bands[g]-bands[g-1])*0.32,0.68,1);
  if(c.wheelspin>0.1&&g<=2)rpm=Math.max(rpm,0.6+c.wheelspin*0.4);
  if(c.shiftT>0){c.shiftT-=dt;rpm*=0.6;}
  c.rpm=rpm;
@@ -4768,15 +4802,15 @@ function updCarVisual(c,dt){
   const[tr,tv2]=spring(c.mesh.driverGroup.rotation.z,c._trV||0,-gLat*0.13,26,7,dt);
   c._trV=tv2;
   c.mesh.driverGroup.rotation.z=tr;
-  // the wheel itself: hands turn it, and it kicks back over a kerb
+  // The steering yoke is bolted to the tub. It must not inherit the driver's
+  // body/head g-load animation or slide around in helmet cam; only its own
+  // centre-pivot lock changes. Keep the base transform hard-fixed every frame.
   if(c.mesh.steering){
-   // The wheel group is Y-flipped (face toward the driver), so its local +x
-   // is the car's RIGHT; a positive rotation.z lifts the right grip, which
-   // from the seat is anticlockwise = a LEFT turn. Negate for a right steer.
-   // (Verified numerically: local (0.205,0,0) -> world x -0.20, lock +0.5 -> y +0.09.)
    const lock=-(c.steerVis||0)*2.1*Math.max(0.25,1-sp01*0.72);
-   const kick=state.mode==='title'?0:road*0.35;
-   c.mesh.steering.rotation.z=damp(c.mesh.steering.rotation.z,lock+kick,18,dt);
+   const kick=state.mode==='title'?0:road*0.18;
+   const z=damp(c.mesh.steering.rotation.z,lock+kick,18,dt);
+   c.mesh.steering.position.set(0,0.80,0.62);
+   c.mesh.steering.rotation.set(0.42,Math.PI,z);
   }
   if(c.mesh.brakes){
    c.brakeHeat=Math.max(0,(c.brakeHeat||0)-dt*0.42+(c.brake>0.02?dt*c.brake*1.9:0));
@@ -5531,6 +5565,16 @@ function renderWingMirrors(){
  renderer.shadowMap.enabled=sh;
  if(helmOverlay)helmOverlay.visible=was!==false;
 }
+function updatePlayerSteeringDisplay(p,sp,sp01,forceDraw=false){
+ if(!p||!p.mesh||!p.mesh.steering)return;
+ const rpm01=clamp(p.rpm!=null?p.rpm:sp01,0,1);
+ const gearTxt=p.vF<-0.5?'R':(Math.abs(p.vF)<0.5&&p.throttle===0?'N':(p.gear||1));
+ updateSteeringHUD(p.mesh.steering,{
+  rpm01,speed:sp*3.6,gear:gearTxt,
+  pos:'P'+(p.pos||1),lap:(p.lap||0)+1,drs:!!p.drsOpen,ers:1-clamp(sp01*0.15,0,0.4),
+  tyre:Math.round(92+(p.onCurb?8:0)+sp01*12),drawLcd:forceDraw||state.camMode===1||state.camMode===2||state.camMode===3
+ });
+}
 function updCamera(dt){
  if(crashCam.active){updCrashCamera(dt);return;}
  camera.up.set(0,1,0);
@@ -5601,14 +5645,15 @@ function updCamera(dt){
    director._hidden=tc;
    const lean=hg?hg.rotation.z*0.55:0,nod=hg?hg.rotation.x*0.4:0;
    tc.mesh.g.updateMatrixWorld(true);
-   const eye=new THREE.Vector3(0,1.06,0.10).applyMatrix4(tc.mesh.g.matrixWorld);
-   const look=new THREE.Vector3((tc.steerVis||0)*0.18,0.78+nod*0.2,8.0).applyMatrix4(tc.mesh.g.matrixWorld);
+   const eye=new THREE.Vector3(0,1.24,-0.04).applyMatrix4(tc.mesh.g.matrixWorld);
+   const look=new THREE.Vector3((tc.steerVis||0)*0.14,1.04+nod*0.12,13.0).applyMatrix4(tc.mesh.g.matrixWorld);
    camera.near=0.16;
    camera.position.copy(eye);
    camera.up.set(0,1,0);
    camera.lookAt(look);
-   camera.rotateZ(lean*0.28+(tc.steerVis||0)*0.04);
-   camera.fov=damp(camera.fov,zf(66),4,dt);camera.updateProjectionMatrix();return;
+   camera.rotateZ(lean*0.18+(tc.steerVis||0)*0.025);
+   updatePlayerSteeringDisplay(tc,Math.abs(tc.vF),clamp(Math.abs(tc.vF)/PH.top,0,1),true);
+   camera.fov=damp(camera.fov,zf(58),4,dt);camera.updateProjectionMatrix();return;
   }
   // Helicopter establishing shot: now a broadcast helicopter following the
   // pack, not a satellite sweep over the weakest far-terrain. This makes the
@@ -5789,13 +5834,16 @@ function updCamera(dt){
   // Eye just above the halo crown (0.985 - 0.06 offset = 0.925 world) so the
   // road is seen OVER the front bar, and the look point dropped so the wheel
   // sits in the bottom quarter of the frame rather than the middle.
-  const eye=new THREE.Vector3(0,1.06,0.10).applyMatrix4(p.mesh.g.matrixWorld);
-  const look=new THREE.Vector3(p.steer*0.18,0.78+nod*0.2,8.0).applyMatrix4(p.mesh.g.matrixWorld);
+  // Sky-style onboard/helmet view: the camera looks OVER the halo/nose, not
+  // through the gap underneath it. A slightly higher eye and higher look point
+  // keep the halo low in frame, with the wheel/LCD in the lower third.
+  const eye=new THREE.Vector3(0,1.24,-0.04).applyMatrix4(p.mesh.g.matrixWorld);
+  const look=new THREE.Vector3(p.steer*0.14,1.04+nod*0.12,13.0).applyMatrix4(p.mesh.g.matrixWorld);
   camera.position.set(eye.x+Math.sin(timeSec*49.7+p.phase)*buzz,eye.y,eye.z);
   camera.up.set(0,1,0);
   camera.lookAt(look.x,look.y,look.z);
-  camera.rotateZ(lean*0.28+p.steer*0.04);
-  tf=66;
+  camera.rotateZ(lean*0.18+p.steer*0.025);
+  tf=58;
   if(p.mesh.steering)p.mesh.steering.visible=true;
   if(p.mesh.halo)p.mesh.halo.visible=true;
   if(p.mesh.body)p.mesh.body.visible=true;
@@ -5831,15 +5879,7 @@ function updCamera(dt){
   }
   helmOverlay.visible=true;
   placeWingMirrors(tf);
-  if(p.mesh.steering){
-   const rpm01=clamp(p.rpm!=null?p.rpm:sp01,0,1);
-   const gearTxt=p.vF<-0.5?'R':(Math.abs(p.vF)<0.5&&p.throttle===0?'N':(p.gear||1));
-   updateSteeringHUD(p.mesh.steering,{
-    rpm01,speed:sp*3.6,gear:gearTxt,
-    pos:'P'+(p.pos||1),lap:(p.lap||0)+1,drs:!!p.drsOpen,ers:1-clamp(sp01*0.15,0,0.4),
-    tyre:Math.round(92+(p.onCurb?8:0)+sp01*12),drawLcd:true
-   });
-  }
+  updatePlayerSteeringDisplay(p,sp,sp01,true);
  }else if(state.camMode===1){
   // "T-cam": mounted near the airbox/halo, behind the front axle, like the
   // real onboard camera — not out ahead of the front wheels. Putting the
@@ -5873,6 +5913,7 @@ function updCamera(dt){
  }
  // Final guard for every race camera, including a camera that has just
  // switched modes or is still damping from a previous view.
+ if(state.camMode!==3)updatePlayerSteeringDisplay(p,sp,clamp(sp/PH.top,0,1),false);
  if(state.camMode!==3)clampCameraToSurface(state.camMode===2?0.18:0.32);
  // Cinematic: pull in closer/tighter to the crash while slow-mo runs.
  // Keep helmet view wide and driveable during impacts; the external cameras
@@ -7096,7 +7137,8 @@ function tick(){
    updWeatherFX(dtGlobal);
    // God rays: culled by weather/TOD inside — costs nothing when hidden.
    if(T&&T.godRays){
-    const grGate=(1-cur.rain*0.92)*(1-clamp(cur.snow,0,1)*0.95)*(state.tod==='night'?0:1)*(1-clamp(cur.fogD*240,0,1));
+    const todRay=state.tod==='dusk'?1:0;
+    const grGate=(state.mode==='title'?0:1)*todRay*(1-cur.rain*0.92)*(1-clamp(cur.snow,0,1)*0.95)*(1-clamp(cur.fogD*240,0,1));
     T.godRays.update(dtGlobal,camera,sunVec,grGate);
    }
    updLens(dtGlobal);
@@ -7121,11 +7163,12 @@ function tick(){
  // a moment to re-bead and dribble down again — like a real visor.
  try{
   const titleOnboard=state.mode==='title'&&(director.shot==='hood'||director.shot==='halo');
-  const rainShaderOn=(QUALITY_PRESETS[effQuality()]||{}).rainShader!==false&&(state.mode!=='title'||titleOnboard);
-  // On the title screen, only hood/halo shots are treated as a physical visor.
-  // Helicopter/TV/orbit cameras should show rain in the world, not smear the
-  // whole menu through a low-res wet windscreen that ignores quality choices.
-  const dCam=titleOnboard&&director.target&&cars.includes(director.target)?director.target:null;
+  const rainShaderOn=(QUALITY_PRESETS[effQuality()]||{}).rainShader!==false&&state.mode!=='title';
+  // Title/menu cameras must not swap to the windshield render path: the offscreen
+  // rain refraction target has its own resolution budget and made ULTRA look
+  // jagged whenever rain was selected. Title still shows world rain/wet road;
+  // true visor refraction is for the actual race cameras.
+  const dCam=null;
   const speedKmh=dCam?Math.abs(dCam.vF)*3.6:(player?Math.abs(player.vF)*3.6:0);
   const speedFactor=clamp(speedKmh/300,0,1);
   // Speed clears the glass: at 300 km/h only ~25% of the water stays on,
