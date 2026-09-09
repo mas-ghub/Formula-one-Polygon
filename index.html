@@ -99,6 +99,10 @@ canvas{display:block;}
 /* Track-limits "give the place back" board — far left, shows the offended driver */
 #giveBack{position:fixed;left:8px;top:50%;transform:translateY(-50%);z-index:45;display:flex;align-items:center;gap:10px;background:rgba(12,14,18,.96);border:2px solid var(--red);border-left:6px solid var(--red);padding:10px 14px;max-width:240px;box-shadow:0 0 26px rgba(225,6,0,.55);pointer-events:none;opacity:0;transition:opacity .18s;}
 #giveBack.show{opacity:1;}
+#giveBack.radio{border-color:#47c7fc;border-left-color:#47c7fc;box-shadow:0 0 22px rgba(71,199,252,.38);}
+#giveBack.radio .gb-code{color:#47c7fc;}
+#giveBack.radio img{border-color:#47c7fc;}
+#giveBack.radio .gb-angry{color:#47c7fc;filter:drop-shadow(0 0 5px rgba(71,199,252,.55));}
 #giveBack img{width:46px;height:46px;border-radius:6px;border:2px solid #ff5348;background:#000;object-fit:cover;}
 #giveBack .gb-code{font-size:22px;font-weight:700;color:#ff5348;letter-spacing:.1em;line-height:1;}
 #giveBack .gb-txt{font-size:12px;color:#fff;font-weight:700;letter-spacing:.08em;margin-top:3px;}
@@ -758,7 +762,7 @@ document.addEventListener('DOMContentLoaded', function() {
   </div>
   
   <div id="tFoot">
-    <span>FULLSCREEN &amp; AUDIO READY · <b id="appVersion">v1.0.0 · BUILD 20260909.19</b></span>
+    <span>FULLSCREEN &amp; AUDIO READY · <b id="appVersion">v1.0.0 · BUILD 20260909.20</b></span>
     <button id="tFootFs" class="btn-mini">⛶ FULLSCREEN</button>
     <button id="tInstall" class="btn-mini" style="display:none;">⤓ INSTALL APP</button>
   </div>
@@ -1063,7 +1067,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <script>
 (function(){
-  const APP_VERSION='v1.0.0 · BUILD 20260909.19';
+  const APP_VERSION='v1.0.0 · BUILD 20260909.20';
   window.POLYGON_GP_VERSION=APP_VERSION;
   const panel=document.getElementById('runtimeErrorPanel');
   const output=document.getElementById('runtimeErrorText');
@@ -1111,7 +1115,7 @@ addEventListener('beforeinstallprompt',e=>{e.preventDefault();__pgpInstall=e;con
 addEventListener('DOMContentLoaded',()=>{const b=document.getElementById('tInstall');if(b)b.onclick=async()=>{if(!__pgpInstall)return;__pgpInstall.prompt();await __pgpInstall.userChoice;__pgpInstall=null;b.style.display='none';};});
 addEventListener('appinstalled',()=>{const b=document.getElementById('tInstall');if(b)b.style.display='none';});
 </script>
-<script type="module" src="/src/game.js?rain=20260909.19"></script>
+<script type="module" src="/src/game.js?rain=20260909.20"></script>
 </body>
 </html>
 

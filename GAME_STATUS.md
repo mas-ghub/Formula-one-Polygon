@@ -1,7 +1,7 @@
 # POLYGON GP — current game status / what is already done
 
 **Last updated:** 2026-09-09  
-**Visible app version in `index.html`:** `v1.0.0 · BUILD 20260909.19`  
+**Visible app version in `index.html`:** `v1.0.0 · BUILD 20260909.20`  
 **Validation after latest edits:** `npm run build` ✅, `npm run lint` ✅  
 **Note:** Playwright was not used for the latest work.
 
@@ -544,6 +544,7 @@ Summary:
 32. FPS visibility correction: FPS is now a visible standalone HUD meter under the timing panel, with the top-right chip changed to an FPS ON/OFF toggle rather than trying to show tiny live numbers in the crowded chip row.
 33. Minimap/helmet-overlay correction: bottom-right circuit diagram canvas now matches its 176px drawing buffer and has no clipped black panel background; helmet-only camera overlay/body visibility overrides are forcibly hidden/restored whenever leaving HELMET cam, including title, demo, helicopter and crash cameras.
 34. Helmet chassis-animation correction: halo/mirror overlay still does not incorrectly rotate with the steering wheel, but it now has subtle chassis flex, lateral-load roll and speed/kerb buzz so it no longer feels frozen or detached while steering.
+35. Voice-pack/admin and driver-radio pass: admin voice-lines expanded from 12 to 49 planned clips, generator supports `FISH_VOICE_DRIVER_RADIO`, admin README explains licensed classic-motorsport voice selection, driver radio now uses a separate `Speech.sayDriver()` path instead of the commentator voice, and driver face/radio popups are shown for normal driver speech as well as angry track-limits moments.
 
 ### 2026-09-09 circuit-drivability pass
 

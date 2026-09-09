@@ -416,7 +416,7 @@ function speechKey(text){
  for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)>>>0;}
  return h.toString(16).padStart(8,'0');
 }
-const Speech={enabled:true,cool:0,voice:null,femaleVoice:null,clips:null,clipAudio:null,
+const Speech={enabled:true,cool:0,voice:null,femaleVoice:null,driverVoice:null,clips:null,clipAudio:null,
 async loadPack(){try{
  const res=await fetch(`${import.meta.env.BASE_URL}audio/voicepack/manifest.json?t=${Date.now()}`,{cache:'no-store'});
  if(!res.ok)return;const data=await res.json();const map=new Map();
@@ -468,6 +468,17 @@ refresh(){try{
   if(name.includes('enhanced'))s+=40;
   return s;};
  this.femaleVoice=[...vs].sort((a,b)=>fscore(b)-fscore(a))[0]||this.voice;
+ // Driver radio fallback must not sound like the commentator. Prefer another
+ // compact/radio-sounding English voice where the browser offers one.
+ const dscore=v=>{let s=0;const name=v.name.toLowerCase(),lang=v.lang.toLowerCase();
+  if(v===this.voice)s-=10000;
+  if(lang.startsWith('en-gb'))s+=45;else if(lang.startsWith('en'))s+=25;
+  if(/(daniel|george|david|james|oliver|ryan|alex|thomas|arthur|guy|fred|nathan|mark|matthew|liam|sean|lee)/i.test(name))s+=160;
+  if(/female/.test(name))s-=80;
+  if(name.includes('compact')||name.includes('local'))s+=25;
+  if(name.includes('natural')||name.includes('neural')||name.includes('premium'))s+=45;
+  return s;};
+ this.driverVoice=[...vs].sort((a,b)=>dscore(b)-dscore(a))[0]||this.femaleVoice||this.voice;
 }catch(e){}},
 init(){try{this.refresh();speechSynthesis.onvoiceschanged=()=>this.refresh();this.loadPack();}catch(e){}},
 say(text,force,opts){
@@ -485,6 +496,25 @@ say(text,force,opts){
   // their moment, this just raises the resting energy level between them.
   u.rate=(opts&&opts.rate!=null)?opts.rate:1.10;
   u.pitch=(opts&&opts.pitch!=null)?opts.pitch:1.07;
+  u.volume=1.0;
+  speechSynthesis.speak(u);
+ }catch(e){}},
+sayDriver(text,force,opts){
+ // Driver radio gets its own clip/voice path. Do not prepend the driver's name
+ // into the spoken text: the face/radio popup identifies them, and clean text
+ // lets Fish-generated driver clips match the manifest keys.
+ if(!this.enabled)return;
+ if(this.tryClip(text,force))return;
+ if(!('speechSynthesis'in window))return;
+ const t=nowT();if(!force&&t<this.cool)return;this.cool=t+1.05;
+ try{
+  if(speechSynthesis.speaking){if(force)speechSynthesis.cancel();else return;}
+  const u=new SpeechSynthesisUtterance(text);
+  const v=this.driverVoice||this.femaleVoice||this.voice;
+  if(v)u.voice=v;
+  u.lang=(v&&v.lang)||'en-GB';
+  u.rate=(opts&&opts.rate!=null)?opts.rate:1.16;
+  u.pitch=(opts&&opts.pitch!=null)?opts.pitch:0.92;
   u.volume=1.0;
   speechSynthesis.speak(u);
  }catch(e){}},
@@ -563,8 +593,10 @@ function driverRadio(c,event='contact'){
  c._radioT=now;
  const special=isLewis(c);
  const lines=(special?LEWIS_RADIO[event]:GENERIC_DRIVER_RADIO[event])||(special?LEWIS_RADIO.contact:GENERIC_DRIVER_RADIO.contact);
+ const line=pick(lines);
  const last=(c.d.name||'Driver').split(' ').pop().toUpperCase();
- Speech.say((special?'':last+': ')+pick(lines),true,{rate:special?1.04:1.12,pitch:special?1.01:1.08});
+ if(typeof showDriverBoard==='function')showDriverBoard(c,line.toUpperCase(),event==='angry'||event==='crash'?3000:2300,event==='angry'||event==='crash'?4:event==='contact'?3:2,'radio');
+ Speech.sayDriver(line,true,{rate:special?1.04:1.16,pitch:special?0.94:0.90});
  return true;
 }
 const FATAL_BANTER_LINES=[
@@ -586,7 +618,8 @@ function fatalAccidentBanter(victim,wasRace){
  const line=pick(FATAL_BANTER_LINES).replace('{victim}',lastName(victim));
  setTimeout(()=>{
   if(!speaker||speaker.wrecked||!speaker.d)return;
-  Speech.say(lastName(speaker).toUpperCase()+': '+line,true,{rate:1.18,pitch:1.10});
+  if(typeof showDriverBoard==='function')showDriverBoard(speaker,line.toUpperCase(),3100,4,'radio');
+  Speech.sayDriver(line,true,{rate:1.18,pitch:0.94});
  },650);
 }
 const ATT_LINES=[
@@ -6152,7 +6185,7 @@ const crossSign=new Map(),gbCool=new Map();
 const angerByDriver=new Map();
 const ANGRY='😠';
 function angerFor(num){return angerByDriver.get(num)||0;}
-function showDriverBoard(o,txt,dur,n){
+function showDriverBoard(o,txt,dur,n,mood='angry'){
  const gb=$('giveBack');
  if(gb){
   const img=$('gbImg'),code=$('gbCode'),name=$('gbName'),at=$('gbTxt'),ang=$('gbAngry');
@@ -6160,8 +6193,9 @@ function showDriverBoard(o,txt,dur,n){
   if(code)code.textContent=o.d.code||o.d.name.split(' ').pop().toUpperCase();
   if(name)name.textContent=o.d.name.toUpperCase();
   if(at)at.textContent=txt;
+  gb.classList.toggle('radio',mood==='radio');
   if(ang){ang.innerHTML='';for(let i=0;i<5;i++){const sp=document.createElement('span');
-   sp.textContent=ANGRY;sp.className=i<n?'on':'off';ang.appendChild(sp);}}
+   sp.textContent=mood==='radio'?'▰':ANGRY;sp.className=i<n?'on':'off';ang.appendChild(sp);}}
   gb.classList.add('show');
   gb.classList.remove('shake');void gb.offsetWidth;gb.classList.add('shake');
   clearTimeout(showDriverBoard._t);

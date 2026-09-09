@@ -12,50 +12,10 @@
     "id": "lights_out_02",
     "role": "commentator",
     "event": "start",
-    "text": "And it is lights out — we are racing!",
-    "fishText": "[excited][shouting] And it is lights out — we are racing!",
+    "text": "And it is lights out \u2014 we are racing!",
+    "fishText": "[excited][shouting] And it is lights out \u2014 we are racing!",
     "voice": "commentator",
     "priority": 9
-  },
-  {
-    "id": "eau_rouge_raidillon_01",
-    "role": "commentator",
-    "event": "track_section",
-    "track": "Spa-Francorchamps",
-    "text": "Up Eau Rouge and Raidillon — hold your breath!",
-    "fishText": "[excited] Up Eau Rouge and Raidillon — [emphasis] hold your breath!",
-    "voice": "commentator",
-    "priority": 6
-  },
-  {
-    "id": "silverstone_maggotts_01",
-    "role": "commentator",
-    "event": "track_section",
-    "track": "Silverstone",
-    "text": "Maggotts and Becketts — this is pure commitment!",
-    "fishText": "[excited] Maggotts and Becketts — this is [emphasis] pure commitment!",
-    "voice": "commentator",
-    "priority": 6
-  },
-  {
-    "id": "monaco_barriers_01",
-    "role": "commentator",
-    "event": "track_section",
-    "track": "Monaco",
-    "text": "Millimetres from the barrier through Monaco!",
-    "fishText": "[excited][in a hurry tone] Millimetres from the barrier through Monaco!",
-    "voice": "commentator",
-    "priority": 6
-  },
-  {
-    "id": "monaco_fairmont_01",
-    "role": "engineer",
-    "event": "track_section",
-    "track": "Monaco",
-    "text": "Fairmont hairpin. Keep it tidy, short shift on the exit.",
-    "fishText": "[calm][confident] Fairmont hairpin. Keep it tidy, short shift on the exit.",
-    "voice": "engineer",
-    "priority": 5
   },
   {
     "id": "overtake_01",
@@ -67,31 +27,67 @@
     "priority": 8
   },
   {
-    "id": "angry_driver_01",
-    "role": "driver",
-    "event": "angry",
-    "text": "What was that? Seriously, what was that?",
-    "fishText": "[angry][shouting] What was that? Seriously, what was that?",
-    "voice": "driver_angry",
+    "id": "overtake_02",
+    "role": "commentator",
+    "event": "overtake",
+    "text": "Lovely move! Up to P{n}!",
+    "fishText": "[excited] Lovely move! Up to P{n}!",
+    "voice": "commentator",
     "priority": 7
   },
   {
-    "id": "angry_driver_02",
-    "role": "driver",
-    "event": "contact",
-    "text": "I was alongside! He just squeezed me!",
-    "fishText": "[angry] I was alongside! He just squeezed me!",
-    "voice": "driver_angry",
-    "priority": 7
-  },
-  {
-    "id": "track_limits_engineer_01",
-    "role": "engineer",
-    "event": "track_limits",
-    "text": "Careful, track limits. Race control are watching.",
-    "fishText": "[worried][confident] Careful, track limits. Race control are watching.",
-    "voice": "engineer",
+    "id": "overtake_03",
+    "role": "commentator",
+    "event": "overtake",
+    "text": "That is absolutely sensational! He saw the gap and went for it!",
+    "fishText": "[excited][shouting] That is absolutely sensational! [emphasis] He saw the gap and went for it!",
+    "voice": "commentator",
     "priority": 8
+  },
+  {
+    "id": "close_01",
+    "role": "commentator",
+    "event": "close",
+    "text": "They are side by side into the corner!",
+    "fishText": "[excited][in a hurry tone] They are side by side into the corner!",
+    "voice": "commentator",
+    "priority": 7
+  },
+  {
+    "id": "close_02",
+    "role": "commentator",
+    "event": "close",
+    "text": "This is brilliant racing \u2014 door to door!",
+    "fishText": "[excited] This is brilliant racing \u2014 [emphasis] door to door!",
+    "voice": "commentator",
+    "priority": 7
+  },
+  {
+    "id": "crash_01",
+    "role": "commentator",
+    "event": "crash",
+    "text": "Oh no! They have come together!",
+    "fishText": "[shouting][worried] Oh no! They have come together!",
+    "voice": "commentator",
+    "priority": 8
+  },
+  {
+    "id": "crash_02",
+    "role": "commentator",
+    "event": "crash",
+    "text": "Ooh, that was a heavy hit!",
+    "fishText": "[shouting][worried] Ooh, that was a heavy hit!",
+    "voice": "commentator",
+    "priority": 8
+  },
+  {
+    "id": "terminal_01",
+    "role": "commentator",
+    "event": "terminal",
+    "text": "Huge accident in the barriers \u2014 the driver is out of the race.",
+    "fishText": "[worried][emphasis] Huge accident in the barriers \u2014 the driver is out of the race.",
+    "voice": "commentator",
+    "priority": 9
   },
   {
     "id": "vsc_01",
@@ -109,6 +105,339 @@
     "text": "Final lap! Give it everything you have left.",
     "fishText": "[excited][shouting] Final lap! Give it everything you have left.",
     "voice": "commentator",
+    "priority": 8
+  },
+  {
+    "id": "fastest_01",
+    "role": "commentator",
+    "event": "fastest",
+    "text": "Fastest lap of the race \u2014 stunning pace.",
+    "fishText": "[excited] Fastest lap of the race \u2014 [emphasis] stunning pace.",
+    "voice": "commentator",
+    "priority": 7
+  },
+  {
+    "id": "win_01",
+    "role": "commentator",
+    "event": "finish",
+    "text": "You win the Grand Prix! What a drive!",
+    "fishText": "[excited][shouting] You win the Grand Prix! What a drive!",
+    "voice": "commentator",
+    "priority": 9
+  },
+  {
+    "id": "rain_01",
+    "role": "commentator",
+    "event": "weather",
+    "text": "Rain is lashing down \u2014 keep it on the black stuff.",
+    "fishText": "[worried][in a hurry tone] Rain is lashing down \u2014 keep it on the black stuff.",
+    "voice": "commentator",
+    "priority": 7
+  },
+  {
+    "id": "eau_rouge_raidillon_01",
+    "role": "commentator",
+    "event": "track_section",
+    "text": "Up Eau Rouge and Raidillon \u2014 hold your breath!",
+    "fishText": "[excited] Up Eau Rouge and Raidillon \u2014 [emphasis] hold your breath!",
+    "voice": "commentator",
+    "priority": 6
+  },
+  {
+    "id": "silverstone_maggotts_01",
+    "role": "commentator",
+    "event": "track_section",
+    "text": "Maggotts and Becketts \u2014 this is pure commitment!",
+    "fishText": "[excited] Maggotts and Becketts \u2014 this is [emphasis] pure commitment!",
+    "voice": "commentator",
+    "priority": 6
+  },
+  {
+    "id": "monaco_barriers_01",
+    "role": "commentator",
+    "event": "track_section",
+    "text": "Millimetres from the barrier through Monaco!",
+    "fishText": "[excited][in a hurry tone] Millimetres from the barrier through Monaco!",
+    "voice": "commentator",
+    "priority": 6
+  },
+  {
+    "id": "engineer_limits_01",
+    "role": "engineer",
+    "event": "track_limits",
+    "text": "Careful, track limits. Race control are watching.",
+    "fishText": "[worried][confident] Careful, track limits. Race control are watching.",
+    "voice": "engineer",
+    "priority": 8
+  },
+  {
+    "id": "engineer_repaired_01",
+    "role": "engineer",
+    "event": "recovery",
+    "text": "The car is back up to speed \u2014 systems recovered.",
+    "fishText": "[calm][confident] The car is back up to speed \u2014 systems recovered.",
+    "voice": "engineer",
+    "priority": 6
+  },
+  {
+    "id": "engineer_monaco_fairmont_01",
+    "role": "engineer",
+    "event": "track_section",
+    "text": "Fairmont hairpin. Keep it tidy, short shift on the exit.",
+    "fishText": "[calm][confident] Fairmont hairpin. Keep it tidy, short shift on the exit.",
+    "voice": "engineer",
+    "priority": 5
+  },
+  {
+    "id": "driver_angry_01",
+    "role": "driver",
+    "event": "angry",
+    "text": "What was that? Seriously, what was that?",
+    "fishText": "[angry][shouting] What was that? Seriously, what was that?",
+    "voice": "driver_angry",
+    "priority": 7
+  },
+  {
+    "id": "driver_angry_02",
+    "role": "driver",
+    "event": "angry",
+    "text": "He cannot just drive into me like that!",
+    "fishText": "[angry][shouting] He cannot just drive into me like that!",
+    "voice": "driver_angry",
+    "priority": 7
+  },
+  {
+    "id": "driver_angry_03",
+    "role": "driver",
+    "event": "angry",
+    "text": "That was my corner. He has to give it back.",
+    "fishText": "[angry] That was my corner. He has to give it back.",
+    "voice": "driver_angry",
+    "priority": 7
+  },
+  {
+    "id": "driver_angry_04",
+    "role": "driver",
+    "event": "angry",
+    "text": "I am not happy with that move at all.",
+    "fishText": "[angry] I am not happy with that move at all.",
+    "voice": "driver_angry",
+    "priority": 7
+  },
+  {
+    "id": "driver_angry_05",
+    "role": "driver",
+    "event": "angry",
+    "text": "Tell him to leave me racing room!",
+    "fishText": "[angry][shouting] Tell him to leave me racing room!",
+    "voice": "driver_angry",
+    "priority": 7
+  },
+  {
+    "id": "driver_contact_01",
+    "role": "driver",
+    "event": "contact",
+    "text": "I was alongside! He just squeezed me!",
+    "fishText": "[angry] I was alongside! He just squeezed me!",
+    "voice": "driver_angry",
+    "priority": 7
+  },
+  {
+    "id": "driver_contact_02",
+    "role": "driver",
+    "event": "contact",
+    "text": "Come on, I had nowhere to go there!",
+    "fishText": "[angry][shouting] Come on, I had nowhere to go there!",
+    "voice": "driver_angry",
+    "priority": 7
+  },
+  {
+    "id": "driver_contact_03",
+    "role": "driver",
+    "event": "contact",
+    "text": "That was not clean. Tell race control to look at it.",
+    "fishText": "[angry] That was not clean. Tell race control to look at it.",
+    "voice": "driver_angry",
+    "priority": 7
+  },
+  {
+    "id": "driver_contact_04",
+    "role": "driver",
+    "event": "contact",
+    "text": "He turned in like I was not there!",
+    "fishText": "[angry] He turned in like I was not there!",
+    "voice": "driver_angry",
+    "priority": 7
+  },
+  {
+    "id": "driver_contact_05",
+    "role": "driver",
+    "event": "contact",
+    "text": "I need space, I need space!",
+    "fishText": "[angry][shouting] I need space, I need space!",
+    "voice": "driver_angry",
+    "priority": 7
+  },
+  {
+    "id": "driver_crash_01",
+    "role": "driver",
+    "event": "crash",
+    "text": "Big hit! I am out, I am out!",
+    "fishText": "[shouting][worried] Big hit! I am out, I am out!",
+    "voice": "driver_angry",
+    "priority": 7
+  },
+  {
+    "id": "driver_crash_02",
+    "role": "driver",
+    "event": "crash",
+    "text": "That was massive. Check the car, check the car!",
+    "fishText": "[worried][shouting] That was massive. Check the car, check the car!",
+    "voice": "driver_angry",
+    "priority": 7
+  },
+  {
+    "id": "driver_crash_03",
+    "role": "driver",
+    "event": "crash",
+    "text": "I got collected there \u2014 nothing I could do!",
+    "fishText": "[angry][worried] I got collected there \u2014 nothing I could do!",
+    "voice": "driver_angry",
+    "priority": 7
+  },
+  {
+    "id": "driver_wall_01",
+    "role": "driver",
+    "event": "wall",
+    "text": "The rear is gone. I have hit the wall.",
+    "fishText": "[worried] The rear is gone. I have hit the wall.",
+    "voice": "driver_angry",
+    "priority": 7
+  },
+  {
+    "id": "driver_wall_02",
+    "role": "driver",
+    "event": "wall",
+    "text": "I touched the barrier; check the front wing.",
+    "fishText": "[worried][in a hurry tone] I touched the barrier; check the front wing.",
+    "voice": "driver_angry",
+    "priority": 7
+  },
+  {
+    "id": "driver_wall_03",
+    "role": "driver",
+    "event": "wall",
+    "text": "The car is damaged, I can feel it.",
+    "fishText": "[worried] The car is damaged, I can feel it.",
+    "voice": "driver_angry",
+    "priority": 7
+  },
+  {
+    "id": "driver_penalty_01",
+    "role": "driver",
+    "event": "penalty",
+    "text": "That penalty is harsh. We need to review it.",
+    "fishText": "[angry] That penalty is harsh. We need to review it.",
+    "voice": "driver_angry",
+    "priority": 7
+  },
+  {
+    "id": "driver_penalty_02",
+    "role": "driver",
+    "event": "penalty",
+    "text": "I was forced into that. Tell them to check the replay.",
+    "fishText": "[angry] I was forced into that. Tell them to check the replay.",
+    "voice": "driver_angry",
+    "priority": 7
+  },
+  {
+    "id": "driver_blue_01",
+    "role": "driver",
+    "event": "blue",
+    "text": "I am trying to let them through, but this is not easy.",
+    "fishText": "[in a hurry tone] I am trying to let them through, but this is not easy.",
+    "voice": "driver_angry",
+    "priority": 7
+  },
+  {
+    "id": "driver_vsc_01",
+    "role": "driver",
+    "event": "vsc",
+    "text": "I am on the delta, but they are all over the place.",
+    "fishText": "[worried] I am on the delta, but they are all over the place.",
+    "voice": "driver_angry",
+    "priority": 7
+  },
+  {
+    "id": "lewis_contact_01",
+    "role": "driver",
+    "event": "contact",
+    "text": "Can we get them to give me some room, man? I was completely boxed in, man.",
+    "fishText": "[angry] Can we get them to give me some room, man? I was completely boxed in, man.",
+    "voice": "driver_angry",
+    "priority": 7
+  },
+  {
+    "id": "lewis_contact_02",
+    "role": "driver",
+    "event": "contact",
+    "text": "Can we look at that one? He just turned in on me, man.",
+    "fishText": "[angry] Can we look at that one? He just turned in on me, man.",
+    "voice": "driver_angry",
+    "priority": 7
+  },
+  {
+    "id": "lewis_angry_01",
+    "role": "driver",
+    "event": "angry",
+    "text": "Can we ask him to give that place back, man? It was clearly my corner, man.",
+    "fishText": "[angry][shouting] Can we ask him to give that place back, man? It was clearly my corner, man.",
+    "voice": "driver_angry",
+    "priority": 7
+  },
+  {
+    "id": "lewis_crash_01",
+    "role": "driver",
+    "event": "crash",
+    "text": "What are they doing, man? I was given no room, man. Can we get the stewards to look at it, man?",
+    "fishText": "[angry][shouting] What are they doing, man? I was given no room, man. Can we get the stewards to look at it, man?",
+    "voice": "driver_angry",
+    "priority": 7
+  },
+  {
+    "id": "lewis_wall_01",
+    "role": "driver",
+    "event": "wall",
+    "text": "Something is wrong with the car, man. The rear just stepped out on its own, man. Can we check it, man?",
+    "fishText": "[worried][angry] Something is wrong with the car, man. The rear just stepped out on its own, man. Can we check it, man?",
+    "voice": "driver_angry",
+    "priority": 7
+  },
+  {
+    "id": "driver_fatal_01",
+    "role": "driver",
+    "event": "fatal",
+    "text": "Oh no, {victim} has had a fatal accident! Let's go, go, go!",
+    "fishText": "[excited][shouting] Oh no, {victim} has had a fatal accident! Let's go, go, go!",
+    "voice": "driver_angry",
+    "priority": 8
+  },
+  {
+    "id": "driver_fatal_02",
+    "role": "driver",
+    "event": "fatal",
+    "text": "Oh no, {victim} has exploded! Fatal accident! Let's go, go, go!",
+    "fishText": "[excited][shouting] Oh no, {victim} has exploded! Fatal accident! Let's go, go, go!",
+    "voice": "driver_angry",
+    "priority": 8
+  },
+  {
+    "id": "driver_fatal_03",
+    "role": "driver",
+    "event": "fatal",
+    "text": "That is {victim} gone! Fatal accident! Go, go, go!",
+    "fishText": "[excited][shouting] That is {victim} gone! Fatal accident! Go, go, go!",
+    "voice": "driver_angry",
     "priority": 8
   }
 ]

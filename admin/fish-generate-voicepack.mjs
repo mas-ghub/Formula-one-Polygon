@@ -12,7 +12,8 @@ const DRY = process.argv.includes('--dry-run');
 const voices = {
   commentator: process.env.FISH_VOICE_COMMENTATOR,
   engineer: process.env.FISH_VOICE_ENGINEER || process.env.FISH_VOICE_COMMENTATOR,
-  driver_angry: process.env.FISH_VOICE_DRIVER_ANGRY || process.env.FISH_VOICE_COMMENTATOR
+  driver_radio: process.env.FISH_VOICE_DRIVER_RADIO || process.env.FISH_VOICE_DRIVER_ANGRY || process.env.FISH_VOICE_COMMENTATOR,
+  driver_angry: process.env.FISH_VOICE_DRIVER_ANGRY || process.env.FISH_VOICE_DRIVER_RADIO || process.env.FISH_VOICE_COMMENTATOR
 };
 
 function speechKey(text){
